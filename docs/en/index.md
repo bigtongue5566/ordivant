@@ -155,7 +155,7 @@ When an Agent lacks information or a tool, add inputs, authorize the appropriate
 
 Ordivant is **MIT licensed**. Use, modify, and deploy it yourself. Work, Knowledge, and Code can be deployed independently, and you manage the data. Shared sign-in supports local accounts and enterprise OIDC; optional Keycloak can bridge SAML and LDAP.
 
-The current version is the **v0.1.0 early public release**. Knowledge offers text search, and Code needs Gitea for write operations. Vector search, built-in CI, SCIM, hard dollar budgets, and distributed execution are not yet available. Docker sandboxes have no network or host-directory access and use tools already present in the environment. Configure VM execution when stronger isolation is required.
+The current version is **v0.2.0 (2026-10-14)**. Human collaboration in Work, Knowledge, and Code needs no LLM; only autonomous Agent Runs require model settings. Knowledge offers text search, and Code Git writes require Gitea. Vector search, built-in CI, SCIM, hard dollar budgets, and distributed execution are not yet available. Docker sandboxes have no network or host-directory access and use tools already present in the environment. Configure VM execution when stronger isolation is required. See the [release and upgrade guide](./release.md).
 
 Provide and authorize your own model and tool connections; external providers may charge for use. Unconfigured DEMO runs illustrate the execution flow. For actual delivery, check results, sources, and provider usage.
 

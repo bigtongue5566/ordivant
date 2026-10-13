@@ -31,7 +31,7 @@ def create_app(database_url: str | None = None, *, mode: str | None = None) -> F
         yield
         engine.dispose()
 
-    application = FastAPI(title="Ordivant Knowledge", version="0.1.0", lifespan=lifespan)
+    application = FastAPI(title="Ordivant Knowledge", version="0.2.0", lifespan=lifespan)
     application.state.settings = settings
     application.state.engine = engine
     application.state.session_factory = session_factory(engine)

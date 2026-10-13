@@ -75,7 +75,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Ordivant API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Ordivant API", version="0.2.0", lifespan=lifespan)
 
 
 @app.exception_handler(DomainError)

@@ -155,7 +155,7 @@ Code 可為 PR 保存綁定目前 head SHA 的 Ordivant 本地討論與審查紀
 
 Ordivant 採 **MIT 授權**，可自行使用、修改及部署。Work、Knowledge 與 Code 可各自部署；資料由你管理。共用登入支援本地帳號與企業 OIDC，選用 Keycloak 可橋接 SAML／LDAP。
 
-現階段為 **v0.1.0 早期公開版**。Knowledge 提供文字搜尋，Code 的寫入操作需要 Gitea；尚未提供向量搜尋、內建 CI、SCIM、硬性金額預算或分散式執行。Docker 沙箱沒有網路或主機目錄存取，使用已備妥的工具執行工作；需要更強隔離時應配置 VM 執行環境。
+目前版本為 **v0.2.0（2026-10-14）**。Work、Knowledge、Code 的真人協作不需要 LLM；只有自主 Agent Run 需要模型設定。Knowledge 提供文字搜尋，Code 的 Git 寫入需要 Gitea；尚未提供向量搜尋、內建 CI、SCIM、硬性金額預算或分散式執行。Docker 沙箱沒有網路或主機目錄存取，使用已備妥的工具執行工作；需要更強隔離時應配置 VM 執行環境。查看[版本與升級說明](./release.md)。
 
 外部模型與工具需自行提供連線及授權，可能產生供應商費用。未設定模型的 DEMO 只演示執行流程；真實交付請核對成果、來源與供應商用量。
 

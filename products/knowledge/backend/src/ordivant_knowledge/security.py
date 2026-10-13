@@ -92,11 +92,62 @@ def authenticate(session: Session, authorization: str | None) -> PrincipalContex
     return principal
 
 
-def require_scope(session: Session, principal: PrincipalContext, space_id: str) -> KnowledgeSpace:
-    space = session.get(KnowledgeSpace, space_id)
-    if space is None or space_id not in principal.scope_ids or space.organization_id != principal.organization_id:
+def _current_scope(
+    session: Session,
+    principal: PrincipalContext,
+    space_id: str,
+    *,
+    lock: bool = False,
+) -> tuple[KnowledgeSpace, PrincipalContext]:
+    space = session.scalar(
+        select(KnowledgeSpace)
+        .where(KnowledgeSpace.id == space_id)
+        .execution_options(populate_existing=True)
+    )
+    principal_statement = select(Principal).where(Principal.id == principal.id).execution_options(populate_existing=True)
+    membership_statement = select(SpaceMembership).where(
+        SpaceMembership.principal_id == principal.id,
+        SpaceMembership.space_id == space_id,
+    )
+    if lock and session.get_bind().dialect.name == "postgresql":
+        principal_statement = principal_statement.with_for_update()
+        membership_statement = membership_statement.with_for_update()
+    current = session.scalar(principal_statement)
+    if (
+        space is None
+        or current is None
+        or not current.active
+        or current.kind != principal.kind
+        or current.organization_id != principal.organization_id
+        or space_id not in principal.scope_ids
+        or space.organization_id != current.organization_id
+        or session.scalar(membership_statement) is None
+    ):
         raise not_found()
+    return space, PrincipalContext(
+        id=current.id,
+        name=current.name,
+        kind=current.kind,
+        role=current.role,
+        organization_id=current.organization_id,
+        scope_ids=principal.scope_ids,
+    )
+
+
+def require_scope(session: Session, principal: PrincipalContext, space_id: str) -> KnowledgeSpace:
+    space, _ = _current_scope(session, principal, space_id)
     return space
+
+
+def require_current_scope(
+    session: Session,
+    principal: PrincipalContext,
+    space_id: str,
+    *,
+    lock: bool = False,
+) -> PrincipalContext:
+    _, current = _current_scope(session, principal, space_id, lock=lock)
+    return current
 
 
 def require_writer(principal: PrincipalContext) -> None:

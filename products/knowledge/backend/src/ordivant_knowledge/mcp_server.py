@@ -92,6 +92,52 @@ async def get_document_context(document_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def get_document_draft(document_id: str) -> dict[str, Any]:
+    """Read the current shared Knowledge draft and its Yjs v1 state update."""
+    return await _request("GET", f"/api/documents/{document_id}/draft")
+
+
+@mcp.tool()
+async def apply_document_draft_update(
+    document_id: str,
+    update: str,
+    request_id: str,
+) -> dict[str, Any]:
+    """Merge a base64-encoded Yjs v1 update into the shared draft."""
+    return await _request(
+        "POST",
+        f"/api/documents/{document_id}/draft/updates",
+        body={"update": update},
+        request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def publish_document_draft(
+    document_id: str,
+    expected_revision: int,
+    change_summary: str,
+    title: str | None = None,
+    source_refs: list[dict[str, str]] | None = None,
+    request_id: str | None = None,
+) -> dict[str, Any]:
+    """Publish the shared draft using compare-and-swap on its current revision."""
+    payload: dict[str, Any] = {
+        "expected_revision": expected_revision,
+        "change_summary": change_summary,
+        "source_refs": source_refs or [],
+    }
+    if title is not None:
+        payload["title"] = title
+    return await _request(
+        "POST",
+        f"/api/documents/{document_id}/draft/publish",
+        body=payload,
+        request_id=request_id,
+    )
+
+
+@mcp.tool()
 async def get_document_version(document_id: str, version: int) -> dict[str, Any]:
     """Read one immutable document version using its exact version number."""
     return await _request("GET", f"/api/documents/{document_id}/versions/{version}")

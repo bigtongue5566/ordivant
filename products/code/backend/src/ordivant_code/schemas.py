@@ -90,6 +90,32 @@ class PullRequestCreate(InputModel):
     source_refs: list[CodeReference] = Field(default_factory=list, max_length=50)
 
 
+class PullRequestCommentCreate(InputModel):
+    body: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("body")
+    @classmethod
+    def safe_body(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("comment cannot contain NUL")
+        value.encode("utf-8", errors="strict")
+        return value
+
+
+class PullRequestReviewCreate(InputModel):
+    decision: Literal["approve", "request_changes", "comment"]
+    comment: str = Field(default="", max_length=20000)
+    expected_head_sha: str = Field(min_length=40, max_length=64, pattern=r"^[a-fA-F0-9]+$")
+
+    @field_validator("comment")
+    @classmethod
+    def safe_review_comment(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("comment cannot contain NUL")
+        value.encode("utf-8", errors="strict")
+        return value
+
+
 class CheckCreate(InputModel):
     commit_sha: str = Field(min_length=40, max_length=64, pattern=r"^[a-fA-F0-9]+$")
     context: str = Field(min_length=1, max_length=255)

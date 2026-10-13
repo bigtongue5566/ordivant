@@ -1,10 +1,10 @@
 # First project: from launch checklist to accepted result {#first-project}
 
-This walkthrough takes a team from its first sign-in to an independently reviewed result. The example project is **Product launch readiness** (`LAUNCH`), with a task named **Organize the product launch checklist**. Screens and labels refer to the installed Ordivant interface; your organization may have different projects, providers, and policies.
+This walkthrough takes a team from first sign-in through coworker assignment, human claiming, Knowledge co-editing, and independent review. The example project is **Product launch readiness** (`LAUNCH`), with a task named **Organize the product launch checklist**. Human workflows in all three products need no LLM and do not require an Agent to stand in for a person. Model connections and automatic Agent Runs are optional.
 
 ## Before you begin {#before-you-begin}
 
-Open the platform URL supplied by your administrator. If you are installing Ordivant yourself, finish the [installation guide](../containers.md) and open the local or organization URL. You do not need to install a model key to try the workflow: the manual route below works without one. A Pi Durable Run needs an administrator to enable the runtime and configure a provider and model.
+Open the platform URL supplied by your administrator. If you are installing Ordivant yourself, finish the [installation guide](../containers.md) and open the local or organization URL. Regular human work in Work, Knowledge, and Code needs no model key. An autonomous Pi Durable Run needs an administrator to enable the runtime and configure a provider and model. Code's Git repositories and PRs require an administrator-configured Gitea service.
 
 ![Ordivant sign-in screen](/screenshots/login-en.png)
 
@@ -38,11 +38,11 @@ Knowledge is optional. Use it when the launch requirements should have an owner,
 1. Switch to **Knowledge**. An Identity administrator selects **Add space** and creates a space with key `LAUNCH`, name `Product launch readiness`, and a short description. The administrator then grants the appropriate people a Knowledge role and that Space scope.
 2. Select the `LAUNCH` Space and choose **Add document**. For example, use title `Launch readiness specification`, summary `Requirements and evidence for the first launch review`, and tags such as `launch` and `readiness`.
 3. Enter the actual specification in **Body (Markdown)**. Include the decisions, owners, dates, and known source material. Add source references with their label and URI where appropriate, then choose **Create document**. The reader should show version `v1`, its body, and its source references.
-4. To revise it later, open the latest version and choose **Publish new version**. Review **Expected current version**, edit the title and body, enter a change summary, and publish. A published version is immutable; the new content becomes the next version.
+4. After creating the document, open the latest version's **Shared draft** and choose **Edit**. Writers and Managers can edit the body together and switch to **Preview** to inspect formatting. The online list shows signed-in members editing together. Agents can also contribute to the same draft through REST or MCP. When the draft shows **Connected** and **Saved**, select **Publish new version**, enter a change summary, and confirm. This creates an immutable version; published content cannot be changed.
 
-A URI in a source reference is a citation; entering it does not fetch or import the page contents. Paste or write content you are authorized to use, or configure an approved retrieval/tool integration separately. See the [Knowledge guide](knowledge.md).
+Readers can view the shared draft and version history but cannot edit. If the connection drops, changes not confirmed by the server remain only in the current browser tab's memory; do not close or reload that tab. If publication reports a version conflict, reload the shared draft, inspect the latest merged content, make edits, wait for **Saved**, then publish. A source URI is a citation; entering it does not fetch page contents. See the [Knowledge guide](knowledge.md) for details.
 
-## Configure a model connection for automatic Runs {#configure-model}
+## Optional: configure a model connection for Agent Runs {#configure-model}
 
 Skip this step for the manual route. Only an Identity administrator can edit organization model connections. Ask your provider or deployment administrator for the supported HTTPS API base URL and exact model ID. Enter your own provider-issued key directly in the form; never copy a key from a guide, put it in a task, or send it to an Agent.
 
@@ -55,9 +55,9 @@ Skip this step for the manual route. Only an Identity administrator can edit org
 
 If the provider or model is not configured, a dispatched Run may be labeled **DEMO**. DEMO uses a deterministic demonstration response, makes no paid model call, and does not produce a real launch deliverable. Do not treat its output or reported cost as a completed task. See [Model connections](../model-usage.md) and [Run and automation usage](../execution-usage.md).
 
-## Create a Pi Durable Worker Agent in this project {#create-agent}
+## Optional: create a Pi Durable Agent in this project {#create-agent}
 
-An Identity administrator or a Work Manager can manage Agents. First make sure `LAUNCH` is the selected Work project; the create form grants the new Agent access to the currently selected project. There is no Project field in this Agent form.
+Complete this section only if you want an autonomous Agent to perform tasks. Human teammates can be assigned or claim work directly; no Agent is needed. An Identity administrator or Work Manager can manage Agents. First make sure `LAUNCH` is the selected Work project; the create form grants the new Agent access to the currently selected project. There is no Project field in this Agent form.
 
 1. Open **Agent directory** and choose **Add agent**.
 2. Enter name `Launch checklist worker`; set **Agent role** to **Worker** and **Runtime** to **Pi Durable**. Leave **Agent template version** empty unless your team has already published a suitable immutable template.
@@ -97,11 +97,11 @@ The practice data deliberately leaves information unknown. Do not invent dates, 
 | Constraints | `Do not invent owners, dates, approvals, or completion status. Do not change the release plan or external systems. Do not include credentials or personal data.` |
 | Acceptance criteria, one per line | `Checklist has a row for each of Product, Login, Backup, Docs, Support, and Analytics.`<br>`Every item has an owner or is explicitly marked unassigned.`<br>`Every status is supported by a source, or marked unknown.`<br>`Each open item has a next action.`<br>`The submitted result includes the checklist and links or quoted evidence needed for review.` |
 | Priority | `Medium` |
-| Assigned agent | Leave unassigned, or choose `Launch checklist worker`. Assignment alone does not start a Run. |
-| Assign reviewer | Leave blank when an authorized human Manager, Reviewer, or Administrator will review. |
+| Assignee | Choose a human teammate authorized for this Project, or leave unassigned for an eligible teammate to claim. Choose `Launch checklist worker` only for an automatic Run. |
+| Assign reviewer | Choose another authorized person or Agent. Leave blank when any eligible person may review. |
 | Dependencies | Leave blank unless another task must be accepted first. |
 
-Choose **Create task**. It should appear in the task list with **Ready** status. Open it and check the goal and criteria before dispatching. The task drawer has separate **Specification**, **Execution and review**, **Collaboration**, and **Events** views.
+Choose **Create task**. An unassigned task should appear in the task list with **Ready** status. Open it and check the goal and criteria. A human assignee can select **Claim task** directly; if assigned to a teammate, that person signs in and works on their own task. The task drawer has separate **Specification**, **Execution and review**, **Collaboration**, and **Events** views.
 
 ![Task specification and execution controls](/screenshots/task-en.png)
 
@@ -109,9 +109,9 @@ Choose **Create task**. It should appear in the task list with **Ready** status.
 
 Create the prerequisite task first, such as `Confirm launch date and release scope`, and state what evidence will prove it is accepted. Edit the checklist task and select that task in **Dependencies** (the prompt says these tasks must be completed first). Until the prerequisite is accepted, the dependent task cannot be claimed or dispatched. Accepting the prerequisite releases eligible dependent tasks to **Ready**. Do not create circular dependencies.
 
-## Dispatch the Agent and inspect its Run {#dispatch-and-run}
+## Optional: dispatch an Agent and inspect its Run {#dispatch-and-run}
 
-An authorized Work Manager or Administrator opens the ready task, chooses `Launch checklist worker` in **Select a Pi runtime agent**, and selects **Dispatch to agent**. This creates an automatic Run. **Claim task** is the manual path and does not start an automatic Run.
+Skip this section for the human workflow. An authorized Work Manager or Administrator opens the ready task, chooses `Launch checklist worker` in **Select a Pi runtime agent**, and selects **Dispatch to agent**. This creates an automatic Run and requires a configured Provider and model. **Claim task** is the human path and does not start an automatic Run.
 
 Open **Run execution** and select the new Run. Review its status, progress, events, response, tools, and any reported model or usage receipt. A real provider call should identify the configured model in the Run record. If the Run says DEMO, stop treating its response as launch evidence and use the manual route or configure the provider first.
 
@@ -123,19 +123,21 @@ Run completion and task acceptance are separate. Continue only when the task has
 
 The submitter provides a concise completion summary and at least one evidence item, such as a document, file, URL, or test report. The task enters **In review**. Open the task's **Execution and review** view and compare each acceptance criterion with the submitted artifacts and sources.
 
-An authorized Reviewer, Manager, or Administrator who did not submit the result chooses **Accept** or **Return**, enters a review comment, and confirms. Accepting changes the task to **Completed** and can release dependent tasks. Returning it preserves the submission and history, then makes the task **Ready** again when its dependencies are satisfied. The submitter cannot review their own result. For human review, leave **Assign reviewer** blank; when an Agent is designated, the review screen may only allow the identity associated with that Agent.
+An authorized Reviewer, Manager, or Administrator who did not submit the result chooses **Accept** or **Return**, enters a review comment, and confirms. Accepting changes the task to **Completed** and can release dependent tasks. Returning it preserves the submission, history, and current assignee. The submitter cannot review their own result. A human or Agent can be assigned as the reviewer.
 
 ![Independent review of task evidence](/screenshots/review-en.png)
 
-### Manual route without a model API key {#manual-route}
+### Human collaboration without an LLM {#manual-route}
 
-This is a real human-authored result, not a model Run. An administrator creates an available **Worker** Agent in the `LAUNCH` project with **External runtime** and no model; its purpose here is to represent a scoped worker for the claim. Leave **Assigned agent** and **Assign reviewer** blank so the second person can choose this Worker Agent.
+People use their own accounts; do not create or select an Agent, enable Runtime, or configure a model for this workflow. Invite a second member in Identity and grant them the Work Worker or Manager role and the `LAUNCH` Project scope. See [Team setup](team-setup.md) for invitation and scope steps.
 
-Prepare the six-line checklist and submission fields before claiming the task. The default human claim lease is 300 seconds. After claiming, keep the current task page open; choose **Extend lease** before it expires if you need more time. Reloading the page does not preserve its lease handle and may prevent submission.
+Assign the task to that teammate or leave it unassigned so they can claim it. A person can claim only a ready task that is unassigned or assigned to them. Human work does not expire; after reloading, resume it from the task's execution history.
 
-1. A second invited person with the **Manager** role in this Work Project opens the task, selects that Worker Agent in **Select an execution agent**, and chooses **Claim task**. They do the checklist work themselves using the synthetic practice data.
-2. In the task's execution controls, choose **Submit result**. In the **Submit result and evidence** form, enter the completion summary, set **Evidence type** to **Document**, enter an evidence title, and paste the six-line checklist below into **Evidence content**. Submit at least one artifact. The task should move to **In review**.
-3. A different person with the **Administrator** role opens **Execution and review**, checks the evidence against each criterion, and chooses **Accept** or **Return** with a written review comment. The Administrator must not be the person who submitted it; leave **Assign reviewer** blank for human review.
+1. The second invited member opens the task in the `LAUNCH` Project and selects **Claim task**. They can report progress, or use **Collaboration** to record questions, handoffs, and decisions.
+2. In the task execution controls, choose **Submit result**. Enter a completion summary, set **Evidence type** to **Document**, enter an evidence title, and paste the six-line checklist below into **Evidence content**. Submit at least one artifact; the task should move to **In review**.
+3. A different authorized Reviewer, Manager, or Administrator opens **Execution and review**, checks the evidence against each criterion, and chooses **Accept** or **Return** with a written review comment. The reviewer must not be the submitter.
+
+To give the task to another person, the current assignee selects **Handoff and release** and records completed work, open items, and next steps. The task returns to **Ready** and clears the human assignee so another eligible teammate can claim it. A blocked or returned task keeps its current assignee.
 
 Copyable evidence content (one Markdown checklist line per area):
 
@@ -150,7 +152,7 @@ Copyable evidence content (one Markdown checklist line per area):
 
 Example submission fields: summary `Prepared a checklist for all six launch-readiness areas from the synthetic practice data. Unknown statuses and unassigned owners are preserved, with a next action for each. No external system was accessed and no test or approval is claimed.`; evidence title `Northstar synthetic launch checklist`. After independently checking the evidence, the reviewer may write: `All six areas are present; unknown statuses and unassigned owners are preserved, and each item has a next action. This is a synthetic exercise and does not claim that tests passed.`
 
-Human claim is distinct from Agent automation: it records the selected scoped Worker Agent and the human actor, but it does not create a Pi Run or paid model call. Do not enter the human's password or any API key into the task.
+This workflow records the human account that submits the evidence; it creates no Pi Run or paid model call. Never enter a person's password or an API key in a task.
 
 ## Reuse an Agent template or workflow {#templates-workflows}
 

@@ -46,7 +46,10 @@ Agent 使用各產品限定範圍的 Bearer token；人類使用 Identity 的 Co
 | --- | --- |
 | `GET/POST /api/projects`、`GET/POST /api/tasks` | 查詢及建立獲授權的專案／任務 |
 | `GET /api/tasks/{task_id}/context` | 取得任務、相依性、訊息與證據脈絡 |
-| `POST /api/tasks/{task_id}/claim`、`renew`、`progress`、`release` | 領取任務、續租、回報與釋放執行權 |
+| `GET /api/projects/{project_id}/participants` | 列出可在該專案指派工作的已授權真人與 Agent |
+| `POST /api/tasks/{task_id}/claim` | 真人以自己的登入身分認領未指派或指派給自己的任務；Agent 以 Bearer token 認領並取得租約 |
+| `POST /api/tasks/{task_id}/renew` | 續期 Agent 租約；真人執行沒有租約 |
+| `POST /api/tasks/{task_id}/progress`、`release` | 回報進度或釋出執行；真人不傳租約 token |
 | `POST /api/tasks/{task_id}/submit`、`review` | 提交證據及由有權限的獨立審核者決定結果 |
 | `POST /api/tasks/{task_id}/dispatch` | 派發 Agent 執行；取得 Run 後再追蹤執行狀態 |
 | `GET /api/runs`、`GET /api/runs/{run_id}/events`、`POST /api/runs/{run_id}/control` | Run 清單、事件與控制 |
@@ -54,6 +57,8 @@ Agent 使用各產品限定範圍的 Bearer token；人類使用 Identity 的 Co
 | `/api/tool-connections`、`/api/sandbox-profiles` | 管理獲允許的工具連線與沙箱設定 |
 
 任務與 Run 是不同紀錄。執行成功不會自動使任務完成；仍需證據與獨立審核。執行模式、暫停／停止限制及工具設定見[執行指南](./execution-usage.md)。`/api/runtime/*` 是受限服務介面，不供一般 Agent 或瀏覽器呼叫。
+
+真人認領會記錄真人執行者，不會建立 Agent 租約；重新載入可繼續進行中的工作。Agent 認領才使用到期時間與 fencing token。真人與 Agent 權限、指派及交接細節見[真人與 Agent 協作契約](./collaboration-contracts.md)。
 
 ### Knowledge 文件與版本 {#knowledge-api}
 
@@ -63,10 +68,13 @@ Agent 使用各產品限定範圍的 Bearer token；人類使用 Identity 的 Co
 | `GET /api/documents?space_id=&q=&tag=`、`POST /api/documents` | 搜尋及建立文件 |
 | `GET /api/documents/{document_id}/versions` | 取得版本歷史 |
 | `GET /api/documents/{document_id}/versions/{version_number}` | 讀取可引用的精確版本 |
-| `POST /api/documents/{document_id}/versions` | 以目前版本檢查發布新版本 |
+| `POST /api/documents/{document_id}/versions` | 舊發布入口；網頁編輯器導引至共同草稿 |
+| `GET /api/documents/{document_id}/draft`、`POST /api/documents/{document_id}/draft/updates` | 讀取共同草稿與送出 CRDT 更新 |
+| `WS /api/documents/{document_id}/collaborate` | 以登入工作階段同步草稿及真人 presence |
+| `POST /api/documents/{document_id}/draft/publish` | 將已保存的共同草稿發布為不可變版本 |
 | `GET/POST /api/decisions`、`GET /api/events` | 決策及獲授權的稽核紀錄 |
 
-已發布版本不可變更。來源引用保留精確版本與 URI，不會擴大存取權。操作流程見[Knowledge 指南](./guide/knowledge.md)。
+已發布版本不可變更。只可發布仍在線、已保存且沒有待確認更新的草稿；未收到確認的離線編輯只保留在目前瀏覽器記憶體，關閉頁面可能遺失。Agent REST／MCP 可讀寫同一共同草稿。來源引用保留精確版本與 URI，不會擴大存取權。操作流程見[Knowledge 指南](./guide/knowledge.md)。
 
 ### Code 與版本控制 {#code-api}
 
@@ -76,9 +84,12 @@ Agent 使用各產品限定範圍的 Bearer token；人類使用 Identity 的 Co
 | `POST /api/repositories/{repository_id}/branches`、`files` | 建立分支及提交檔案 |
 | `GET/POST /api/repositories/{repository_id}/pulls` | 查詢及建立 PR |
 | `GET /api/repositories/{repository_id}/pulls/{number}` | PR 詳情、來源引用與狀態收據 |
+| `GET /api/repositories/{repository_id}/pulls/{number}/collaboration` | Ordivant 討論、審查紀錄與目前 PR head |
+| `POST /api/repositories/{repository_id}/pulls/{number}/comments` | 留下 Ordivant 本地 PR 討論 |
+| `POST /api/repositories/{repository_id}/pulls/{number}/reviews` | 針對指定 head SHA 留下 Ordivant 審查 |
 | `POST /api/repositories/{repository_id}/checks` | 回報明確標示為 Agent 自報的 commit 狀態 |
 
-寫入需設定 Gitea；未設定時仍可查看已保存的中繼資料。此版本不提供 PR 合併或刪除 API，也不包含 CI runner。`agent_reported` 收據不能當成實際 CI 執行證據。詳見[Code 指南](./guide/code.md)。
+Code 的 Git 操作需設定 Gitea；Ordivant 討論與審查是本地紀錄，綁定 PR head SHA，不等同 Gitea 核准或 CI 結果。Gitea 負責 Git、合併及其自身的核准；此版本不提供 PR 合併或刪除 API，也不包含 CI runner。`agent_reported` 收據不能當成實際 CI 執行證據。詳見[Code 指南](./guide/code.md)與[真人與 Agent 協作契約](./collaboration-contracts.md)。
 
 ### 模型設定 {#model-settings}
 

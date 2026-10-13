@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy import case, delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -836,6 +836,26 @@ def introspect(
     }
     db.commit()
     return result
+
+
+@router.get("/directory")
+def product_directory(
+    request: Request,
+    product: str = Query(pattern="^(work|knowledge|code)$"),
+    scope_id: str = Query(min_length=1, max_length=80),
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> dict:
+    if not constant_time_equal(f"Bearer {_settings(request).service_secret}", authorization):
+        raise _unauthorized("service_unauthorized", "Identity service authorization is required")
+    roles = {"manager", "worker", "reviewer"} if product == "work" else {"manager", "writer", "reader"}
+    result = []
+    for user in db.scalars(select(User).where(User.active.is_(True)).order_by(User.name, User.id)):
+        permission = (user.permissions or {}).get(product, {})
+        if user.role != "admin" and (permission.get("role") not in roles or scope_id not in permission.get("scope_ids", [])):
+            continue
+        result.append({"id": user.id, "name": user.name, "role": user.role, "active": user.active, "permissions": user.permissions})
+    return {"users": result}
 
 
 __all__ = ["router"]

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -6,12 +6,12 @@ import {
   Empty,
   Form,
   Input,
-  InputNumber,
   Modal,
   Select,
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -27,6 +27,7 @@ import { ProductApiError, createProductApi, productApiPrefix } from '../shared/p
 import { ProductLogin } from '../shared/ProductLogin';
 import { ProductShell } from '../shared/ProductShell';
 import { MarkdownContent, MarkdownPreview } from '../../shared/MarkdownContent';
+import { CollaborativeMarkdownEditor, type KnowledgeCollaborationState } from '../../shared/CollaborativeMarkdownEditor';
 import { AuthProvider, useAuth } from '../../auth/AuthContext';
 import { AuthAccessDenied } from '../../auth/AuthAccessDenied';
 import { ReferenceFields, ReferenceList } from '../shared/References';
@@ -79,6 +80,8 @@ function KnowledgeWorkspace() {
   const [documentContext, setDocumentContext] = useState<DocumentContext | null>(null);
   const [history, setHistory] = useState<DocumentVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<DocumentVersion | null>(null);
+  const [collaborationState, setCollaborationState] = useState<KnowledgeCollaborationState | null>(null);
+  const [draftRefreshKey, setDraftRefreshKey] = useState(0);
   const [documentBusy, setDocumentBusy] = useState(false);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [decisionsBusy, setDecisionsBusy] = useState(false);
@@ -106,6 +109,13 @@ function KnowledgeWorkspace() {
   const currentSpace = spaces.find((item) => item.id === spaceId) ?? null;
   const canWrite = Boolean(principal && ['admin', 'manager', 'writer'].includes(principal.role));
   const canCreateSpace = auth.session?.user.role === 'admin';
+  const canPublishDraft = Boolean(
+    canWrite
+    && collaborationState?.draft.document_id === documentId
+    && collaborationState.connection === 'live'
+    && collaborationState.pendingUpdates === 0
+    && !collaborationState.permissionLost,
+  );
 
   const checkHealth = useCallback(async () => {
     const requestId = ++healthRequestId.current;
@@ -327,13 +337,11 @@ function KnowledgeWorkspace() {
   }
 
   function openPublish() {
-    if (!documentContext) return;
+    if (!documentContext || !canPublishDraft || !collaborationState) return;
     setPublishError(null);
     publishForm.resetFields();
     publishForm.setFieldsValue({
-      expected_version: documentContext.document.current_version,
-      title: documentContext.version.title,
-      body: documentContext.version.body,
+      title: collaborationState.draft.title,
       change_summary: '',
       source_refs: [],
     });
@@ -341,14 +349,13 @@ function KnowledgeWorkspace() {
   }
 
   async function publishVersion(values: Record<string, unknown>) {
-    if (!documentId) return;
+    if (!documentId || !collaborationState || !canPublishDraft) return;
     setPublishSaving(true);
     setPublishError(null);
     try {
-      await knowledgeApi.post<DocumentVersion>(`/documents/${encodeURIComponent(documentId)}/versions`, {
-        expected_version: values.expected_version,
-        title: values.title,
-        body: values.body,
+      await knowledgeApi.post<DocumentVersion>(`/documents/${encodeURIComponent(documentId)}/draft/publish`, {
+        expected_revision: collaborationState.draft.revision,
+        ...(typeof values.title === 'string' && values.title.trim() ? { title: values.title.trim() } : {}),
         change_summary: values.change_summary,
         source_refs: values.source_refs ?? [],
       });
@@ -356,12 +363,14 @@ function KnowledgeWorkspace() {
       publishForm.resetFields();
       await loadDocuments();
       await loadDocumentContext(documentId);
+      setDraftRefreshKey((value) => value + 1);
       messageApi.success(t('新版本已發佈；舊版本保持不變。'));
     } catch (error) {
       if (error instanceof ProductApiError && error.status === 409) {
         setPublishError({ message: errorMessage(error) });
         void loadDocuments();
         void loadDocumentContext(documentId).catch(() => undefined);
+        setDraftRefreshKey((value) => value + 1);
       } else {
         setPublishError({ message: errorMessage(error) });
       }
@@ -394,10 +403,10 @@ function KnowledgeWorkspace() {
     }
   }
 
-  const sectionItems = useMemo(() => [
+  const sectionItems = [
     { key: 'documents', label: t('文件庫'), icon: <FileTextOutlined /> },
     { key: 'decisions', label: t('決策紀錄'), icon: <SafetyCertificateOutlined /> },
-  ], []);
+  ];
 
   if (!auth.session) {
     return <>{messageContext}<ProductLogin product="knowledge" productName="Knowledge" /></>;
@@ -422,7 +431,7 @@ function KnowledgeWorkspace() {
         onSectionChange={(key) => setSection(key as KnowledgeSection)}
         mode={health?.mode ?? 'unavailable'}
         serviceStatus={healthStatus}
-        headerExtra={<Space size={7}><Select aria-label={t('選擇 Knowledge space')} className="product-scope-select" placeholder={t('選擇 Space')} value={spaceId || undefined} loading={spaceBusy} onChange={(value) => { setSpaceId(value); setDocumentId(''); }} options={spaces.map((space) => ({ value: space.id, label: `${space.key} · ${space.name}` }))} notFoundContent={t('沒有可存取的 Space')} />{canCreateSpace && <Button aria-label={t('建立 Space')} icon={<PlusOutlined />} onClick={() => { spaceForm.resetFields(); setFormError(''); setSpaceModalOpen(true); }}>{t('新增 Space')}</Button>}</Space>}
+        headerExtra={<Space size={7}><Select aria-label={t('選擇 Knowledge space')} className="product-scope-select" placeholder={t('選擇 Space')} value={spaceId || undefined} loading={spaceBusy} onChange={(value) => { if (value !== spaceId) setCollaborationState(null); setSpaceId(value); setDocumentId(''); }} options={spaces.map((space) => ({ value: space.id, label: `${space.key} · ${space.name}` }))} notFoundContent={t('沒有可存取的 Space')} />{canCreateSpace && <Button aria-label={t('建立 Space')} icon={<PlusOutlined />} onClick={() => { spaceForm.resetFields(); setFormError(''); setSpaceModalOpen(true); }}>{t('新增 Space')}</Button>}</Space>}
         title={t(section === 'documents' ? '文件庫' : '決策紀錄')}
         eyebrow={currentSpace ? `${currentSpace.key} · ${currentSpace.name}` : 'KNOWLEDGE'}
         actions={canWrite && section === 'documents'
@@ -444,13 +453,13 @@ function KnowledgeWorkspace() {
                 <div className="knowledge-list-heading"><span>{t('搜尋結果')}</span><span>{formatNumber(documents.length)}</span></div>
                 {documentsBusy && !documents.length && <div className="product-inline-loading"><Spin size="small" /></div>}
                 {!documentsBusy && documents.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t(query || tagFilter ? '沒有符合條件的文件' : '此 Space 尚無文件')}>{canWrite && !query && !tagFilter && <Button size="small" type="primary" onClick={openCreateDocument}>{t('建立文件')}</Button>}</Empty>}
-                {documents.map((document) => <button type="button" key={document.id} className={`knowledge-document-item${document.id === documentId ? ' knowledge-document-active' : ''}`} onClick={() => setDocumentId(document.id)}><span className="document-item-top"><strong>{document.title}</strong><Tag>v{document.version ?? document.current_version}</Tag></span><MarkdownPreview className="document-item-summary" content={document.snippet || document.summary || t('尚無摘要')} /><span className="document-item-bottom"><span>{document.tags?.slice(0, 3).map((tag) => `#${tag}`).join(' ') || t('無標籤')}</span><time>{dateText(document.updated_at)}</time></span></button>)}
+                {documents.map((document) => <button type="button" key={document.id} className={`knowledge-document-item${document.id === documentId ? ' knowledge-document-active' : ''}`} onClick={() => { if (document.id !== documentId) setCollaborationState(null); setDocumentId(document.id); }}><span className="document-item-top"><strong>{document.title}</strong><Tag>v{document.version ?? document.current_version}</Tag></span><MarkdownPreview className="document-item-summary" content={document.snippet || document.summary || t('尚無摘要')} /><span className="document-item-bottom"><span>{document.tags?.slice(0, 3).map((tag) => `#${tag}`).join(' ') || t('無標籤')}</span><time>{dateText(document.updated_at)}</time></span></button>)}
               </aside>
               <main className="knowledge-reader">
                 {documentBusy && !documentContext && <div className="product-inline-loading"><Spin /></div>}
                 {!documentId && !documentsBusy && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('選取一份文件以檢視版本與來源')} />}
                 {documentId && !documentContext && !documentBusy && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('文件脈絡無法載入')} />}
-                {documentContext && selectedVersion && <DocumentReader context={documentContext} selectedVersion={selectedVersion} history={history} busy={documentBusy} canWrite={canWrite} onVersion={selectExactVersion} onPublish={openPublish} onCreateDecision={() => { decisionForm.resetFields(); decisionForm.setFieldsValue({ document_id: documentContext.document.id, source_refs: [] }); setFormError(''); setDecisionOpen(true); }} />}
+                {documentContext && selectedVersion && <DocumentReader context={documentContext} selectedVersion={selectedVersion} history={history} busy={documentBusy} actorId={principal.id} canWrite={canWrite} canPublish={canPublishDraft && selectedVersion.version === documentContext.document.current_version} collaborationState={collaborationState?.draft.document_id === documentContext.document.id ? collaborationState : null} refreshKey={draftRefreshKey} onCollaborationStateChange={setCollaborationState} onVersion={selectExactVersion} onPublish={openPublish} onCreateDecision={() => { decisionForm.resetFields(); decisionForm.setFieldsValue({ document_id: documentContext.document.id, source_refs: [] }); setFormError(''); setDecisionOpen(true); }} />}
               </main>
             </div>
           </>
@@ -484,11 +493,9 @@ function KnowledgeWorkspace() {
 
       <Modal title={t('發佈文件新版本') + (documentContext ? ` · ${documentContext.document.title}` : '')} open={publishOpen} onCancel={() => { setPublishOpen(false); setPublishError(null); }} onOk={() => publishForm.submit()} confirmLoading={publishSaving} okText={t('發佈新版本')} cancelText={t('取消')} width={780} destroyOnClose>
         {publishError && <Alert className="product-form-alert" type="error" showIcon message={t('未發佈新版本')} description={t('版本衝突：{{message}} 目前草稿仍保留，請確認最新版本後再決定如何發佈。', { message: publishError.message })} />}
-        {documentContext && <Alert className="product-form-alert" type="info" showIcon message={t('目前最新版 v{{version}}', { version: formatNumber(documentContext.document.current_version) })} description={t('expected_version 採 compare-and-swap；舊版本不可變更。若遇版本衝突，先確認最新內容及來源再調整草稿。')} />}
+        {documentContext && collaborationState && <Alert className="product-form-alert" type="info" showIcon message={t('即將發佈共同草稿修訂 {{revision}}', { revision: formatNumber(collaborationState.draft.revision) })} description={t('發佈後會建立新的不可變版本，舊版本仍可從版本歷程閱讀。')} />}
         <Form form={publishForm} layout="vertical" onFinish={(values) => void publishVersion(values)}>
-          <Form.Item name="expected_version" label={t('預期目前版本')} rules={[{ required: true }]}><InputNumber min={1} className="full-width" /></Form.Item>
-          <Form.Item name="title" label={t('版本標題')} rules={[{ required: true, whitespace: true }]}><Input maxLength={200} /></Form.Item>
-          <Form.Item name="body" label={t('正文（Markdown）')} rules={[{ required: true, whitespace: true, message: t('正文不得空白') }]}><TextArea rows={12} spellCheck /></Form.Item>
+          <Form.Item name="title" label={t('版本標題（選填）')}><Input maxLength={200} /></Form.Item>
           <Form.Item name="change_summary" label={t('變更摘要')} rules={[{ required: true, whitespace: true }]}><Input maxLength={300} /></Form.Item>
           <Divider orientation="left" plain>{t('來源與 provenance')}</Divider><ReferenceFields />
         </Form>
@@ -512,7 +519,12 @@ function DocumentReader({
   selectedVersion,
   history,
   busy,
+  actorId,
   canWrite,
+  canPublish,
+  collaborationState,
+  refreshKey,
+  onCollaborationStateChange,
   onVersion,
   onPublish,
   onCreateDecision,
@@ -521,7 +533,12 @@ function DocumentReader({
   selectedVersion: DocumentVersion;
   history: DocumentVersion[];
   busy: boolean;
+  actorId: string;
   canWrite: boolean;
+  canPublish: boolean;
+  collaborationState: KnowledgeCollaborationState | null;
+  refreshKey: number;
+  onCollaborationStateChange: (state: KnowledgeCollaborationState | null) => void;
   onVersion: (version: number) => void;
   onPublish: () => void;
   onCreateDecision: () => void;
@@ -530,12 +547,15 @@ function DocumentReader({
   const isLatest = selectedVersion.version === context.document.current_version;
   return (
     <div className="document-reader-content">
-      <div className="reader-toolbar"><div className="citation-uri">{selectedVersion.uri}</div><Space><Select aria-label={t('選擇文件版本')} value={selectedVersion.version} loading={busy} onChange={(version) => onVersion(version)} options={history.slice().sort((a, b) => b.version - a.version).map((version) => ({ value: version.version, label: `v${formatNumber(version.version)}${version.version === context.document.current_version ? ` · ${t('最新')}` : ''}` }))} />{canWrite && isLatest && <Button type="primary" onClick={onPublish}>{t('發佈新版本')}</Button>}</Space></div>
+      <div className="reader-toolbar"><div className="citation-uri">{selectedVersion.uri}</div><Space><Select aria-label={t('選擇文件版本')} value={selectedVersion.version} loading={busy} onChange={(version) => onVersion(version)} options={history.slice().sort((a, b) => b.version - a.version).map((version) => ({ value: version.version, label: `v${formatNumber(version.version)}${version.version === context.document.current_version ? ` · ${t('最新')}` : ''}` }))} />{canWrite && isLatest && <Tooltip title={!canPublish ? t('待共同草稿已同步後才能發佈') : undefined}><Button type="primary" disabled={!canPublish} onClick={onPublish}>{t('發佈新版本')}</Button></Tooltip>}</Space></div>
       {!isLatest && <Alert className="historical-version-alert" type="warning" showIcon icon={<HistoryOutlined />} message={t('正在檢視不可變更的歷史版本 v{{version}}', { version: formatNumber(selectedVersion.version) })} />}
-      <div className="reader-document-head"><div><div className="document-version-kicker">{context.document.space_id.slice(0, 8)} · {t('版本')} {formatNumber(selectedVersion.version)}</div><Title level={3}>{selectedVersion.title}</Title><Paragraph>{context.document.summary}</Paragraph></div><div className="reader-head-actions">{canWrite && <Button icon={<SafetyCertificateOutlined />} onClick={onCreateDecision}>{t('記錄決策')}</Button>}</div></div>
+      <div className="reader-document-head"><div><div className="document-version-kicker">{context.document.space_id.slice(0, 8)} · {isLatest ? t('共同草稿') : t('版本')} {isLatest ? collaborationState ? formatNumber(collaborationState.draft.revision) : '…' : formatNumber(selectedVersion.version)}</div><Title level={3}>{isLatest ? collaborationState?.draft.title ?? selectedVersion.title : selectedVersion.title}</Title><Paragraph>{context.document.summary}</Paragraph></div><div className="reader-head-actions">{canWrite && <Button icon={<SafetyCertificateOutlined />} onClick={onCreateDecision}>{t('記錄決策')}</Button>}</div></div>
       <Space wrap className="document-tags">{context.document.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}</Space>
       {busy && <div className="reader-loading"><Spin size="small" /> {t('載入版本')}</div>}
-      <article className="markdown-content"><MarkdownContent content={selectedVersion.body} /></article>
+      <div hidden={!isLatest}>
+        <CollaborativeMarkdownEditor key={`${actorId}:${context.document.id}`} documentId={context.document.id} actorId={actorId} canEdit={canWrite && isLatest} refreshKey={refreshKey} onStateChange={onCollaborationStateChange} />
+      </div>
+      {!isLatest && <article className="markdown-content"><MarkdownContent content={selectedVersion.body} /></article>}
       <section className="version-metadata"><div><span>{t('版本建立')}</span><strong>{dateText(selectedVersion.created_at)}</strong></div><div><span>{t('編輯者')}</span><strong>{selectedVersion.author_id}</strong></div><div><span>{t('內容 SHA-256')}</span><code>{selectedVersion.content_sha256}</code></div><div><span>{t('變更摘要')}</span><strong>{selectedVersion.change_summary || '—'}</strong></div></section>
       <section className="provenance-section"><div className="knowledge-subhead"><h3>{t('來源引用')}</h3><span>{formatNumber(selectedVersion.source_refs.length)}</span></div><ReferenceList references={selectedVersion.source_refs} /></section>
       <section className="version-history-section"><div className="knowledge-subhead"><h3>{t('不可變版本歷程')}</h3><span>{formatNumber(history.length)}</span></div>{history.slice().sort((a, b) => b.version - a.version).map((version) => <button type="button" key={version.id} className={`version-history-row${version.version === selectedVersion.version ? ' version-history-current' : ''}`} onClick={() => onVersion(version.version)}><span className="version-history-number">v{formatNumber(version.version)}</span><span className="version-history-summary">{version.change_summary || t('沒有變更摘要')}<small>{dateText(version.created_at)} · SHA-256 {version.content_sha256.slice(0, 12)}…</small></span>{version.version === context.document.current_version && <Tag color="green">{t('最新')}</Tag>}</button>)}</section>

@@ -96,6 +96,26 @@ class PullRequest(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class PullRequestComment(Base):
+    __tablename__ = "pull_request_comments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    pull_request_id: Mapped[str] = mapped_column(ForeignKey("pull_requests.id"), nullable=False, index=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey("principals.id"), nullable=False, index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PullRequestReview(Base):
+    __tablename__ = "pull_request_reviews"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    pull_request_id: Mapped[str] = mapped_column(ForeignKey("pull_requests.id"), nullable=False, index=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey("principals.id"), nullable=False, index=True)
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)
+    comment: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    head_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CheckReceipt(Base):
     __tablename__ = "check_receipts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

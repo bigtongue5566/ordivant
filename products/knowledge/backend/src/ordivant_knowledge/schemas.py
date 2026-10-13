@@ -54,6 +54,17 @@ class VersionPublish(InputModel):
         return value
 
 
+class DraftUpdate(InputModel):
+    update: str = Field(min_length=1, max_length=350_000)
+
+
+class DraftPublish(InputModel):
+    expected_revision: int = Field(ge=0)
+    change_summary: str = Field(min_length=1, max_length=4000)
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    source_refs: list[Reference] = Field(default_factory=list, max_length=200)
+
+
 class DecisionCreate(InputModel):
     space_id: str = Field(min_length=1, max_length=80)
     document_id: str | None = Field(default=None, max_length=80)

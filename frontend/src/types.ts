@@ -36,6 +36,21 @@ export type Agent = {
   created_at: string;
 };
 
+export type ProjectParticipant = {
+  id: string;
+  principal_id: string;
+  name: string;
+  kind: 'human' | 'agent';
+  role: 'admin' | 'manager' | 'worker' | 'reviewer';
+};
+
+export type TaskAssignment = {
+  id: string;
+  principal_id: string;
+  name: string;
+  kind: 'human' | 'agent';
+};
+
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type ModelDefinition = {
@@ -98,7 +113,11 @@ export type Task = {
   priority: Priority;
   status: TaskStatus;
   assignee_id: string | null;
+  assignee_principal_id?: string | null;
+  assignee?: TaskAssignment | null;
   reviewer_id: string | null;
+  reviewer_principal_id?: string | null;
+  reviewer?: TaskAssignment | null;
   parent_task_id: string | null;
   dependency_ids: string[];
   labels: string[];
@@ -113,9 +132,14 @@ export type Task = {
 export type Execution = {
   id: string;
   task_id: string;
-  agent_id: string;
+  agent_id: string | null;
+  executor_id?: string | null;
+  executor_kind?: 'human' | 'agent' | 'runtime' | null;
+  executor_name?: string | null;
+  claimed_by_principal_id?: string | null;
+  submitted_by_principal_id?: string | null;
   status: 'running' | 'submitted' | 'accepted' | 'rejected' | 'expired' | 'released';
-  lease_expires_at: string;
+  lease_expires_at: string | null;
   started_at: string;
   finished_at: string | null;
   progress: number;
@@ -193,7 +217,7 @@ export type Overview = {
 export type ClaimedExecution = {
   task: Task;
   execution: Execution;
-  lease_token: string;
+  lease_token: string | null;
 };
 
 export type ExecutionConfig = {

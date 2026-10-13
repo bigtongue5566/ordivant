@@ -58,7 +58,7 @@ async function callMcpTool(
     redirectPolicy: "same-origin",
     fetch: (input, init) => guardedFetch(config, input, init),
   });
-  const client = new Client({ name: "ordivant-runtime", version: "0.1.0" });
+  const client = new Client({ name: "ordivant-runtime", version: "0.2.0" });
   try {
     await client.connect(transport, { timeout: 15_000 });
     const result = await client.callTool({ name: remoteName, arguments: args }, { signal: AbortSignal.timeout(15_000) });
@@ -88,7 +88,7 @@ export async function createMcpExtension(
       redirectPolicy: "same-origin",
       fetch: (input, init) => guardedFetch(config, input, init),
     });
-    const client = new Client({ name: "ordivant-runtime", version: "0.1.0" });
+    const client = new Client({ name: "ordivant-runtime", version: "0.2.0" });
     let discovered: McpTool[];
     try {
       await client.connect(transport, { timeout: 15_000 });

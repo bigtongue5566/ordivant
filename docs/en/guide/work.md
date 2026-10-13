@@ -11,26 +11,30 @@ Work organizes projects, tasks, Agent execution, messages, result evidence, and 
 
 1. An Identity administrator creates a Project in Work and grants members access to it. Members see only their authorized scope.
 2. In the Project's “Tasks” view, create a Task and enter its goal, description, inputs, scope, constraints, acceptance criteria, and priority.
-3. Choose an execution Agent with the required capabilities and access to this Project, then assign a different reviewer. Add prerequisite Tasks as dependencies when needed. Cycles are rejected. A dependent Task can start only after its prerequisites pass independent review.
+3. In **Assignee**, choose a human teammate or Agent authorized for this Project, or leave it unassigned for an eligible person to claim. In **Assign reviewer**, choose another authorized person or Agent. Add prerequisite Tasks as dependencies when needed. Cycles are rejected. A dependent Task can start only after its prerequisites pass independent review.
 4. Save and search the task list or filter it by status. Editing the task specification does not replace saved execution or review history.
+
+Human assignees must be invited, active, and granted a Work role and this Project scope by an Identity administrator. An administrator can assign work to an invited teammate before they have signed in to Work. See [Team setup](team-setup.md) for roles and scopes.
 
 <span id="執行並提交證據"></span>
 <span id="运行并提交证据"></span>
 
 ## Execute and submit evidence
 
-Each Agent attempt has its own execution record. Automatic execution requires an administrator to enable the Agent execution service first. You can still arrange tasks, submit results, and review them manually without it. See [Runs and automation](../execution-usage.md) for dispatching.
+Human work needs no LLM or Agent. A Worker, Manager, or Admin with access to this Project can claim a ready task that is unassigned or assigned to them. Select **Claim task** directly; do not select an Agent. A person cannot claim work assigned to someone else. Human execution has no Agent lease and can be resumed from the task's execution history after reloading the page.
 
-After the work is complete, the executor submits a summary and one or more results, such as text, an Artifact URI, or a file/test-result reference. Submission moves the Task into review and preserves the Run's events and receipt. Explain how the evidence meets the acceptance criteria. “Run done” means only that execution was submitted; it does not mean the Task was accepted.
+Use **Report progress** to record updates and evidence while working. If the task must wait for information, select **Mark blocked**. A blocked or returned task keeps its current assignee. To pass work to a colleague, choose **Handoff and release** and add a handoff note. This closes the current execution, records the handoff, clears the human assignee, and returns the task to **Ready** so another eligible teammate can claim it. A Manager or Admin can also reassign a task before execution starts.
 
-The reviewer checks the summary and evidence in the Task details, then accepts or returns it with a comment. Acceptance completes the Task. Returning it makes it executable again and preserves prior evidence. A submitter cannot accept their own result. When a Task is rejected or retried, its new Execution does not overwrite the previous history.
+When done, submit a summary and one or more results, such as text, an Artifact URI, or a file/test-result reference. Submission moves the Task into review and preserves its execution, evidence, and handoff history. Explain how the evidence meets the acceptance criteria; submission does not mean the Task was accepted. A different authorized person reviews it and accepts or returns it. Submitters cannot review their own results.
+
+Dispatching an Agent is a separate path: the Agent execution service must be enabled, and only autonomous Pi Runs need a model connection. Agent executions retain their own lease and fencing token. See [Runs and automation](../execution-usage.md) for dispatching.
 
 <span id="協作與引用"></span>
 <span id="协作与引用"></span>
 
 ## Collaboration and citations
 
-Use messages in the Task context to ask another member or Agent a question, reply, hand off work, or record a decision. A Project manager or the Agent responsible for a parent Task can delegate a child Task; delegation does not grant the delegate access to other Projects.
+Use messages in the Task context to ask another member or Agent a question, reply, hand off work, or record a decision. A Project Manager or Admin, or the human or Agent responsible for a parent Task, can select **Delegate child task** to assign work to a colleague or Agent with execution rights in that Project. Delegation does not grant access to other Projects.
 
 When work depends on a Knowledge document, put its **exact-version citation URI** in Task inputs or submitted evidence, retaining the version number. A citation records the source but does not authorize readers in the Knowledge Space; members who need the original document must be granted access separately. See the [Knowledge guide](knowledge.md) for the citation format and workflow.
 
@@ -50,7 +54,7 @@ See the [execution guide](../execution-usage.md) for Run states, waiting and sto
 ## Permissions overview
 
 - **Manager:** manages tasks and execution schedules in authorized Projects.
-- **Worker:** performs authorized work and submits results.
-- **Reviewer:** reviews submissions and cannot accept their own.
+- **Worker:** claims unassigned work or work assigned to them, submits results, and can hand work off.
+- **Reviewer:** reviews submissions and cannot accept their own. Managers and Administrators can also review within their authorized scope.
 
 Organization administrators create Projects, invite members, and grant product roles. Work access is based on Project scope and manager, worker, or reviewer identity; there is no separate Work Reader role. A human sign-in session does not become an Agent or Runtime credential.

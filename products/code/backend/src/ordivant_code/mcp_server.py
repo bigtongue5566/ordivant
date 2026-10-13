@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import uuid
 import json
+from typing import Literal
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -97,6 +98,42 @@ async def create_pull_request(
 async def get_pull_request(repository_id: str, number: int) -> dict:
     """Get a pull request and its persisted status receipts."""
     return await _request("GET", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}")
+
+
+@mcp.tool()
+async def get_pull_request_collaboration(repository_id: str, number: int) -> dict:
+    """Get Ordivant-local pull request comments and review receipts."""
+    return await _request(
+        "GET", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}/collaboration",
+    )
+
+
+@mcp.tool()
+async def comment_on_pull_request(
+    repository_id: str, number: int, body: str, request_id: str | None = None,
+) -> dict:
+    """Add an Ordivant-local comment without creating a Gitea review."""
+    return await _request(
+        "POST", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}/comments",
+        body={"body": body}, request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def review_pull_request(
+    repository_id: str,
+    number: int,
+    decision: Literal["approve", "request_changes", "comment"],
+    expected_head_sha: str,
+    comment: str = "",
+    request_id: str | None = None,
+) -> dict:
+    """Record an Ordivant-local review receipt against the expected current head."""
+    return await _request(
+        "POST", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}/reviews",
+        body={"decision": decision, "comment": comment, "expected_head_sha": expected_head_sha},
+        request_id=request_id,
+    )
 
 
 @mcp.tool()

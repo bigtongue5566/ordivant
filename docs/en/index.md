@@ -43,6 +43,14 @@ Start with a document preparation task and add models, tools, project knowledge,
 
 For example, summarize release readiness every week: first organize the supplied information, identify gaps and questions, then wait for review before dependent work begins. To read an external system, an administrator first connects and authorizes its tool. Adding a URL does not automatically retrieve its contents.
 
+## Work with your team without an LLM {#collaboration-without-llm}
+
+People can create tasks in Work. Managers and administrators can assign a task to a coworker, and authorized workers can claim tasks that are unassigned or assigned to them. A different authorized person must independently review submitted evidence.
+
+In Knowledge, authorized members edit the same draft together in real time; a saved draft can be published as an immutable version. Agents can participate in that shared draft through REST or MCP, but these human workflows do not require an LLM.
+
+Code stores Ordivant discussions and review records tied to a PR head SHA. Git operations in Code require Gitea; Gitea remains responsible for Git, merges, and its own approval process. Only autonomous Agent runs require model configuration.
+
 ## Explore the main features {#product-tour}
 
 Switch products below to see the actual interface and the work it supports. Click a documentation screenshot to enlarge it, or view its original size to inspect the fields. The screens use demonstration data to show the features; DEMO runs illustrate operation and do not represent completed paid-model tasks.
@@ -51,7 +59,7 @@ Switch products below to see the actual interface and the work it supports. Clic
 
 ### Work: tasks, collaboration, and independent review {#work-preview}
 
-Write a goal, inputs, scope, constraints, and acceptance criteria in the task specification. Set owners, priorities, and dependencies. Request help or delegate a child task when needed, preserving discussion and deliverables in context. Each task keeps its own submission and review history.
+Write a goal, inputs, scope, constraints, and acceptance criteria in the task specification. Managers can assign work to a coworker or Agent; authorized workers can also claim tasks that are unassigned or assigned to them. Keep help requests and delegated work in context, then submit evidence for an independent review by another authorized person.
 
 [Task and review guide](./guide/work.md) · [Help and delegation](./features.md#work-help-and-delegation)
 
@@ -63,13 +71,13 @@ After dispatching to a Pi Agent, inspect status, events, tool results, outputs, 
 
 ### Knowledge: document versions and decision sources {#knowledge-preview}
 
-Organize documents in Spaces and search titles, bodies, and tags. Each publication preserves an immutable version. Tasks and PRs can cite an exact version so reviewers can inspect the information used. Decision records preserve the reasoning and sources behind a choice. Space permissions still control who can read a citation.
+Organize documents in Spaces and search titles, bodies, and tags. Authorized members can edit the same Markdown draft together in real time, and Agents can join that draft through REST or MCP. Publishing preserves an immutable version that tasks and PRs can cite. Space permissions still control who can read a citation.
 
 [Documents, versions, search, and citations](./guide/knowledge.md)
 
 ### Code: code delivery and pull requests {#code-preview}
 
-With optional Gitea enabled, create repositories, branches, commits, and PRs in Code, attach task and document sources, and follow your team's code review process. Teams already using GitHub, GitLab, or Gitea can first configure Work's read-only connections for PR and check status.
+Code stores Ordivant-local PR discussions and review records tied to the current head SHA; these are not Gitea approvals. Git operations require Gitea, which remains responsible for Git, merging, and its own approvals. Teams already using GitHub or GitLab can configure Work's read-only connections for PR and check status.
 
 [Code operating guide](./guide/code.md) · [Choose the products you need](./overview.md#four-service-boundaries)
 
@@ -147,7 +155,7 @@ When an Agent lacks information or a tool, add inputs, authorize the appropriate
 
 Ordivant is **MIT licensed**. Use, modify, and deploy it yourself. Work, Knowledge, and Code can be deployed independently, and you manage the data. Shared sign-in supports local accounts and enterprise OIDC; optional Keycloak can bridge SAML and LDAP.
 
-The current version is the **v0.1.0 early public release**. Knowledge offers text search, and Code needs Gitea for write operations. Vector search, built-in CI, SCIM, hard dollar budgets, and distributed execution are not yet available. Docker sandboxes have no network or host-directory access and use tools already present in the environment. Configure VM execution when stronger isolation is required.
+The current version is **v0.2.0 (2026-10-14)**. Human collaboration in Work, Knowledge, and Code needs no LLM; only autonomous Agent Runs require model settings. Knowledge offers text search, and Code Git writes require Gitea. Vector search, built-in CI, SCIM, hard dollar budgets, and distributed execution are not yet available. Docker sandboxes have no network or host-directory access and use tools already present in the environment. Configure VM execution when stronger isolation is required. See the [release and upgrade guide](./release.md).
 
 Provide and authorize your own model and tool connections; external providers may charge for use. Unconfigured DEMO runs illustrate the execution flow. For actual delivery, check results, sources, and provider usage.
 

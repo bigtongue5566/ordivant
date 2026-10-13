@@ -139,7 +139,7 @@ def test_verified_creator_can_comment_but_cannot_approve_own_pull(api, credentia
     }
     rejected = api.post(
         f"{base}/reviews",
-        headers={**auth(credentials["manager_token"]), "Idempotency-Key": "self-approve-312"},
+        headers={**auth(credentials["manager_token"]), "Idempotency-Key": "self-review"},
         json={"decision": "approve", "comment": "", "expected_head_sha": "a" * 40},
     )
     assert rejected.status_code == 403
@@ -180,7 +180,7 @@ def test_review_requires_current_head_and_open_pr_except_comment(api, credential
 
     closed = api.post(
         f"{base}/reviews",
-        headers={**auth(credentials["writer_token"]), "Idempotency-Key": "closed-approve-313"},
+        headers={**auth(credentials["writer_token"]), "Idempotency-Key": "closed-review"},
         json={"decision": "approve", "comment": "", "expected_head_sha": "c" * 40},
     )
     assert closed.status_code == 409

@@ -127,7 +127,11 @@ def task_json(session: Session, task: Task) -> dict:
         "priority": task.priority,
         "status": task.status,
         "assignee_id": task.assignee_id,
+        "assignee_principal_id": task.assignee_principal_id,
+        "assignee": participant_reference(session, task.assignee_id, task.assignee_principal_id),
         "reviewer_id": task.reviewer_id,
+        "reviewer_principal_id": task.reviewer_principal_id,
+        "reviewer": participant_reference(session, task.reviewer_id, task.reviewer_principal_id),
         "parent_task_id": task.parent_task_id,
         "dependency_ids": dependency_ids,
         "labels": _loads(task.labels_json, []),
@@ -140,11 +144,18 @@ def task_json(session: Session, task: Task) -> dict:
     }
 
 
-def execution_json(execution: Execution) -> dict:
+def execution_json(execution: Execution, session: Session) -> dict:
+    operator = session.get(Principal, execution.claimed_by_principal_id)
+    agent = session.get(Agent, execution.agent_id) if execution.agent_id else None
     return {
         "id": execution.id,
         "task_id": execution.task_id,
         "agent_id": execution.agent_id,
+        "executor_id": execution.agent_id or execution.claimed_by_principal_id,
+        "executor_kind": "agent" if execution.agent_id else "human",
+        "executor_name": agent.name if agent else operator.name if operator else "",
+        "claimed_by_principal_id": execution.claimed_by_principal_id,
+        "submitted_by_principal_id": execution.submitted_by_principal_id,
         "status": execution.status,
         "lease_expires_at": _iso(execution.lease_expires_at),
         "started_at": _iso(execution.started_at),
@@ -292,9 +303,62 @@ def agent_for_task(session: Session, actor: Principal, agent_id: str, project_id
     if agent is None:
         raise not_found("找不到 agent")
     principal = session.get(Principal, agent.principal_id)
-    if principal is None or project_id not in principal_projects(session, principal.id):
+    if principal is None or not principal.active or principal.organization_id != actor.organization_id or project_id not in principal_projects(session, principal.id):
         raise forbidden("agent 沒有此專案的存取權")
     return agent
+
+
+def human_for_task(session: Session, actor: Principal, principal_id: str, project_id: str, *, reviewer: bool = False) -> Principal:
+    target = session.get(Principal, principal_id)
+    roles = {"admin", "manager", "reviewer"} if reviewer else {"admin", "manager", "worker"}
+    if target is None or target.kind != "human" or not target.active or target.organization_id != actor.organization_id:
+        raise not_found("找不到可指派的人員")
+    if project_id not in principal_projects(session, target.id) or target.role not in roles:
+        raise forbidden("人員沒有此專案的所需角色或存取權")
+    return target
+
+
+def participant_reference(session: Session, agent_id: str | None, principal_id: str | None) -> dict | None:
+    if agent_id:
+        agent = session.get(Agent, agent_id)
+        return {"id": agent.id, "principal_id": agent.principal_id, "name": agent.name, "kind": "agent"} if agent else None
+    principal = session.get(Principal, principal_id) if principal_id else None
+    return {"id": principal.id, "principal_id": principal.id, "name": principal.name, "kind": "human"} if principal else None
+
+
+def list_participants(session: Session, actor: Principal, project_id: str) -> list[dict]:
+    require_project(session, actor, project_id)
+    result = []
+    humans = session.scalars(select(Principal).join(ProjectMembership, ProjectMembership.principal_id == Principal.id).where(
+        ProjectMembership.project_id == project_id, Principal.organization_id == actor.organization_id,
+        Principal.kind == "human", Principal.active.is_(True),
+    ).order_by(Principal.name, Principal.id))
+    for principal in humans:
+        result.append({**participant_reference(session, None, principal.id), "role": principal.role})
+    agents = session.scalars(select(Agent).join(Principal, Principal.id == Agent.principal_id).join(
+        ProjectMembership, ProjectMembership.principal_id == Principal.id,
+    ).where(ProjectMembership.project_id == project_id, Principal.organization_id == actor.organization_id,
+        Principal.active.is_(True), Agent.status != "disabled").order_by(Agent.name, Agent.id))
+    for agent in agents:
+        result.append({**participant_reference(session, agent.id, None), "role": agent.role})
+    return result
+
+
+def _validate_assignment(session: Session, actor: Principal, project_id: str, value: dict) -> None:
+    for field, role in (("assignee_id", "worker"), ("reviewer_id", "reviewer")):
+        human_field = field.replace("_id", "_principal_id")
+        if value.get(field) and value.get(human_field):
+            raise bad_request("assignment_conflict", "每個負責角色只能指派一位人員或 Agent")
+        if value.get(field):
+            agent = agent_for_task(session, actor, value[field], project_id)
+            if agent.role != role or agent.status == "disabled":
+                raise bad_request("invalid_agent", f"{field} 必須指定可用的 {role} agent")
+        if value.get(human_field):
+            human_for_task(session, actor, value[human_field], project_id, reviewer=role == "reviewer")
+    assignee = participant_reference(session, value.get("assignee_id"), value.get("assignee_principal_id"))
+    reviewer = participant_reference(session, value.get("reviewer_id"), value.get("reviewer_principal_id"))
+    if assignee and reviewer and assignee["principal_id"] == reviewer["principal_id"]:
+        raise bad_request("review_separation", "執行者與指定審查者必須不同")
 
 
 def actor_agent(session: Session, actor: Principal) -> Agent | None:
@@ -310,7 +374,7 @@ def has_active_task_lease(session: Session, actor: Principal, task: Task) -> boo
             Execution.claimed_by_principal_id == actor.id,
         )
     )
-    return bool(execution and _utc(execution.lease_expires_at) > now)
+    return bool(execution and (execution.agent_id is None or _utc(execution.lease_expires_at) > now))
 
 
 def _dependencies_done(session: Session, task_id: str) -> bool:
@@ -454,7 +518,9 @@ def _task_values(value: dict) -> dict:
         "priority": value.get("priority", "medium"),
         "status": value.get("status", "ready"),
         "assignee_id": value.get("assignee_id"),
+        "assignee_principal_id": value.get("assignee_principal_id"),
         "reviewer_id": value.get("reviewer_id"),
+        "reviewer_principal_id": value.get("reviewer_principal_id"),
         "parent_task_id": value.get("parent_task_id"),
         "labels_json": _json(value.get("labels", [])),
         "blocked_reason": value.get("blocked_reason"),
@@ -475,12 +541,9 @@ def create_task(session: Session, actor: Principal, value: dict) -> dict:
             raise forbidden()
         if value.get("status", "ready") not in {"backlog", "ready"}:
             raise bad_request("invalid_initial_status", "新任務只能從 backlog 或 ready 開始")
-    for field, expected_role in (("assignee_id", "worker"), ("reviewer_id", "reviewer")):
-        agent_id = value.get(field)
-        if agent_id:
-            target = agent_for_task(session, actor, agent_id, value["project_id"])
-            if target.role != expected_role or target.status == "disabled":
-                raise bad_request("invalid_agent", f"{field} 必須指定可用的 {expected_role} agent")
+    if actor.role not in ACTIVE_ROLES and value.get("assignee_principal_id"):
+        raise forbidden("只有管理者可指派其他人員")
+    _validate_assignment(session, actor, value["project_id"], value)
     dependencies = value.get("dependency_ids", [])
     _validate_dependencies(session, value["project_id"], None, dependencies)
     task = Task(**_task_values(value))
@@ -543,10 +606,25 @@ def patch_task(session: Session, actor: Principal, task_id: str, patch: dict) ->
     values = {
         key: value
         for key, value in patch.items()
-        if value is not None or key in {"assignee_id", "reviewer_id"}
+        if value is not None or key in {"assignee_id", "reviewer_id", "assignee_principal_id", "reviewer_principal_id"}
     }
     if not values:
         return task_json(session, task)
+    assignment_fields = {"assignee_id", "reviewer_id", "assignee_principal_id", "reviewer_principal_id"}
+    if assignment_fields.intersection(values):
+        assignment = {name: getattr(task, name) for name in assignment_fields}
+        assignment.update({name: value for name, value in values.items() if name in assignment_fields})
+        for field in ("assignee_id", "reviewer_id"):
+            human_field = field.replace("_id", "_principal_id")
+            if values.get(field) and human_field not in values:
+                assignment[human_field] = values[human_field] = None
+            if values.get(human_field) and field not in values:
+                assignment[field] = values[field] = None
+        if task.status in {"in_progress", "in_review"} and any(
+            assignment[name] != getattr(task, name) for name in ("assignee_id", "assignee_principal_id")
+        ):
+            raise conflict("active_assignment", "進行中任務需先交接或釋出才能變更負責者")
+        _validate_assignment(session, actor, task.project_id, assignment)
     if "status" in values:
         allowed = (task.status == "backlog" and values["status"] == "ready") or values["status"] == "cancelled"
         if not allowed:
@@ -563,7 +641,7 @@ def patch_task(session: Session, actor: Principal, task_id: str, patch: dict) ->
                 execution.status = "released"
                 execution.finished_at = now_utc()
                 execution.lease_token_hash = None
-                agent = session.get(Agent, execution.agent_id)
+                agent = session.get(Agent, execution.agent_id) if execution.agent_id else None
                 if agent and agent.status == "busy":
                     agent.status = "available"
                 add_audit(session, actor, "execution.released", "execution", execution.id, task.project_id, {"reason": "task_cancelled"})
@@ -613,7 +691,7 @@ def get_task_context(session: Session, actor: Principal, task_id: str) -> dict:
     )
     return {
         "task": task_json(session, task),
-        "executions": [execution_json(item) for item in executions],
+        "executions": [execution_json(item, session) for item in executions],
         "artifacts": [artifact_json(item) for item in artifacts],
         "messages": [message_json(item) for item in messages],
         "events": [event_json(item) for item in events],
@@ -624,7 +702,7 @@ def get_task_context(session: Session, actor: Principal, task_id: str) -> dict:
 def list_executions(session: Session, actor: Principal, task_id: str) -> list[dict]:
     task = task_for_actor(session, actor, task_id)
     return [
-        execution_json(item)
+        execution_json(item, session)
         for item in session.scalars(
             select(Execution).where(Execution.task_id == task.id).order_by(Execution.started_at.desc())
         )
@@ -636,7 +714,7 @@ def _close_expired(session: Session, task: Task) -> None:
     for execution in session.scalars(
         select(Execution).where(Execution.task_id == task.id, Execution.status == "running")
     ):
-        if _utc(execution.lease_expires_at) <= now:
+        if execution.agent_id and _utc(execution.lease_expires_at) <= now:
             execution.status = "expired"
             execution.finished_at = now
             execution.lease_token_hash = None
@@ -666,7 +744,18 @@ def claim_task(session: Session, actor: Principal, task_id: str, value: dict) ->
     agent = actor_agent(session, actor)
     if actor.kind == "runtime":
         raise forbidden("runtime credential 不可代替 agent 領取任務")
-    if agent:
+    human_work = actor.kind == "human" and not value.get("agent_id")
+    claimed_agent = None
+    if human_work:
+        require_role(actor, {"admin", "manager", "worker"})
+        if task.assignee_id or (task.assignee_principal_id and task.assignee_principal_id != actor.id):
+            raise forbidden("只能認領未指派或指派給自己的任務")
+        if task.reviewer_principal_id == actor.id:
+            raise bad_request("review_separation", "指定審查者不可認領同一任務")
+        if session.scalar(select(OutboxEvent.id).where(OutboxEvent.task_id == task.id, OutboxEvent.status.in_(["pending", "claimed"]))):
+            raise conflict("dispatch_pending", "任務已派發給 Agent，需先停止派發")
+        agent_id = None
+    elif agent:
         agent_id = agent.id
     elif actor.role in ACTIVE_ROLES:
         agent_id = value.get("agent_id")
@@ -676,11 +765,14 @@ def claim_task(session: Session, actor: Principal, task_id: str, value: dict) ->
         raise forbidden("只有 worker agent 或具管理權的 human 可 claim")
     if value.get("agent_id") and agent and value["agent_id"] != agent.id:
         raise forbidden("agent 不可冒用其他 agent 身分")
-    claimed_agent = _lock_agent(session, agent_for_task(session, actor, agent_id, task.project_id))
-    if claimed_agent.role != "worker" or claimed_agent.status != "available":
-        raise conflict("agent_unavailable", "agent 目前不可執行任務")
-    if task.assignee_id and task.assignee_id != claimed_agent.id:
-        raise forbidden("此任務已指派給其他 agent")
+    if not human_work:
+        if task.assignee_principal_id:
+            raise forbidden("此任務已指派給人員")
+        claimed_agent = _lock_agent(session, agent_for_task(session, actor, agent_id, task.project_id))
+        if claimed_agent.role != "worker" or claimed_agent.status != "available":
+            raise conflict("agent_unavailable", "agent 目前不可執行任務")
+        if task.assignee_id and task.assignee_id != claimed_agent.id:
+            raise forbidden("此任務已指派給其他 agent")
     if task.status != "ready":
         raise conflict("task_not_ready", "任務目前不可領取")
     if not _dependencies_done(session, task.id):
@@ -688,34 +780,43 @@ def claim_task(session: Session, actor: Principal, task_id: str, value: dict) ->
         task.blocked_reason = "dependencies_pending"
         raise conflict("dependencies_pending", "任務依賴尚未完成")
     now = now_utc()
+    claim_values = {"status": "in_progress", "blocked_reason": None, "updated_at": now}
+    if human_work:
+        claim_values["assignee_principal_id"] = actor.id
     result = session.execute(
         update(Task)
-        .where(Task.id == task.id, Task.status == "ready")
-        .values(status="in_progress", blocked_reason=None, updated_at=now)
+        .where(
+            Task.id == task.id,
+            Task.status == "ready",
+            Task.assignee_id == task.assignee_id,
+            Task.assignee_principal_id == task.assignee_principal_id,
+        )
+        .values(**claim_values)
     )
     if result.rowcount != 1:
         raise conflict("task_claimed", "任務已被其他執行者領取")
-    token = new_secret("lease")
+    token = None if human_work else new_secret("lease")
     execution = Execution(
         id=new_id(),
         task_id=task.id,
-        agent_id=claimed_agent.id,
+        agent_id=claimed_agent.id if claimed_agent else None,
         claimed_by_principal_id=actor.id,
         status="running",
-        lease_token_hash=hash_secret(token),
-        lease_expires_at=now + timedelta(seconds=value.get("lease_seconds", 300)),
+        lease_token_hash=hash_secret(token) if token else None,
+        lease_expires_at=None if human_work else now + timedelta(seconds=value.get("lease_seconds", 300)),
         started_at=now,
         progress=0,
         cost_usd=0,
         cost_source="self_reported",
     )
     session.add(execution)
-    claimed_agent.status = "busy"
+    if claimed_agent:
+        claimed_agent.status = "busy"
     task.status = "in_progress"
     task.updated_at = now
-    add_audit(session, actor, "task.claimed", "task", task.id, task.project_id, {"execution_id": execution.id, "agent_id": claimed_agent.id})
+    add_audit(session, actor, "task.claimed", "task", task.id, task.project_id, {"execution_id": execution.id, "agent_id": execution.agent_id, "executor_kind": "human" if human_work else "agent"})
     session.flush()
-    return {"task": task_json(session, task), "execution": execution_json(execution), "lease_token": token}
+    return {"task": task_json(session, task), "execution": execution_json(execution, session), "lease_token": token}
 
 
 def _leased_execution(
@@ -723,7 +824,7 @@ def _leased_execution(
     actor: Principal,
     task: Task,
     execution_id: str,
-    lease_token: str,
+    lease_token: str | None,
 ) -> Execution:
     task = _lock_task(session, task)
     if session.bind and session.bind.dialect.name != "sqlite":
@@ -739,6 +840,11 @@ def _leased_execution(
         raise not_found("找不到 execution")
     if execution.status != "running" or execution.claimed_by_principal_id != actor.id:
         raise conflict("lease_invalid", "execution lease 已失效或不屬於目前 actor")
+    if execution.agent_id is None:
+        if actor.kind != "human":
+            raise forbidden("只有實際執行的人員可更新此任務")
+        require_role(actor, {"admin", "manager", "worker"})
+        return execution
     if _utc(execution.lease_expires_at) <= now_utc():
         execution.status = "expired"
         execution.finished_at = now_utc()
@@ -751,7 +857,7 @@ def _leased_execution(
             agent.status = "available"
         add_audit(session, actor, "execution.expired", "execution", execution.id, task.project_id, {"task_id": task.id})
         raise conflict("lease_expired", "execution lease 已過期")
-    if not execution.lease_token_hash or not hmac.compare_digest(execution.lease_token_hash, hash_secret(lease_token)):
+    if not lease_token or not execution.lease_token_hash or not hmac.compare_digest(execution.lease_token_hash, hash_secret(lease_token)):
         raise conflict("lease_invalid", "lease token 無效")
     return execution
 
@@ -759,6 +865,8 @@ def _leased_execution(
 def renew_lease(session: Session, actor: Principal, task_id: str, value: dict) -> dict:
     task = task_for_actor(session, actor, task_id)
     execution = _leased_execution(session, actor, task, value["execution_id"], value["lease_token"])
+    if execution.agent_id is None:
+        raise conflict("human_work_has_no_lease", "人員工作不需要續期租約")
     token = new_secret("lease")
     now = now_utc()
     execution.lease_token_hash = hash_secret(token)
@@ -766,12 +874,12 @@ def renew_lease(session: Session, actor: Principal, task_id: str, value: dict) -
     task.updated_at = now
     add_audit(session, actor, "execution.renewed", "execution", execution.id, task.project_id, {"lease_expires_at": _iso(execution.lease_expires_at)})
     session.flush()
-    return {"task": task_json(session, task), "execution": execution_json(execution), "lease_token": token}
+    return {"task": task_json(session, task), "execution": execution_json(execution, session), "lease_token": token}
 
 
 def report_progress(session: Session, actor: Principal, task_id: str, value: dict) -> dict:
     task = task_for_actor(session, actor, task_id)
-    execution = _leased_execution(session, actor, task, value["execution_id"], value["lease_token"])
+    execution = _leased_execution(session, actor, task, value["execution_id"], value.get("lease_token"))
     progress = value["progress"]
     execution.progress = progress
     task.progress = progress
@@ -791,7 +899,7 @@ def _finish_execution(session: Session, task: Task, execution: Execution, status
     execution.status = status
     execution.finished_at = now
     execution.lease_token_hash = None
-    agent = session.get(Agent, execution.agent_id)
+    agent = session.get(Agent, execution.agent_id) if execution.agent_id else None
     if agent and agent.status == "busy":
         agent.status = "available"
     task.updated_at = now
@@ -799,7 +907,7 @@ def _finish_execution(session: Session, task: Task, execution: Execution, status
 
 def block_task(session: Session, actor: Principal, task_id: str, value: dict) -> dict:
     task = task_for_actor(session, actor, task_id)
-    execution = _leased_execution(session, actor, task, value["execution_id"], value["lease_token"])
+    execution = _leased_execution(session, actor, task, value["execution_id"], value.get("lease_token"))
     _finish_execution(session, task, execution, "released")
     task.status = "blocked"
     task.blocked_reason = value["reason"]
@@ -811,12 +919,14 @@ def block_task(session: Session, actor: Principal, task_id: str, value: dict) ->
 
 def release_task(session: Session, actor: Principal, task_id: str, value: dict) -> dict:
     task = task_for_actor(session, actor, task_id)
-    execution = _leased_execution(session, actor, task, value["execution_id"], value["lease_token"])
+    execution = _leased_execution(session, actor, task, value["execution_id"], value.get("lease_token"))
     _finish_execution(session, task, execution, "released")
     task.status = "ready"
     task.blocked_reason = None
     task.handoff = value["handoff"]
     task.progress = 0
+    if execution.agent_id is None:
+        task.assignee_principal_id = None
     add_audit(session, actor, "task.released", "task", task.id, task.project_id, {"execution_id": execution.id})
     session.flush()
     return task_json(session, task)
@@ -839,7 +949,7 @@ def unblock_task(session: Session, actor: Principal, task_id: str) -> dict:
 
 def submit_result(session: Session, actor: Principal, task_id: str, value: dict) -> dict:
     task = task_for_actor(session, actor, task_id)
-    execution = _leased_execution(session, actor, task, value["execution_id"], value["lease_token"])
+    execution = _leased_execution(session, actor, task, value["execution_id"], value.get("lease_token"))
     now = now_utc()
     execution.status = "submitted"
     execution.finished_at = now
@@ -866,7 +976,7 @@ def submit_result(session: Session, actor: Principal, task_id: str, value: dict)
                 created_at=now,
             )
         )
-    agent = session.get(Agent, execution.agent_id)
+    agent = session.get(Agent, execution.agent_id) if execution.agent_id else None
     if agent and agent.status == "busy":
         agent.status = "available"
     add_audit(session, actor, "task.submitted", "task", task.id, task.project_id, {"execution_id": execution.id, "artifact_count": len(value["artifacts"])})
@@ -887,6 +997,8 @@ def review_result(session: Session, actor: Principal, task_id: str, value: dict)
     if submitted is None:
         raise conflict("submission_missing", "找不到待審核的執行紀錄")
     reviewer_agent = actor_agent(session, actor)
+    if task.reviewer_principal_id and actor.id != task.reviewer_principal_id:
+        raise forbidden("此任務指定了其他人員審查")
     if task.reviewer_id:
         if actor.role != "admin" and (reviewer_agent is None or reviewer_agent.id != task.reviewer_id):
             raise forbidden("此任務指定了其他 reviewer")
@@ -1113,7 +1225,7 @@ def create_message(session: Session, actor: Principal, value: dict) -> dict:
     if recipient:
         if recipient.id == actor.id:
             raise bad_request("self_message", "不可傳送訊息給自己")
-        if recipient.organization_id != actor.organization_id or value["project_id"] not in principal_projects(session, recipient.id):
+        if not recipient.active or recipient.kind == "runtime" or recipient.organization_id != actor.organization_id or value["project_id"] not in principal_projects(session, recipient.id):
             raise forbidden("寄件者與收件者必須共同有此專案權限")
     message = Message(
         id=new_id(),
@@ -1177,9 +1289,17 @@ def delegate_task(session: Session, actor: Principal, task_id: str, value: dict)
     parent = _lock_task(session, task_for_actor(session, actor, task_id))
     if actor.role not in ACTIVE_ROLES and not has_active_task_lease(session, actor, parent):
         raise forbidden("只有管理者或持有有效 lease 的任務 owner 可 delegate")
-    target = agent_for_task(session, actor, value["agent_id"], parent.project_id)
-    if target.role != "worker" or target.status in {"disabled", "offline"}:
-        raise bad_request("invalid_delegate", "delegate 對象必須是可用的 worker agent")
+    agent_id, human_id = value.get("agent_id"), value.get("assignee_principal_id")
+    if bool(agent_id) == bool(human_id):
+        raise bad_request("delegate_target_required", "委派需選擇一位人員或 Agent")
+    if human_id:
+        target = human_for_task(session, actor, human_id, parent.project_id)
+        recipient_id = target.id
+    else:
+        target = agent_for_task(session, actor, agent_id, parent.project_id)
+        if target.role != "worker" or target.status in {"disabled", "offline"}:
+            raise bad_request("invalid_delegate", "delegate 對象必須是可用的 worker agent")
+        recipient_id = target.principal_id
     if _task_depth(session, parent) >= 3:
         raise conflict("delegation_depth_exceeded", "子任務最多允許三層")
     child_value = {
@@ -1192,12 +1312,15 @@ def delegate_task(session: Session, actor: Principal, task_id: str, value: dict)
         "constraints": value.get("constraints", ""),
         "acceptance_criteria": value.get("acceptance_criteria", []),
         "priority": value.get("priority", "medium"),
-        "assignee_id": target.id,
+        "assignee_id": agent_id,
+        "assignee_principal_id": human_id,
         "reviewer_id": parent.reviewer_id,
+        "reviewer_principal_id": parent.reviewer_principal_id,
         "parent_task_id": parent.id,
         "budget_usd": value.get("budget_usd", 0),
         "status": "ready",
     }
+    _validate_assignment(session, actor, parent.project_id, child_value)
     child = Task(**_task_values(child_value))
     child.key = f"{session.get(Project, child.project_id).key}-{child.id.replace('-', '')[:8].upper()}"
     session.add(child)
@@ -1207,7 +1330,7 @@ def delegate_task(session: Session, actor: Principal, task_id: str, value: dict)
         project_id=parent.project_id,
         task_id=parent.id,
         sender_id=actor.id,
-        recipient_id=target.principal_id,
+        recipient_id=recipient_id,
         kind="handoff",
         body=f"Delegated task {child.key}: {child.title}",
         reply_to_id=None,
@@ -1215,8 +1338,8 @@ def delegate_task(session: Session, actor: Principal, task_id: str, value: dict)
         created_at=now_utc(),
     )
     session.add(message)
-    add_audit(session, actor, "task.delegated", "task", child.id, child.project_id, {"parent_task_id": parent.id, "agent_id": target.id})
-    add_audit(session, actor, "message.sent", "message", message.id, parent.project_id, {"kind": "handoff", "task_id": parent.id, "recipient_id": target.principal_id})
+    add_audit(session, actor, "task.delegated", "task", child.id, child.project_id, {"parent_task_id": parent.id, "agent_id": agent_id, "assignee_principal_id": human_id})
+    add_audit(session, actor, "message.sent", "message", message.id, parent.project_id, {"kind": "handoff", "task_id": parent.id, "recipient_id": recipient_id})
     session.flush()
     return task_json(session, child)
 
@@ -1242,6 +1365,10 @@ def _admit_runtime_project(session: Session, project: Project) -> None:
 
 def _create_dispatch(session: Session, actor: Principal, task: Task, agent: Agent, *, retry_of: str | None = None) -> dict:
     task = _lock_task(session, task)
+    if task.assignee_principal_id:
+        raise conflict("human_assigned_task", "人員負責的任務不可派發給 Pi Agent")
+    if task.assignee_id and task.assignee_id != agent.id:
+        raise forbidden("此任務已指派給其他 Agent")
     agent = _lock_agent(session, agent)
     agent_principal = session.get(Principal, agent.principal_id)
     project = session.get(Project, task.project_id)
@@ -1342,6 +1469,8 @@ def dispatch_task(session: Session, actor: Principal, task_id: str, agent_id: st
     task = _lock_task(session, task_for_actor(session, actor, task_id))
     if actor.role not in ACTIVE_ROLES and not has_active_task_lease(session, actor, task):
         raise forbidden("只有管理者或持有有效 lease 的任務 owner 可 dispatch")
+    if task.assignee_principal_id:
+        raise conflict("human_assigned_task", "人員任務需先明確改指派為 Agent 才能派發")
     agent = agent_for_task(session, actor, agent_id, task.project_id)
     return _create_dispatch(session, actor, task, agent)
 

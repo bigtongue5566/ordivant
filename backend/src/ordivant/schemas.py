@@ -29,7 +29,9 @@ class TaskCreate(InputModel):
     priority: Literal["urgent", "high", "medium", "low"] = "medium"
     status: Literal["backlog", "ready"] = "ready"
     assignee_id: str | None = None
+    assignee_principal_id: str | None = None
     reviewer_id: str | None = None
+    reviewer_principal_id: str | None = None
     parent_task_id: str | None = None
     dependency_ids: list[str] = Field(default_factory=list)
     labels: list[str] = Field(default_factory=list)
@@ -50,7 +52,9 @@ class TaskPatch(InputModel):
     priority: Literal["urgent", "high", "medium", "low"] | None = None
     status: Literal["backlog", "ready", "cancelled"] | None = None
     assignee_id: str | None = None
+    assignee_principal_id: str | None = None
     reviewer_id: str | None = None
+    reviewer_principal_id: str | None = None
     dependency_ids: list[str] | None = None
     labels: list[str] | None = None
     budget_usd: float | None = Field(default=None, ge=0)
@@ -63,13 +67,13 @@ class ClaimRequest(InputModel):
 
 class LeaseRequest(InputModel):
     execution_id: str
-    lease_token: str = Field(min_length=24, max_length=200)
+    lease_token: str | None = Field(default=None, min_length=24, max_length=200)
     lease_seconds: int = Field(default=300, ge=30, le=3600)
 
 
 class ProgressRequest(InputModel):
     execution_id: str
-    lease_token: str = Field(min_length=24, max_length=200)
+    lease_token: str | None = Field(default=None, min_length=24, max_length=200)
     progress: int = Field(ge=0, le=100)
     summary: str | None = None
     cost_usd: float | None = Field(default=None, ge=0)
@@ -77,14 +81,14 @@ class ProgressRequest(InputModel):
 
 class BlockRequest(InputModel):
     execution_id: str
-    lease_token: str = Field(min_length=24, max_length=200)
+    lease_token: str | None = Field(default=None, min_length=24, max_length=200)
     reason: str = Field(min_length=1, max_length=2000)
     handoff: str | None = None
 
 
 class ReleaseRequest(InputModel):
     execution_id: str
-    lease_token: str = Field(min_length=24, max_length=200)
+    lease_token: str | None = Field(default=None, min_length=24, max_length=200)
     handoff: str = Field(min_length=1, max_length=4000)
 
 
@@ -103,7 +107,7 @@ class ArtifactInput(InputModel):
 
 class SubmitRequest(InputModel):
     execution_id: str
-    lease_token: str = Field(min_length=24, max_length=200)
+    lease_token: str | None = Field(default=None, min_length=24, max_length=200)
     summary: str = Field(min_length=1, max_length=10000)
     artifacts: list[ArtifactInput] = Field(min_length=1)
     cost_usd: float = Field(default=0, ge=0)
@@ -115,7 +119,8 @@ class ReviewRequest(InputModel):
 
 
 class DelegateRequest(InputModel):
-    agent_id: str
+    agent_id: str | None = None
+    assignee_principal_id: str | None = None
     title: str = Field(min_length=1, max_length=300)
     goal: str = Field(min_length=1)
     description: str = ""

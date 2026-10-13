@@ -1,0 +1,35 @@
+.collab-editor { min-width: 0; margin: 18px 0; border: 1px solid var(--line); border-radius: 6px; background: #fffefd; }
+.collab-toolbar { display: flex; min-height: 48px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 9px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: #fbfaf8; }
+.collab-status-group { min-width: 0; }
+.collab-editor .ant-tag { margin-inline-end: 0; font-size: 9px; }
+.collab-connection-live { color: #27684d; border-color: #b9d8c7; background: #f0f8f3; }
+.collab-connection-reconnecting, .collab-connection-connecting, .collab-connection-loading { color: #806016; border-color: #e6d7aa; background: #fbf6e8; }
+.collab-connection-error, .collab-connection-permission_lost { color: #9a3938; border-color: #e6b9b4; background: #fff2f0; }
+.collab-save-ok { color: #27684d; border-color: #d4e7da; background: #f7fbf8; }
+.collab-save-pending { color: #806016; border-color: #e6d7aa; background: #fbf6e8; }
+.collab-presence { display: flex; min-width: 0; min-height: 28px; align-items: center; gap: 6px; color: #817c85; font-size: 9px; }
+.collab-avatar { border: 1px solid #fffefd; font-size: 9px; }
+.collab-avatar-human { color: #355b66; background: #dcebf0; }
+.collab-avatar-agent { color: #5e4d8b; background: #e9e2f4; }
+.collab-editor .ant-segmented { flex: 0 0 auto; font-size: 10px; }
+.collab-alert { margin: 10px; }
+.collab-loading { display: flex; min-height: 84px; align-items: center; justify-content: center; gap: 8px; color: #817c85; font-size: 10px; }
+.collab-panel[hidden] { display: none; }
+.collab-codemirror { min-height: 410px; }
+.collab-codemirror .cm-editor { min-height: 410px; color: #38353d; font: 13px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.collab-codemirror .cm-scroller { min-height: 410px; overflow: auto; }
+.collab-codemirror .cm-content { padding: 13px 0; }
+.collab-codemirror .cm-gutters { color: #97919c; border-right: 1px solid #eeeae6; background: #fbfaf8; }
+.collab-codemirror .cm-activeLineGutter, .collab-codemirror .cm-activeLine { background: #f7f5fa; }
+.collab-codemirror .cm-focused { outline: 2px solid #9d8cca; outline-offset: -2px; }
+.collab-preview { min-height: 410px; padding: 17px 20px; }
+.collab-preview .rendered-markdown { font-size: 12px; }
+.collab-preview > p { color: #817c85; font-size: 11px; }
+
+@media (max-width: 680px) {
+  .collab-toolbar { align-items: flex-start; }
+  .collab-status-group { width: 100%; }
+  .collab-presence { flex: 1 1 auto; }
+  .collab-codemirror, .collab-codemirror .cm-editor, .collab-codemirror .cm-scroller, .collab-preview { min-height: 320px; }
+  .collab-preview { padding: 13px; }
+}

@@ -22,7 +22,9 @@ from .schemas import (
     FileCommit,
     LocalSessionInput,
     ProjectCreate,
+    PullRequestCommentCreate,
     PullRequestCreate,
+    PullRequestReviewCreate,
     RepositoryCreate,
     WebhookResult,
 )
@@ -33,14 +35,17 @@ from .service import (
     create_pull,
     create_repository,
     commit_file,
+    comment_on_pull_request,
     get_project,
     get_pull,
+    get_pull_collaboration,
     list_events,
     list_projects,
     list_pulls,
     list_repositories,
     process_webhook,
     report_check,
+    review_pull_request,
 )
 from .models import Organization, Principal, ScopeMembership
 
@@ -243,6 +248,42 @@ def pull(
     session: Session = Depends(_get_database),
 ):
     return get_pull(session, principal, repository_id, number)
+
+
+@app.get("/api/repositories/{repository_id}/pulls/{number}/collaboration")
+def pull_collaboration(
+    repository_id: str,
+    number: int,
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return get_pull_collaboration(session, principal, repository_id, number)
+
+
+@app.post("/api/repositories/{repository_id}/pulls/{number}/comments")
+def pull_comment(
+    repository_id: str,
+    number: int,
+    payload: PullRequestCommentCreate,
+    request: Request,
+    key: str | None = Header(default=None, alias="Idempotency-Key"),
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return comment_on_pull_request(session, principal, repository_id, number, request.url.path, key or "", payload)
+
+
+@app.post("/api/repositories/{repository_id}/pulls/{number}/reviews")
+def pull_review(
+    repository_id: str,
+    number: int,
+    payload: PullRequestReviewCreate,
+    request: Request,
+    key: str | None = Header(default=None, alias="Idempotency-Key"),
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return review_pull_request(session, principal, repository_id, number, request.url.path, key or "", payload)
 
 
 @app.post("/api/repositories/{repository_id}/checks")

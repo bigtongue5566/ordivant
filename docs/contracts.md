@@ -1,6 +1,6 @@
 # 共用 REST／Runtime 契約（v0.1） {#shared-rest-runtime-contract-v0-1}
 
-使用者選定的 Run 執行控制台、自動工作流程、不可變 Agent 範本、外部 MCP 連線與隔離執行工作區，定義於[執行契約](execution-contracts.md)。此擴充保留既有的授權、租約、獨立審查與機密處理規則。
+使用者選定的 Run 執行控制台、自動工作流程、不可變 Agent 範本、外部 MCP 連線與隔離執行工作區，定義於[執行契約](execution-contracts.md)。真人與 Agent 的任務認領、Knowledge 共同草稿及 Code PR 協作細節見[真人與 Agent 協作契約](collaboration-contracts.md)。此擴充保留 Agent 租約、獨立審查與機密處理規則。
 
 JSON 使用 UTF-8，時間戳記採 UTC ISO-8601，ID 為字串。清單端點回傳陣列，資源端點直接回傳物件。驗證錯誤採 FastAPI 格式；領域錯誤為 `{ "detail": { "code": "...", "message": "..." } }`。HTTP 401 表示未驗證，403 表示禁止存取，404 表示未知或無法存取，409 表示衝突，422 表示輸入無效。Agent 的變更請求支援 `Idempotency-Key`。相同金鑰、路由、操作者及本文會重播首次回應；本文變更時回報衝突。
 
@@ -19,9 +19,9 @@ JSON 使用 UTF-8，時間戳記採 UTC ISO-8601，ID 為字串。清單端點�
 
 憑證簽發是明文記載的冪等例外：重送建立 Agent 的請求會回傳同一個 Agent，並簽發新的單次 token，因此原始 bearer token 不會進入回應快取。一般變更會重播原始回應。冪等路由包含實際資源 ID，而非路徑範本；重播時會重新檢查目前的專案存取權。
 
-`Task`：`{id,key,project_id,title,description,goal,inputs,scope,constraints,acceptance_criteria:string[],priority:"urgent"|"high"|"medium"|"low",status,assignee_id:string|null,reviewer_id:string|null,parent_task_id:string|null,dependency_ids:string[],labels:string[],blocked_reason:string|null,progress:number,handoff:string|null,budget_usd:number,created_at,updated_at}`。`inputs`、`scope`、`constraints` 是文字字串。
+`Task`：`{id,key,project_id,title,description,goal,inputs,scope,constraints,acceptance_criteria:string[],priority:"urgent"|"high"|"medium"|"low",status,assignee_id:string|null,assignee_principal_id:string|null,reviewer_id:string|null,reviewer_principal_id:string|null,parent_task_id:string|null,dependency_ids:string[],labels:string[],blocked_reason:string|null,progress:number,handoff:string|null,budget_usd:number,created_at,updated_at,assignee:{id,principal_id,name,kind:"human"|"agent"}|null,reviewer:{id,principal_id,name,kind:"human"|"agent"}|null}`。每個負責人欄位只能指定一種身分；Agent 使用 `assignee_id`／`reviewer_id`，真人使用 `assignee_principal_id`／`reviewer_principal_id`。`inputs`、`scope`、`constraints` 是文字字串。
 
-`Execution`：`{id,task_id,agent_id,status:"running"|"submitted"|"accepted"|"rejected"|"expired"|"released",lease_expires_at,started_at,finished_at:string|null,progress:number,summary:string|null,cost_usd:number,cost_source:"self_reported"|"measured"}`。防護用 `lease_token` 只會出現在 claim／renew 回應，不會出現在一般清單。
+`Execution`：`{id,task_id,agent_id:string|null,claimed_by_principal_id:string|null,submitted_by_principal_id:string|null,executor_id,executor_kind:"human"|"agent",executor_name,status:"running"|"submitted"|"accepted"|"rejected"|"expired"|"released",lease_expires_at:string|null,started_at,finished_at:string|null,progress:number,summary:string|null,cost_usd:number,cost_source:"self_reported"|"measured"}`。真人執行沒有 Agent 租約；Agent 的防護用 `lease_token` 只會出現在 claim／renew 回應，不會出現在一般清單。
 
 `Artifact`：`{id,task_id,execution_id,kind:"document"|"url"|"test_report"|"file"|"summary",title,uri:string|null,content:string|null,created_at}`。
 
@@ -35,16 +35,17 @@ JSON 使用 UTF-8，時間戳記採 UTC ISO-8601，ID 為字串。清單端點�
 
 - `GET/POST /api/projects`；建立本文為 `{key,name,description?,team_id?,budget_usd?}`。
 - `GET /api/projects/{id}`；`GET /api/projects/{id}/context` -> `{project,tasks,agents,decisions}`。
+- `GET /api/projects/{id}/participants` -> 此專案已授權的真人與 Agent，供管理者指派任務。
 - `GET /api/projects/{id}/vcs/pulls/{provider}/{number}?repository=owner/repo` -> `{provider,repository,number,title,state,web_url,head_sha,head,base,checks,checks_available,source:"provider_api"}`。Work 會直接讀取已設定的 GitHub／GitLab／Gitea；不需要 Code。先檢查專案範圍，再套用伺服器端 repository 白名單。不回傳上游憑證。設定缺漏時回傳 503；檢查項目無法取得時會明確標示，絕不回報為通過。此唯讀操作不能接受任務或合併 PR。
 - `GET /api/tasks?project_id=&status=&q=&ready_only=true`；`POST /api/tasks` 接受上方所有可編輯的任務欄位；預設為 ready／medium。會強制檢查操作者範圍。
 - `GET /api/tasks/{id}`；`PATCH /api/tasks/{id}` 可編輯規格／相依性／指派／預算欄位；生命週期狀態只能透過受保護的操作變更，管理者取消或將 backlog 改為 ready 除外。Agent 沒有租約時不能修改執行中欄位。
 - `GET /api/tasks/{id}/context`；`GET /api/tasks/{id}/executions`。
-- `POST /api/tasks/{id}/claim` 本文 `{lease_seconds?:300}` -> `{task,execution,lease_token}`。Agent 身分由 token 推斷；人類操作者可提供 `agent_id`，代表該範圍內的 Agent 申領任務。Runtime 身分絕不可在此冒充任意使用者。
-- `POST /api/tasks/{id}/renew` -> 本文 `{execution_id,lease_token,lease_seconds?:300}` -> 同一種 claim 回應結構。
-- `POST /api/tasks/{id}/progress` 本文 `{execution_id,lease_token,progress,summary?,cost_usd?}` -> task。
-- `POST /api/tasks/{id}/block` 本文 `{execution_id,lease_token,reason,handoff?}` -> task；關閉 execution 並釋放租約。
-- `POST /api/tasks/{id}/release` 本文 `{execution_id,lease_token,handoff}` -> task 回到 ready，execution 為 released。管理者可呼叫 `POST /api/tasks/{id}/unblock` `{}`。
-- `POST /api/tasks/{id}/submit` 本文 `{execution_id,lease_token,summary,artifacts:[{kind,title,uri?,content?}],cost_usd?:0}` -> TaskContext。至少需要一項證據 artifact，並將狀態設為 in_review。
+- `POST /api/tasks/{id}/claim` 本文 `{lease_seconds?:300,agent_id?:string}`。真人以登入 Cookie 呼叫且不帶 `agent_id`，可認領未指派或指派給自己的 ready 任務；Manager／admin 可明確帶入有專案權限的 `agent_id`，代表該 Agent 認領。Agent 身分由 Bearer token 推斷。真人 execution 的 `agent_id` 與租約欄位為 null，重載頁面可繼續；Runtime 身分絕不可冒充任意使用者。
+- `POST /api/tasks/{id}/renew` 僅續期 Agent 租約，本文 `{execution_id,lease_token,lease_seconds?:300}`。
+- `POST /api/tasks/{id}/progress` 本文 `{execution_id,lease_token?,progress,summary?,cost_usd?}` -> task。Agent 必須帶目前 fencing token；真人不帶 token，由 Python 驗證本人仍是執行者且保有專案權限。
+- `POST /api/tasks/{id}/block` 本文 `{execution_id,lease_token?,reason,handoff?}` -> task；關閉 execution 並釋放租約。真人不使用租約 token。
+- `POST /api/tasks/{id}/release` 本文 `{execution_id,lease_token?,handoff}` -> task 回到 ready，execution 為 released。真人可交接並釋出工作，管理者可呼叫 `POST /api/tasks/{id}/unblock` `{}`。
+- `POST /api/tasks/{id}/submit` 本文 `{execution_id,lease_token?,summary,artifacts:[{kind,title,uri?,content?}],cost_usd?:0}` -> TaskContext。至少需要一項證據 artifact，並將狀態設為 in_review；真人不使用租約 token。
 - `POST /api/tasks/{id}/review` 本文 `{decision:"accept"|"reject",comment}` -> TaskContext。僅 reviewer／manager／admin 可執行；提交者不能審查自己的結果，且若已指定審查者則必須遵守。拒絕時將任務設為 ready，並保留歷程與證據。
 - `POST /api/tasks/{id}/delegate` 本文 `{agent_id,title,goal,description?,inputs?,scope?,constraints?,acceptance_criteria:string[],priority?,budget_usd?:0}` -> 子 Task；操作者必須是範圍內的管理者或父任務的作用中負責人；子任務指派給指定 Agent；委派不能授予存取權。巢狀深度上限為 3。
 - `GET/POST /api/agents`；建立本文 `{name,role,team_id?,capabilities,project_ids,runtime?,model?,model_config?}`。`PATCH /api/agents/{id}` 僅 admin／manager 可停用或編輯能力／模型。明確傳入 `model_config: null` 會清除覆寫並恢復繼承。

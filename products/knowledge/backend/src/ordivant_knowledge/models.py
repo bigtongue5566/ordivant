@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, JSON, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -85,6 +85,62 @@ class DocumentVersion(Base):
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     source_refs: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class DocumentDraft(Base):
+    __tablename__ = "document_drafts"
+
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    base_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    published_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    state: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class DraftUpdateReceipt(Base):
+    __tablename__ = "draft_update_receipts"
+    __table_args__ = (
+        UniqueConstraint("document_id", "actor_id", "request_id", name="uq_knowledge_draft_update_request"),
+        Index("ix_knowledge_draft_update_created", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("principals.id", ondelete="CASCADE"), nullable=False)
+    request_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class DraftRateWindow(Base):
+    __tablename__ = "draft_rate_windows"
+
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    actor_id: Mapped[str] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), primary_key=True
+    )
+    window_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class CollaborationPresence(Base):
+    __tablename__ = "collaboration_presence"
+    __table_args__ = (Index("ix_knowledge_presence_document_expiry", "document_id", "expires_at"),)
+
+    connection_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    principal_id: Mapped[str] = mapped_column(ForeignKey("principals.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
+    expires_at: Mapped[str] = mapped_column(String(40), nullable=False)
 
 
 class Decision(Base):

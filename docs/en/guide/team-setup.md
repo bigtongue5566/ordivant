@@ -29,9 +29,9 @@ Grant the smallest role and scope that lets each person do their work. If a proj
 
 Plan for at least two people on work that requires review: one authorized person submits evidence and a different authorized Reviewer, Manager, or Admin reviews it. The service rejects self-review.
 
-The Work task's **Assign reviewer** field selects a reviewer Agent, not a human user account. For human review, leave the field blank and have another person with Work Project access, who is not the submitter, review the result. When an Agent is designated, the review screen may only allow the identity associated with that Agent.
+When creating or editing a Work task, a Manager can select an authorized human teammate or Agent under **Assignee**. **Assign reviewer** also accepts either a person or an Agent. If no assignee is selected, an eligible human Worker, Manager, or Administrator can claim the task directly. A person can claim only an unassigned task or one assigned to them, never a colleague's assignment. Managers can assign work to an invited, active teammate before that person first signs in to Work.
 
-For a no-model manual workflow, an invited Work Manager can claim a task on behalf of a scoped Worker Agent, do the work themselves, and submit evidence; a different Administrator can review it. See the [first-project walkthrough](first-project.md#manual-route).
+People use their own Work account to report progress, submit evidence, mark a task blocked, or hand it off. This does not require creating an Agent, enabling Agent Runtime, or configuring an LLM. After reloading, a person can resume their work from the task's execution history. **Handoff and release** ends the current execution, records the handoff, and clears the human assignee so another eligible teammate can claim it. A blocked or returned task keeps its current assignee. Agent automation continues to use Agent-specific leases and fencing tokens. See the [Work guide](work.md) and [first-project walkthrough](first-project.md#manual-route) for the complete flow.
 
 ## Separate people, Agents, and runtime identities {#separate-identities}
 
@@ -62,7 +62,7 @@ Direct OIDC supports providers such as Entra ID, Google Workspace, Okta, Auth0, 
 | Invitation cannot be accepted | Confirm the code was delivered correctly, is still within its 24-hour validity, and has not already been used. Create a new invitation if it expired or was consumed. |
 | Sign-in works but a product is unavailable | Check that the account is active and has a role and resource scope for that product. |
 | Product opens but a Project or Space is missing | Add that exact resource to the member's scope in **Product roles and resources**. |
-| A reviewer cannot review a task | Confirm the reviewer has Work access to the Project, is not the submitter, and matches the task's **Assign reviewer** Agent when one is set. |
+| A reviewer cannot review a task | Confirm they have Reviewer, Manager, or Administrator scope for the Work Project, are not the submitter, and match the task's assigned human or Agent reviewer. |
 | SSO sign-in succeeds but resources are empty | Review provisioning policy, group-to-role mapping, and explicit Project/Space scopes. Authentication alone grants no resource access. |
 
 For the task flow after access is ready, see [First project](first-project.md). For the full role guide, see [Administration](administration.md).

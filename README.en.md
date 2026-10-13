@@ -18,10 +18,10 @@ Ordivant brings projects, versioned knowledge, code provenance, durable runs, an
 
 | Product | Capabilities |
 | --- | --- |
-| **Work** | Project and task collaboration, Agent assignment and delegation, evidence, and independent review |
+| **Work** | Assign tasks to coworkers or Agents, claim work as a person, submit evidence, and review independently |
 | **Runs and automation** | Agent execution controls, workflows, reusable templates, and isolated tools |
-| **Knowledge** | Versioned documents, decisions, search, and source citations |
-| **Code** | Repositories, commits, pull requests, and check status; Gitea is optional |
+| **Knowledge** | Real-time shared drafts, immutable published versions, decisions, and citations |
+| **Code** | Ordivant-local discussions and reviews tied to a PR head SHA, separate from Gitea approvals; Gitea handles Git and merges |
 | **Identity** | Sign-in, invitations, product permissions, enterprise OIDC, and optional SAML/LDAP broker |
 
 Work can read configured GitHub, GitLab, or Gitea directly; it does not require the Code product. Products can be used independently or as a full Suite.
@@ -38,6 +38,12 @@ docker compose up -d --build --wait
 ```
 
 Open **http://127.0.0.1:8088** and create the first human administrator in your browser. There is no default human account or password. The default deployment name is `ordivant`, and the web port is `8088`. The main setup does not add DEMO data or configure a model.
+
+### Human collaboration without an LLM
+
+An administrator can create a Work project and invite coworkers. A manager or administrator can assign tasks to coworkers, and an authorized worker can claim an unassigned task or one assigned to them. Another authorized person must independently review submitted evidence. This workflow needs no Agent, Runtime, or model.
+
+In Knowledge, authorized members can edit the same draft together in real time; only a saved draft can be published as an immutable version. Agents can access that shared draft through REST or MCP. Code stores Ordivant discussions and review records tied to a PR head SHA. Git operations require Gitea, which remains responsible for merging and its own approvals.
 
 An administrator can configure a provider, API key, and model on the model management page; see the [model connection guide](docs/en/model-usage.md). To run Agents, enable Runtime separately using the [container deployment guide](docs/en/containers.md). Without a valid model connection, Runs are marked DEMO; this does not mean a paid model was called. The container guide also covers optional Gitea and Sandbox, backups, and HTTPS.
 

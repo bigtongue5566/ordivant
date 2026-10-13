@@ -1,6 +1,6 @@
 # Shared REST/runtime contract (v0.1)
 
-The user-selected Run console, automatic workflows, immutable Agent templates, external MCP connections and isolated execution workspaces are defined in [execution contracts](execution-contracts.md). This extension preserves all existing authorization, lease, independent review and secret-handling rules.
+The user-selected Run console, automatic workflows, immutable Agent templates, external MCP connections and isolated execution workspaces are defined in [execution contracts](execution-contracts.md). Human and Agent claims, shared Knowledge drafts, and Code PR collaboration are described in [human and Agent collaboration contracts](collaboration-contracts.md). Agent leases, independent review, and secret-handling rules remain in effect.
 
 UTF-8 JSON, UTC ISO-8601 timestamps, ids are strings. List endpoints return arrays. Resource endpoints return the object directly. Validation errors use FastAPI shape; domain errors: `{ "detail": { "code": "...", "message": "..." } }`. HTTP 401 unauthenticated, 403 forbidden, 404 unknown/inaccessible, 409 conflict, 422 invalid input. Mutating agent requests support `Idempotency-Key`. The same key + route + actor + same body replays the first response; changed body conflicts.
 
@@ -19,9 +19,9 @@ UTF-8 JSON, UTC ISO-8601 timestamps, ids are strings. List endpoints return arra
 
 Credential issuance is a documented idempotency exception: repeating an agent-creation request returns the same agent with a fresh one-time token, so raw bearer tokens never enter the response cache. Ordinary mutations replay their original response. Idempotency routes include actual resource ids, not path templates, and replay rechecks current project access.
 
-`Task`: `{id,key,project_id,title,description,goal,inputs,scope,constraints,acceptance_criteria:string[],priority:"urgent"|"high"|"medium"|"low",status,assignee_id:string|null,reviewer_id:string|null,parent_task_id:string|null,dependency_ids:string[],labels:string[],blocked_reason:string|null,progress:number,handoff:string|null,budget_usd:number,created_at,updated_at}`. `inputs`, `scope`, `constraints` are text strings.
+`Task`: `{id,key,project_id,title,description,goal,inputs,scope,constraints,acceptance_criteria:string[],priority:"urgent"|"high"|"medium"|"low",status,assignee_id:string|null,assignee_principal_id:string|null,reviewer_id:string|null,reviewer_principal_id:string|null,parent_task_id:string|null,dependency_ids:string[],labels:string[],blocked_reason:string|null,progress:number,handoff:string|null,budget_usd:number,created_at,updated_at,assignee:{id,principal_id,name,kind:"human"|"agent"}|null,reviewer:{id,principal_id,name,kind:"human"|"agent"}|null}`. Each assignment is either a human or Agent. Agents use `assignee_id` / `reviewer_id`; people use `assignee_principal_id` / `reviewer_principal_id`. `inputs`, `scope`, and `constraints` are text strings.
 
-`Execution`: `{id,task_id,agent_id,status:"running"|"submitted"|"accepted"|"rejected"|"expired"|"released",lease_expires_at,started_at,finished_at:string|null,progress:number,summary:string|null,cost_usd:number,cost_source:"self_reported"|"measured"}`. Fencing `lease_token` appears only in claim/renew responses, never in normal listings.
+`Execution`: `{id,task_id,agent_id:string|null,claimed_by_principal_id:string|null,submitted_by_principal_id:string|null,executor_id,executor_kind:"human"|"agent",executor_name,status:"running"|"submitted"|"accepted"|"rejected"|"expired"|"released",lease_expires_at:string|null,started_at,finished_at:string|null,progress:number,summary:string|null,cost_usd:number,cost_source:"self_reported"|"measured"}`. Human executions have no Agent lease. An Agent's fencing `lease_token` appears only in claim/renew responses, never in normal listings.
 
 `Artifact`: `{id,task_id,execution_id,kind:"document"|"url"|"test_report"|"file"|"summary",title,uri:string|null,content:string|null,created_at}`.
 
@@ -35,16 +35,17 @@ Credential issuance is a documented idempotency exception: repeating an agent-cr
 
 - `GET/POST /api/projects`; create `{key,name,description?,team_id?,budget_usd?}`.
 - `GET /api/projects/{id}`; `GET /api/projects/{id}/context` -> `{project,tasks,agents,decisions}`.
+- `GET /api/projects/{id}/participants` -> people and Agents authorized for project assignment.
 - `GET /api/projects/{id}/vcs/pulls/{provider}/{number}?repository=owner/repo` -> `{provider,repository,number,title,state,web_url,head_sha,head,base,checks,checks_available,source:"provider_api"}`. Work reads configured existing GitHub/GitLab/Gitea directly; Code is not required. First enforce project scope, then server-side repository allowlist. No upstream credentials returned. Missing configuration is 503; unavailable checks are explicit, never a passing result. This read cannot accept a task or merge a PR.
 - `GET /api/tasks?project_id=&status=&q=&ready_only=true`; `POST /api/tasks` takes all editable task fields above; defaults ready/medium. Actor scope enforced.
 - `GET /api/tasks/{id}`; `PATCH /api/tasks/{id}` editable spec/dependencies/assignment/budget fields; lifecycle states only via guarded operations, except manager cancellation or backlog->ready. Agents cannot patch executing fields without lease.
 - `GET /api/tasks/{id}/context`; `GET /api/tasks/{id}/executions`.
-- `POST /api/tasks/{id}/claim` body `{lease_seconds?:300}` -> `{task,execution,lease_token}`. Agent identity inferred from token; humans can include `agent_id` to claim on that scoped agent's behalf. Runtime identities must never impersonate an arbitrary user here.
-- `POST /api/tasks/{id}/renew` -> body `{execution_id,lease_token,lease_seconds?:300}` -> same claim shape.
-- `POST /api/tasks/{id}/progress` body `{execution_id,lease_token,progress,summary?,cost_usd?}` -> task.
-- `POST /api/tasks/{id}/block` body `{execution_id,lease_token,reason,handoff?}` -> task; closes execution and releases lease.
-- `POST /api/tasks/{id}/release` body `{execution_id,lease_token,handoff}` -> task ready, execution released. Manager can `POST /api/tasks/{id}/unblock` `{}`.
-- `POST /api/tasks/{id}/submit` body `{execution_id,lease_token,summary,artifacts:[{kind,title,uri?,content?}],cost_usd?:0}` -> TaskContext. Requires at least one evidence artifact. Sets in_review.
+- `POST /api/tasks/{id}/claim` body `{lease_seconds?:300,agent_id?:string}`. A person uses an authenticated cookie with no `agent_id` and can claim a ready task that is unassigned or assigned to them. Only a manager/administrator may explicitly include an authorized `agent_id` to claim on its behalf; an Agent is otherwise identified by its bearer token. Human executions have null Agent and lease fields and can resume after reload. Runtime identities must never impersonate an arbitrary user.
+- `POST /api/tasks/{id}/renew` renews an Agent lease only; body `{execution_id,lease_token,lease_seconds?:300}`.
+- `POST /api/tasks/{id}/progress` body `{execution_id,lease_token?,progress,summary?,cost_usd?}` -> task. Agents send the current fencing token; for a person, Python verifies the authenticated actor still owns the execution and has project access.
+- `POST /api/tasks/{id}/block` body `{execution_id,lease_token?,reason,handoff?}` -> task; closes execution and releases the lease. A person does not send a lease token.
+- `POST /api/tasks/{id}/release` body `{execution_id,lease_token?,handoff}` -> task ready, execution released. A person can hand off and release work. Manager can `POST /api/tasks/{id}/unblock` `{}`.
+- `POST /api/tasks/{id}/submit` body `{execution_id,lease_token?,summary,artifacts:[{kind,title,uri?,content?}],cost_usd?:0}` -> TaskContext. Requires at least one evidence artifact. Sets in_review; a person does not send a lease token.
 - `POST /api/tasks/{id}/review` body `{decision:"accept"|"reject",comment}` -> TaskContext. Reviewer/manager/admin only; cannot be submitting actor, obey designated reviewer if set, rejecting sets ready and preserves history/evidence.
 - `POST /api/tasks/{id}/delegate` body `{agent_id,title,goal,description?,inputs?,scope?,constraints?,acceptance_criteria:string[],priority?,budget_usd?:0}` -> child Task; actor must be scoped manager or active owner of parent; child assigned to agent; delegation cannot grant access. Limit nesting depth to 3.
 - `GET/POST /api/agents`; create `{name,role,team_id?,capabilities,project_ids,runtime?,model?,model_config?}`. `PATCH /api/agents/{id}` admin/manager may disable, edit capability/model. An explicit null `model_config` clears an override and restores inheritance.

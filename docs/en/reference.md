@@ -46,7 +46,10 @@ The business endpoints below use native service paths. For example, Knowledge's 
 | --- | --- |
 | `GET/POST /api/projects`, `GET/POST /api/tasks` | List and create authorized projects / tasks |
 | `GET /api/tasks/{task_id}/context` | Retrieve task, dependency, message, and evidence context |
-| `POST /api/tasks/{task_id}/claim`, `renew`, `progress`, `release` | Claim, renew, report, and release execution authority |
+| `GET /api/projects/{project_id}/participants` | List people and Agents authorized for assignment in the project |
+| `POST /api/tasks/{task_id}/claim` | A person claims as their own identity; an Agent claims with its bearer token and receives a lease |
+| `POST /api/tasks/{task_id}/renew` | Renew an Agent lease; human work has no lease |
+| `POST /api/tasks/{task_id}/progress`, `release` | Report progress or release execution; people do not send lease tokens |
 | `POST /api/tasks/{task_id}/submit`, `review` | Submit evidence and obtain a decision from an authorized independent reviewer |
 | `POST /api/tasks/{task_id}/dispatch` | Dispatch an Agent; track the resulting Run for execution status |
 | `GET /api/runs`, `GET /api/runs/{run_id}/events`, `POST /api/runs/{run_id}/control` | Run lists, events, and controls |
@@ -54,6 +57,8 @@ The business endpoints below use native service paths. For example, Knowledge's 
 | `/api/tool-connections`, `/api/sandbox-profiles` | Manage permitted tool connections and sandbox settings |
 
 A task and a Run are separate records. Successful execution does not complete a task automatically: evidence and independent review are required. See the [execution guide](./execution-usage.md) for modes, pause / stop limits, and tools. `/api/runtime/*` is a restricted service interface for trusted runtime integration.
+
+A human claim records the human executor without an Agent lease; reloading can resume the active work. Agent claims use an expiry and fencing token. See [human and Agent collaboration contracts](./collaboration-contracts.md) for assignment and handoff rules.
 
 ### Knowledge documents and versions {#knowledge-api}
 
@@ -63,10 +68,13 @@ A task and a Run are separate records. Successful execution does not complete a 
 | `GET /api/documents?space_id=&q=&tag=`, `POST /api/documents` | Search and create documents |
 | `GET /api/documents/{document_id}/versions` | Version history |
 | `GET /api/documents/{document_id}/versions/{version_number}` | Read an exact citable version |
-| `POST /api/documents/{document_id}/versions` | Publish a new version with a current-version check |
+| `POST /api/documents/{document_id}/versions` | Legacy publication entry; the web editor directs users to the shared draft |
+| `GET /api/documents/{document_id}/draft`, `POST /api/documents/{document_id}/draft/updates` | Read the shared draft and submit CRDT updates |
+| `WS /api/documents/{document_id}/collaborate` | Sync the draft and authenticated human presence |
+| `POST /api/documents/{document_id}/draft/publish` | Publish the saved shared draft as an immutable version |
 | `GET/POST /api/decisions`, `GET /api/events` | Decisions and authorized audit records |
 
-Published versions are immutable. References preserve the exact version and URI without broadening access. See the [Knowledge guide](./guide/knowledge.md).
+Published versions are immutable. Publish only while the editor is live, all updates are saved, and none are pending. Unacknowledged offline edits remain in the current browser's memory and may be lost if the page is closed. Agents can use REST/MCP to access the same shared draft. References preserve the exact version and URI without broadening access. See the [Knowledge guide](./guide/knowledge.md).
 
 ### Code and version control {#code-api}
 
@@ -76,9 +84,12 @@ Published versions are immutable. References preserve the exact version and URI 
 | `POST /api/repositories/{repository_id}/branches`, `files` | Create branches and commit files |
 | `GET/POST /api/repositories/{repository_id}/pulls` | List and open PRs |
 | `GET /api/repositories/{repository_id}/pulls/{number}` | PR details, provenance, and status receipts |
+| `GET /api/repositories/{repository_id}/pulls/{number}/collaboration` | Ordivant discussion, review records, and current PR head |
+| `POST /api/repositories/{repository_id}/pulls/{number}/comments` | Add an Ordivant-local PR discussion |
+| `POST /api/repositories/{repository_id}/pulls/{number}/reviews` | Record an Ordivant review against the expected head SHA |
 | `POST /api/repositories/{repository_id}/checks` | Report a commit status explicitly labeled as Agent-reported |
 
-Writes require configured Gitea; saved metadata remains readable without it. This release has no PR merge or delete API and includes no CI runner. An `agent_reported` receipt is not evidence that CI actually ran. See the [Code guide](./guide/code.md).
+Git operations in Code require configured Gitea. Ordivant discussions and reviews are local records tied to a PR head SHA; they are not Gitea approvals or CI results. Gitea remains responsible for Git, merging, and its own approvals. This release has no PR merge or delete API and includes no CI runner. An `agent_reported` receipt is not evidence that CI actually ran. See the [Code guide](./guide/code.md) and [human and Agent collaboration contracts](./collaboration-contracts.md).
 
 ### Model settings {#model-settings}
 

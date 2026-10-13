@@ -1,6 +1,22 @@
 # Ordivant 功能導覽 {#product-features}
 
-這份導覽依照日常工作說明 Ordivant 的操作入口、操作後會留下什麼紀錄，以及目前的限制。Work 負責任務與 Agent 執行；Knowledge 負責文件版本和決策；Code 在設定 Gitea 後提供 repository 和 PR 工作區。先從[專案介紹](./overview.md)選擇適合的產品，再依下列情境操作。
+這份導覽依照日常工作說明 Ordivant 的操作入口、操作後會留下什麼紀錄，以及目前的限制。Work、Knowledge 和 Code 都支援真人與 Agent 在同一產品流程中合作；一般真人操作不需要 LLM。Work 管理任務、真人執行和 Agent Run；Knowledge 管理共同草稿、文件版本和決策；Code 管理連接至 Gitea 的 repository 和 PR，並保存 Ordivant 討論與審查紀錄。先從[專案介紹](./overview.md)選擇適合的產品，再依下列情境操作。
+
+## 真人與 Agent 協作 {#human-and-agent-collaboration}
+
+### 情境 {#human-and-agent-collaboration-scenario}
+
+團隊想先讓同事自行處理任務、共同編寫規格並審查 PR，之後再為適合自動化的工作加入 Agent。這些人工作業可以先於模型設定使用。
+
+### 操作入口 {#human-and-agent-collaboration-steps}
+
+1. 在 Work 建立任務時，選擇獲授權的真人同事或 Agent 作為負責者；也可留白讓同事認領。真人 Worker、Manager 或 Admin 可認領未指派或指派給自己的待執行任務，回報進度、提交證據或交接。提交者不能審查自己的成果。請依[Work 指南](./guide/work.md)操作。
+2. 在 Knowledge 開啟最新版本的共同草稿；Writer 和 Manager 可以同時編輯，Reader 可閱讀。草稿伺服器確認保存後，才可發佈成不可變版本。Agent 透過 REST／MCP 參與同一草稿。請見[Knowledge 指南](./guide/knowledge.md)。
+3. 在 Code 的 PR 詳情討論變更並提交 Ordivant 審查紀錄。每筆審查綁定當時的 PR head SHA；Gitea 仍負責 Git、合併與 Gitea 自身核准。請見[Code 指南](./guide/code.md)。
+
+### 結果與界限 {#human-and-agent-collaboration-result}
+
+人員以自己的 Identity 帳號工作，不需建立 Agent 來代表人，也不需模型金鑰。只有自主 Pi Agent Run 需要啟用 Runtime 並配置 Provider/model。Code 的 repository、branch、commit 和 PR 寫入需要 Gitea。Knowledge 斷線時，尚未確認保存的修改只留在目前瀏覽器分頁記憶體，關閉或重新載入可能遺失；發佈衝突需重新載入並檢查最新草稿。Ordivant Code 審查不是 Gitea approval、CI 結果或 Work 任務驗收。
 
 ## 任務規格與相依任務 {#work-task-design}
 
@@ -11,7 +27,7 @@
 ### 入口與操作 {#work-task-design-steps}
 
 1. 在 Work 選取已授權的 Project，進入「任務」，按「新增任務」。
-2. 填寫任務名稱、目標、輸入資料、範圍、限制條件及驗收條件；每個驗收條件分行填寫。選擇優先級、負責 Agent 和獨立 reviewer。
+2. 填寫任務名稱、目標、輸入資料、範圍、限制條件及驗收條件；每個驗收條件分行填寫。選擇優先級、獲授權的同事或 Agent 作為負責者，並設定獨立 reviewer；也可先不指派，讓同事認領。
 3. 在「相依任務」選取必須先完成的 Task，再建立任務。開啟任務後可在「規格」頁籤檢查欄位與相依狀態；需要修改時按「編輯規格」。
 
 ![Work 專案任務清單](/screenshots/work-zh-TW.png)
@@ -26,17 +42,17 @@
 
 ### 情境 {#work-help-scenario}
 
-執行者需要另一位 Agent 協助確認資料來源，或能把「整理測試案例」拆成可單獨審查的子工作。
+執行者需要另一位同事或 Agent 協助確認資料來源，或能把「整理測試案例」拆成可單獨審查的子工作。
 
 ### 入口與操作 {#work-help-steps}
 
-1. 在任務清單開啟 Task 詳情，按「請求協作」，選擇收件 Agent，將問題或需要的資料寫在訊息內容後送出。對話會留在該 Task 的「協作」頁籤；收件者也可在 Work 的「協作收件匣」查看。
+1. 在任務清單開啟 Task 詳情，按「請求協作」，選擇獲授權的同事或 Agent 作為收件者，將問題或需要的資料寫在訊息內容後送出。討論會留在該 Task 的「協作」頁籤；收件者也可在 Work 的「協作收件匣」查看。
 2. 收到訊息後可在任務討論串回覆；收件者或有權限的管理者可標記已接收或完成。問題、回覆、決議和交接都會保留在專案／任務脈絡中。
-3. 若工作可以獨立交付，在 Task 詳情按「委派子任務」，選擇負責 Agent，填寫子任務名稱、目標、範圍、輸入、限制和驗收條件，再按「委派任務」。
+3. 若工作可以獨立交付，在 Task 詳情按「委派子任務」，選擇獲授權的同事或 Agent 作為負責者，填寫子任務名稱、目標、範圍、輸入、限制和驗收條件，再按「委派任務」。
 
 ### 結果與界限 {#work-help-result}
 
-委派會建立一筆連結至父任務的獨立 Task，讓它有自己的執行、證據與審查歷程。只有已獲專案授權的管理者或父任務目前的負責 Agent 可委派；子任務不會替 Agent 增加專案權限，巢狀委派最多三層。求助與委派不是即時聊天，也不會自動替收件者建立其他專案的存取權。
+委派會建立一筆連結至父任務的獨立 Task，並保留自己的 Execution／Run、證據與審查歷程。具專案範圍的 Manager／Admin，或目前實際負責父任務執行紀錄的真人或 Agent，可委派子任務；子任務不會擴大任何人的專案權限，巢狀委派最多三層。求助與委派不是即時聊天，也不會自動替收件者建立其他專案的存取權。
 
 ## Run 與人工介入 {#runs-and-intervention}
 
@@ -46,7 +62,7 @@
 
 ### 入口與操作 {#runs-intervention-steps}
 
-1. 開啟 Task 詳情，在「派發給 Agent」旁選擇 Pi 執行 Agent，再按「派發給 Agent」。人工「認領任務」只建立 Work 執行租約，不會啟動 Pi Run。
+1. 開啟 Task 詳情。真人負責者直接按「認領任務」；沒有 Agent 租約，重新載入後可從執行紀錄繼續。需要自主執行時才選擇 Pi Agent 並按「派發給 Agent」，這會建立自動 Run。
 2. 開啟 Work 的「Run 執行」，選擇 Run 查看狀態、答案、事件、工具結果、沙箱輸出及供應商回報的模型／用量。
 3. 有管理權限時，可在 Run 詳情要求「暫停」、「恢復」或「停止」；失敗或停止的 Run 可建立新的「重跑」。重跑會保留舊 Run，並建立新的執行紀錄。
 4. Run 提交後，回到 Task 的「執行與審核」檢查摘要及成果，由另一位符合權限的 reviewer 接受或退回。
@@ -55,7 +71,7 @@
 
 ### 結果與界限 {#runs-intervention-result}
 
-Run 的「已提交」表示模型回合已提交，不代表 Task 已完成；只有獨立審查接受才會完成 Task。暫停會等目前的模型或工具操作結束後才生效。停止不會撤銷外部服務已完成的操作；結果不明時，請先到上游服務核對再重跑。DEMO 不呼叫付費模型；沒有可確認的用量或美元金額時會顯示未知。
+Run 的「已提交」表示模型回合已提交，不代表 Task 已完成；只有獨立審查接受才會完成 Task。真人執行是獨立於 Agent Run 的工作紀錄，不需要模型。暫停會等目前的模型或工具操作結束後才生效。停止不會撤銷外部服務已完成的操作；結果不明時，請先到上游服務核對再重跑。DEMO 不呼叫付費模型；沒有可確認的用量或美元金額時會顯示未知。
 
 ## Agent 範本與工作流程 {#agent-templates-and-workflows}
 
@@ -101,14 +117,15 @@ Provider key 加密保存，重新開啟時不會顯示明文。外部 Runtime A
 ### 入口與操作 {#knowledge-versioning-steps}
 
 1. 開啟 Knowledge，選擇已授權的 Space，再進入「文件庫」。按「新增文件」，填寫標題、摘要、正文、標籤及可追溯來源。
-2. 修訂文件時打開文件，按「發佈新版本」，確認目前版本，輸入新內容、變更摘要與來源後發佈。
-3. 在文件檢視器切換版本，查看版本 URI、建立時間、SHA-256 及變更摘要；使用搜尋框比對標題或正文，或依標籤篩選。
+2. 修訂文件時打開最新版本的「共同草稿」，選擇編輯。Writer／Manager 與 Agent 可同時更新正文，內容會合併；切換預覽檢查 Markdown。
+3. 等待草稿顯示已連線和已保存，再按「發佈新版本」，輸入變更摘要並確認。發佈建立不可變版本；Reader 只可檢視。若版本衝突，重新載入草稿，檢查合併結果並等到已保存後再發佈。
+4. 在文件檢視器切換版本，查看版本 URI、建立時間、SHA-256 及變更摘要；使用搜尋框比對標題或正文，或依標籤篩選。
 
 ![Knowledge 文件與版本](/screenshots/knowledge-zh-TW.png)
 
 ### 結果與界限 {#knowledge-versioning-result}
 
-每次發佈都會新增不可變版本，舊版本和引用會保留。若其他人先發佈造成版本衝突，先讀取最新版並重新整理草稿再發佈。搜尋比對已保存的標題、正文和標籤，是文字搜尋，不提供向量搜尋或 RAG。
+每次發佈都會新增不可變版本，舊版本和引用會保留。未經伺服器確認的離線修改只留在目前瀏覽器分頁記憶體；不可宣稱關閉頁面後仍保留。搜尋比對已保存的標題、正文和標籤，是文字搜尋，不提供向量搜尋或 RAG。
 
 ## Knowledge 決策與精確引用 {#knowledge-decisions-and-citations}
 
@@ -133,13 +150,13 @@ ordivant://knowledge/spaces/{space_id}/documents/{document_id}/versions/{version
 1. 開啟 Code，選取已授權的 Code Project 和 repository。具寫入權限時，可建立私人 repository。
 2. 在 repository 詳情建立 branch，使用「提交檔案」新增或更新 UTF-8 檔案並填寫 commit message。
 3. 按「建立 PR」，選擇來源 branch 與目標 branch，寫上標題／描述，並加入 Work、Knowledge 或外部來源引用。
-4. 在 PR 詳情查看 head SHA、來源、狀態與 check 收據；按「在 Gitea 開啟」依組織流程完成程式碼審查和合併。
+4. 在 PR 詳情查看 head SHA、來源、狀態與 check 收據；在 Ordivant 討論與審查區留評論、要求修改或記錄核准。按「在 Gitea 開啟」依組織流程完成正式審查和合併。
 
 ![Code repository 與 Pull Request](/screenshots/code-zh-TW.png)
 
 ### 結果與界限 {#code-pull-requests-result}
 
-Code 的 repository、branch、commit 與 PR 由部署端連接的 Gitea 保存；尚未設定 Gitea 時，無法執行寫入操作。Code 的「回報狀態」會記錄為 Agent 回報，並不表示 CI 真正執行測試。具簽章驗證的 Gitea webhook 狀態會標明來源；仍需打開上游 check 紀錄確認測試內容。PR 不會自動核准 Work Task。若只需要檢視既有 GitHub、GitLab 或 Gitea 的 PR 狀態，可使用已設定的 Work 唯讀整合，無須部署 Code。
+Code 的 repository、branch、commit 與 PR 由部署端連接的 Gitea 保存；尚未設定 Gitea 時，無法執行寫入操作。真人或 Agent 可在 Ordivant 討論與審查，但每筆審查綁定 PR head SHA，head 更新後舊審查會過期。Ordivant 紀錄不會同步成 Gitea approval，也不是 CI 或 Work Task 驗收。Code 的「回報狀態」會記錄為 Agent 回報，並不表示 CI 真正執行測試。具簽章驗證的 Gitea webhook 狀態會標明來源；仍需打開上游 check 紀錄確認測試內容。若只需要檢視既有 GitHub、GitLab 或 Gitea 的 PR 狀態，可使用已設定的 Work 唯讀整合，無須部署 Code。
 
 ## 權限、成員與企業 SSO {#permissions-and-sso}
 

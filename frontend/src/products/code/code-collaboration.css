@@ -1,0 +1,99 @@
+.code-pr-collaboration {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.code-collaboration-note,
+.code-collaboration-stale,
+.code-collaboration-error {
+  margin: 0;
+}
+
+.code-collaboration-heads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: #77727b;
+  font-size: 10px;
+}
+
+.code-collaboration-heads code,
+.code-collaboration-sha {
+  overflow-wrap: anywhere;
+  color: #77727b;
+  font-size: 9px;
+}
+
+.code-collaboration-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: #514d56;
+  font-size: 11px;
+}
+
+.code-collaboration-entry {
+  display: grid;
+  gap: 7px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eeeae6;
+}
+
+.code-collaboration-entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: #514d56;
+  font-size: 10px;
+}
+
+.code-collaboration-entry-head .ant-tag {
+  margin: 0;
+  font-size: 8px;
+}
+
+.code-collaboration-entry-head time {
+  margin-left: auto;
+  color: #96909a;
+  font-size: 8px;
+}
+
+.code-collaboration-entry .rendered-markdown {
+  color: #625d66;
+  font-size: 10px;
+}
+
+.code-collaboration-entry .rendered-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.code-collaboration-compose {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.code-collaboration-compose .ant-input,
+.code-collaboration-review .ant-select {
+  width: 100%;
+}
+
+.code-collaboration-review {
+  padding-top: 10px;
+  border-top: 1px solid #eeeae6;
+}
+
+.code-collaboration-review > .ant-alert {
+  width: 100%;
+}
+
+.code-collaboration-readonly {
+  color: #85808a;
+  font-size: 10px;
+}

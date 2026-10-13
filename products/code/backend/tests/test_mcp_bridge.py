@@ -22,7 +22,20 @@ def _free_port() -> int:
         return sock.getsockname()[1]
 
 
-def test_official_mcp_stdio_bridge_uses_scoped_rest_api(api, credentials):
+def test_official_mcp_stdio_bridge_uses_scoped_rest_api(api, credentials, repository, monkeypatch):
+    from ordivant_code import service
+
+    class PullStub:
+        def pull(self, owner, repo, number):
+            return {
+                "number": number, "title": "MCP collaboration", "body": "", "state": "open",
+                "head": {"ref": "topic", "sha": "e" * 40},
+                "base": {"ref": "main", "sha": "f" * 40},
+                "html_url": f"http://127.0.0.1:3001/demo/pulls/{number}",
+                "created_at": "2026-10-10T00:00:00Z", "updated_at": "2026-10-10T00:00:00Z",
+            }
+
+    monkeypatch.setattr(service, "_gitea", lambda: PullStub())
     port = _free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="critical", access_log=False))
     thread = threading.Thread(target=server.run, daemon=True)
@@ -51,12 +64,35 @@ def test_official_mcp_stdio_bridge_uses_scoped_rest_api(api, credentials):
                 names = {tool.name for tool in tool_list.tools}
                 assert names == {
                     "list_code_projects", "list_repositories", "create_repository", "create_branch",
-                    "commit_file", "create_pull_request", "get_pull_request", "report_check", "get_code_events",
+                    "commit_file", "create_pull_request", "get_pull_request",
+                    "get_pull_request_collaboration", "comment_on_pull_request", "review_pull_request",
+                    "report_check", "get_code_events",
                 }
                 result = await session.call_tool("list_code_projects", {})
                 assert not result.isError
                 text = "\n".join(item.text for item in result.content if hasattr(item, "text"))
                 assert "code-demo" in text and "DEMO Code Repository Pilot" in text
+                collaboration = await session.call_tool("get_pull_request_collaboration", {
+                    "repository_id": repository["id"], "number": 321,
+                })
+                assert not collaboration.isError
+                comment = await session.call_tool("comment_on_pull_request", {
+                    "repository_id": repository["id"], "number": 321, "body": "MCP local comment",
+                    "request_id": "mcp-comment-321",
+                })
+                assert not comment.isError
+                review = await session.call_tool("review_pull_request", {
+                    "repository_id": repository["id"], "number": 321,
+                    "decision": "approve", "expected_head_sha": "e" * 40,
+                    "comment": "MCP local review", "request_id": "mcp-review-321",
+                })
+                assert not review.isError
+                latest = await session.call_tool("get_pull_request_collaboration", {
+                    "repository_id": repository["id"], "number": 321,
+                })
+                assert not latest.isError
+                latest_text = "\n".join(item.text for item in latest.content if hasattr(item, "text"))
+                assert "MCP local comment" in latest_text and "MCP local review" in latest_text
                 templates = await session.list_resource_templates()
                 template_uris = {item.uriTemplate for item in templates.resourceTemplates}
                 assert "code://projects/{project_id}/repositories" in template_uris

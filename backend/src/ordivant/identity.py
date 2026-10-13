@@ -296,3 +296,38 @@ async def cookie_principal(request: Request, session: Session) -> Principal | No
     if user is None:
         return None
     return _sync_principal(session, user)
+
+
+async def sync_project_directory(session: Session, actor: Principal, project_id: str) -> None:
+    """Synchronize eligible colleagues before exposing or changing assignments."""
+    from .service import require_project
+
+    require_project(session, actor, project_id)
+    if not identity_configured():
+        return
+    _, identity_url, service_token = _configuration()
+    try:
+        async with httpx.AsyncClient(timeout=3.0, follow_redirects=False, trust_env=False) as client:
+            response = await client.get(f"{identity_url}/api/auth/directory", headers={"Authorization": f"Bearer {service_token}"}, params={"product": "work", "scope_id": project_id})
+        if response.status_code != 200:
+            raise _unavailable()
+        users = response.json()["users"]
+        if not isinstance(users, list) or len(users) > 10000:
+            raise _unavailable()
+        subjects = set()
+        for user in users:
+            if not isinstance(user, dict) or not isinstance(user.get("id"), str) or not isinstance(user.get("name"), str) or not user.get("active"):
+                raise _unavailable()
+            principal = _sync_principal(session, user)
+            if principal.organization_id != actor.organization_id:
+                raise DomainError(403, "identity_cross_organization_scope", "Directory member belongs to another organization")
+            subjects.add(user["id"])
+        stale = session.scalars(select(ProjectMembership).join(IdentityBinding, IdentityBinding.principal_id == ProjectMembership.principal_id).where(
+            ProjectMembership.project_id == project_id, IdentityBinding.organization_id == actor.organization_id,
+            IdentityBinding.subject.not_in(subjects),
+        ))
+        for membership in stale:
+            session.delete(membership)
+        session.commit()
+    except (httpx.HTTPError, KeyError, ValueError, TypeError) as exc:
+        raise _unavailable() from exc

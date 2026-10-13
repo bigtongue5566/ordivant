@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, uuid5
 
 import httpx
-from fastapi import Request
+from fastapi import Request, WebSocket
 from sqlalchemy import Boolean, ForeignKey, String, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column
@@ -302,4 +302,21 @@ async def cookie_principal(request: Request, session: Session) -> PrincipalConte
     user = await _cookie_identity(request)
     if user is None:
         return None
+    return _sync_principal(session, user)
+
+
+async def websocket_cookie_principal(
+    websocket: WebSocket,
+    session: Session,
+    csrf_token: str,
+) -> PrincipalContext:
+    if not identity_configured():
+        raise DomainError(503, "identity_unavailable", "Identity authentication is required for collaboration")
+    cookie_name, identity_url, service_token = _configuration()
+    session_token = websocket.cookies.get(cookie_name)
+    if not session_token:
+        raise DomainError(401, "unauthenticated", "Identity session is missing or expired")
+    user, expected_csrf = await _introspect(identity_url, service_token, session_token)
+    if not hmac.compare_digest(csrf_token.encode("utf-8"), expected_csrf.encode("utf-8")):
+        raise DomainError(403, "csrf_failed", "CSRF token is missing or invalid")
     return _sync_principal(session, user)

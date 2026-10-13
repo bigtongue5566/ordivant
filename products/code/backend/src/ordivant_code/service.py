@@ -22,13 +22,24 @@ from .models import (
     OperationIntent,
     Principal,
     Project,
+    PullRequestComment,
     PullRequest,
+    PullRequestReview,
     Repository,
     Scope,
     ScopeMembership,
     WebhookDelivery,
 )
-from .schemas import BranchCreate, CheckCreate, FileCommit, ProjectCreate, PullRequestCreate, RepositoryCreate
+from .schemas import (
+    BranchCreate,
+    CheckCreate,
+    FileCommit,
+    ProjectCreate,
+    PullRequestCommentCreate,
+    PullRequestCreate,
+    PullRequestReviewCreate,
+    RepositoryCreate,
+)
 from .security import new_id, now_utc
 
 INTENT_MARKER = "<!-- ordivant-intent:{intent_id} -->"
@@ -703,6 +714,182 @@ def get_pull(session: Session, principal: Principal, repository_id: str, number:
         CheckReceipt.repository_id == repository.id, CheckReceipt.commit_sha == pull.head_sha,
     ).order_by(CheckReceipt.created_at.desc())).all()
     return {**pull_json(pull), "checks": [check_json(item) for item in checks]}
+
+
+def _active_collaboration_actor(session: Session, principal: Principal, *, write: bool) -> Principal:
+    actor = session.get(Principal, principal.id, populate_existing=True)
+    if actor is None or not actor.active:
+        raise DomainError(401, "unauthenticated", "Principal is no longer active")
+    if write and actor.kind not in {"human", "agent"}:
+        raise DomainError(403, "forbidden", "Only human and agent principals can collaborate on pull requests")
+    return actor
+
+
+def _live_pull(
+    session: Session, repository: Repository, number: int,
+) -> PullRequest:
+    remote = _gitea().pull(repository.owner, repository.name, number)
+    if not isinstance(remote, dict):
+        raise DomainError(502, "gitea_invalid_pull_request", "Gitea returned an invalid pull request")
+    if any(remote.get(name) is not None and not isinstance(remote.get(name), dict) for name in ("head", "base")):
+        raise DomainError(502, "gitea_invalid_pull_request", "Gitea returned an invalid pull request")
+    remote_number = remote.get("number") or remote.get("id")
+    if str(remote_number) != str(number):
+        raise DomainError(502, "gitea_invalid_pull_request", "Gitea returned an invalid pull request")
+    head_sha = ((remote.get("head") or {}).get("sha") or remote.get("head_sha") or "")
+    if not isinstance(head_sha, str) or not re.fullmatch(r"[a-fA-F0-9]{40,64}", head_sha):
+        raise DomainError(502, "gitea_invalid_pull_request", "Gitea returned an invalid pull request head")
+    try:
+        pull = _sync_pull(session, repository, remote)
+        session.commit()
+        return pull
+    except IntegrityError:
+        session.rollback()
+        pull = session.scalar(select(PullRequest).where(
+            PullRequest.repository_id == repository.id, PullRequest.number == number,
+        ))
+        if pull is None:
+            raise
+        fresh = _repo_json_from_pr(repository, remote, pull.source_refs)
+        pull.title, pull.body, pull.state = fresh.title, fresh.body, fresh.state
+        pull.head, pull.base, pull.web_url, pull.head_sha = fresh.head, fresh.base, fresh.web_url, fresh.head_sha
+        pull.updated_at = fresh.updated_at
+        session.commit()
+        return pull
+
+
+def _collaboration_author(principal: Principal) -> dict:
+    return {"id": principal.id, "name": principal.name, "kind": principal.kind}
+
+
+def _pull_proposer(session: Session, pull: PullRequest) -> Principal | None:
+    actor_id = session.scalar(select(AuditEvent.actor_id).where(
+        AuditEvent.action == "code.pull_request_created",
+        AuditEvent.entity_type == "pull_request",
+        AuditEvent.entity_id == pull.id,
+        AuditEvent.actor_id.is_not(None),
+    ).order_by(AuditEvent.created_at.asc()))
+    if actor_id is None:
+        actor_id = session.scalar(select(OperationIntent.actor_id).where(
+            OperationIntent.repository_id == pull.repository_id,
+            OperationIntent.kind == "create_pull",
+            OperationIntent.state == "complete",
+            OperationIntent.external_id == str(pull.number),
+        ).order_by(OperationIntent.created_at.asc()))
+    return session.get(Principal, actor_id) if actor_id else None
+
+
+def _pull_comment_json(session: Session, comment: PullRequestComment) -> dict:
+    author = session.get(Principal, comment.author_id)
+    return {
+        "id": comment.id,
+        "author": _collaboration_author(author),
+        "body": comment.body,
+        "created_at": _iso(comment.created_at),
+    }
+
+
+def _pull_review_json(session: Session, review: PullRequestReview, current_head_sha: str | None = None) -> dict:
+    author = session.get(Principal, review.author_id)
+    result = {
+        "id": review.id,
+        "author": _collaboration_author(author),
+        "decision": review.decision,
+        "comment": review.comment,
+        "head_sha": review.head_sha,
+        "created_at": _iso(review.created_at),
+    }
+    if current_head_sha is not None:
+        result["is_current"] = review.head_sha.casefold() == current_head_sha.casefold()
+    return result
+
+
+def get_pull_collaboration(session: Session, principal: Principal, repository_id: str, number: int) -> dict:
+    actor = _active_collaboration_actor(session, principal, write=False)
+    repository, _ = require_repository(session, actor, repository_id)
+    pull = _live_pull(session, repository, number)
+    proposer = _pull_proposer(session, pull)
+    comments = session.scalars(select(PullRequestComment).where(
+        PullRequestComment.pull_request_id == pull.id,
+    ).order_by(PullRequestComment.created_at.asc(), PullRequestComment.id.asc())).all()
+    reviews = session.scalars(select(PullRequestReview).where(
+        PullRequestReview.pull_request_id == pull.id,
+    ).order_by(PullRequestReview.created_at.asc(), PullRequestReview.id.asc())).all()
+    return {
+        "pull_request_id": pull.id,
+        "head_sha": pull.head_sha,
+        "proposer": _collaboration_author(proposer) if proposer else None,
+        "comments": [_pull_comment_json(session, item) for item in comments],
+        "reviews": [_pull_review_json(session, item, pull.head_sha) for item in reviews],
+    }
+
+
+def comment_on_pull_request(
+    session: Session, principal: Principal, repository_id: str, number: int,
+    route: str, key: str, payload: PullRequestCommentCreate,
+) -> dict:
+    actor = _active_collaboration_actor(session, principal, write=True)
+    repository, project = require_repository(session, actor, repository_id, write=True)
+    data = payload.model_dump(mode="json")
+    cached = _cached(session, actor, route, key, data)
+    if cached is not None:
+        return cached
+    pull = _live_pull(session, repository, number)
+    comment_id = new_id()
+
+    def create():
+        current_actor = _active_collaboration_actor(session, actor, write=True)
+        require_repository(session, current_actor, repository_id, write=True)
+        comment = PullRequestComment(
+            id=comment_id, pull_request_id=pull.id, author_id=actor.id,
+            body=payload.body, created_at=now_utc(),
+        )
+        session.add(comment)
+        session.flush()
+        return _pull_comment_json(session, comment)
+
+    return _local_mutation(
+        session, actor, route, key, data, "code.pull_request_comment_added",
+        "pull_request_comment", comment_id, project.id, create,
+    )
+
+
+def review_pull_request(
+    session: Session, principal: Principal, repository_id: str, number: int,
+    route: str, key: str, payload: PullRequestReviewCreate,
+) -> dict:
+    actor = _active_collaboration_actor(session, principal, write=True)
+    repository, project = require_repository(session, actor, repository_id, write=True)
+    data = payload.model_dump(mode="json")
+    cached = _cached(session, actor, route, key, data)
+    if cached is not None:
+        return cached
+    pull = _live_pull(session, repository, number)
+    if payload.expected_head_sha.casefold() != pull.head_sha.casefold():
+        raise DomainError(409, "stale_pull_request_head", "The pull request head changed; reload it before reviewing")
+    if payload.decision != "comment" and pull.state != "open":
+        raise DomainError(409, "pull_request_closed", "Closed pull requests only accept comment reviews")
+    proposer = _pull_proposer(session, pull)
+    if payload.decision in {"approve", "request_changes"} and proposer and proposer.id == actor.id:
+        raise DomainError(403, "self_review_forbidden", "Pull request proposers cannot approve or request changes on their own pull request")
+    review_id = new_id()
+
+    def create():
+        current_actor = _active_collaboration_actor(session, actor, write=True)
+        require_repository(session, current_actor, repository_id, write=True)
+        review = PullRequestReview(
+            id=review_id, pull_request_id=pull.id, author_id=actor.id,
+            decision=payload.decision, comment=payload.comment,
+            head_sha=pull.head_sha, created_at=now_utc(),
+        )
+        session.add(review)
+        session.flush()
+        return _pull_review_json(session, review)
+
+    return _local_mutation(
+        session, actor, route, key, data, "code.pull_request_review_recorded",
+        "pull_request_review", review_id, project.id, create,
+    )
 
 
 def report_check(session: Session, principal: Principal, repository_id: str, route: str, key: str, payload: CheckCreate) -> dict:

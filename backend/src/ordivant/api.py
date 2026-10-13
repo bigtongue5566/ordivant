@@ -18,8 +18,9 @@ from sqlalchemy.orm import Session
 from . import automation, execution_settings, runs, sandbox_profiles, service, tool_connections, vcs
 from .config import app_mode, authorized_dev_proxy
 from .db import Base, SessionLocal, engine, get_db
+from .migrations import migrate_collaboration
 from .errors import DomainError, conflict
-from .identity import cookie_principal, identity_configured, require_identity_admin_for_scope_creation
+from .identity import cookie_principal, identity_configured, require_identity_admin_for_scope_creation, sync_project_directory
 from .models import Agent, IdempotencyRecord, Message, OutboxEvent, Principal, Task
 from .model_settings import (
     get_model_catalog,
@@ -70,6 +71,7 @@ from .security import authenticate_header, hash_secret, issue_token, new_secret,
 async def lifespan(_app: FastAPI):
     app_mode()
     Base.metadata.create_all(bind=engine)
+    migrate_collaboration(engine)
     yield
 
 
@@ -210,7 +212,9 @@ def _refresh_fencing_tokens(session: Session, actor: Principal, path: str, body:
         task = service.task_for_actor(session, actor, parts[2])
         execution_data = response.get("execution") or {}
         execution = session.get(service.Execution, execution_data.get("id"))
-        if execution and execution.status == "running" and execution.claimed_by_principal_id == actor.id:
+        if execution and execution.agent_id is None:
+            response["lease_token"] = None
+        elif execution and execution.status == "running" and execution.claimed_by_principal_id == actor.id:
             token = new_secret("lease")
             execution.lease_token_hash = hash_secret(token)
             response["lease_token"] = token
@@ -439,6 +443,12 @@ def get_project_context(project_id: str, session: Session = Depends(get_db), act
     return service.get_project_context(session, actor, project_id)
 
 
+@app.get("/api/projects/{project_id}/participants")
+async def get_project_participants(project_id: str, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    await sync_project_directory(session, actor, project_id)
+    return JSONResponse(content=service.list_participants(session, actor, project_id), headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/projects/{project_id}")
 def get_project(project_id: str, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
     from .models import Project
@@ -470,13 +480,15 @@ def get_tasks(
 
 
 @app.post("/api/tasks", status_code=201)
-def post_task(
+async def post_task(
     request: Request,
     value: TaskCreate,
     session: Session = Depends(get_db),
     actor: Principal = Depends(get_actor),
 ):
     data = value.model_dump()
+    if data.get("assignee_principal_id") or data.get("reviewer_principal_id"):
+        await sync_project_directory(session, actor, data["project_id"])
     return _perform_mutation(request, session, actor, data, lambda: service.create_task(session, actor, data), 201)
 
 
@@ -585,7 +597,7 @@ def post_review(
 
 
 @app.post("/api/tasks/{task_id}/delegate", status_code=201)
-def post_delegate(
+async def post_delegate(
     task_id: str,
     request: Request,
     value: DelegateRequest,
@@ -593,11 +605,14 @@ def post_delegate(
     actor: Principal = Depends(get_actor),
 ):
     data = value.model_dump()
+    if data.get("assignee_principal_id"):
+        task = service.task_for_actor(session, actor, task_id)
+        await sync_project_directory(session, actor, task.project_id)
     return _perform_mutation(request, session, actor, data, lambda: service.delegate_task(session, actor, task_id, data), 201)
 
 
 @app.patch("/api/tasks/{task_id}")
-def patch_task(
+async def patch_task(
     task_id: str,
     request: Request,
     value: TaskPatch,
@@ -605,6 +620,9 @@ def patch_task(
     actor: Principal = Depends(get_actor),
 ):
     data = value.model_dump(exclude_unset=True)
+    if data.get("assignee_principal_id") or data.get("reviewer_principal_id"):
+        task = service.task_for_actor(session, actor, task_id)
+        await sync_project_directory(session, actor, task.project_id)
     return _perform_mutation(request, session, actor, data, lambda: service.patch_task(session, actor, task_id, data))
 
 
@@ -648,13 +666,15 @@ def get_messages(
 
 
 @app.post("/api/messages", status_code=201)
-def post_message(
+async def post_message(
     request: Request,
     value: MessageCreate,
     session: Session = Depends(get_db),
     actor: Principal = Depends(get_actor),
 ):
     data = value.model_dump()
+    if data.get("recipient_id"):
+        await sync_project_directory(session, actor, data["project_id"])
     return _perform_mutation(request, session, actor, data, lambda: service.create_message(session, actor, data), 201)
 
 

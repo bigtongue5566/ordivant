@@ -22,7 +22,16 @@ from .models import (
     Principal,
     SpaceMembership,
 )
-from .schemas import DecisionCreate, DocumentCreate, LocalSessionCreate, Reference, SpaceCreate, VersionPublish
+from .schemas import (
+    DecisionCreate,
+    DocumentCreate,
+    DraftPublish,
+    DraftUpdate,
+    LocalSessionCreate,
+    Reference,
+    SpaceCreate,
+    VersionPublish,
+)
 from .security import (
     PrincipalContext,
     authenticate,
@@ -47,6 +56,7 @@ from .service import (
     space_view,
     version_view,
 )
+from .drafts import apply_document_draft_update, get_document_draft, publish_document_draft, synchronize_legacy_publish
 
 
 router = APIRouter(prefix="/api")
@@ -349,6 +359,68 @@ def get_document(document_id: str, session: SessionDep, principal: PrincipalDep)
     return document_context(session, _document(session, principal, document_id))
 
 
+@router.get("/documents/{document_id}/draft")
+def get_shared_document_draft(
+    document_id: str,
+    session: SessionDep,
+    principal: PrincipalDep,
+) -> dict[str, object]:
+    result = get_document_draft(session, principal, document_id)
+    session.commit()
+    return result
+
+
+@router.post("/documents/{document_id}/draft/updates")
+def apply_shared_document_draft_update(
+    document_id: str,
+    body: DraftUpdate,
+    request: Request,
+    session: SessionDep,
+    principal: PrincipalDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> JSONResponse:
+    return mutate(
+        session,
+        principal,
+        route=request.url.path,
+        idempotency_key=idempotency_key,
+        body=body.model_dump(mode="json"),
+        status_code=200,
+        action=lambda: apply_document_draft_update(session, principal, document_id, body.update),
+        authorize_replay=lambda _response: _document(session, principal, document_id),
+    )
+
+
+@router.post("/documents/{document_id}/draft/publish", status_code=201)
+def publish_shared_document_draft(
+    document_id: str,
+    body: DraftPublish,
+    request: Request,
+    session: SessionDep,
+    principal: PrincipalDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> JSONResponse:
+    source_refs = _reference_models(body.source_refs)
+    return mutate(
+        session,
+        principal,
+        route=request.url.path,
+        idempotency_key=idempotency_key,
+        body=body.model_dump(mode="json"),
+        status_code=201,
+        action=lambda: publish_document_draft(
+            session,
+            principal,
+            document_id,
+            expected_revision=body.expected_revision,
+            change_summary=body.change_summary,
+            title=body.title,
+            source_refs=source_refs,
+        ),
+        authorize_replay=lambda _response: _document(session, principal, document_id),
+    )
+
+
 @router.get("/documents/{document_id}/versions")
 def list_document_versions(document_id: str, session: SessionDep, principal: PrincipalDep) -> list[dict[str, object]]:
     document = _document(session, principal, document_id)
@@ -424,6 +496,14 @@ def publish_document_version(
         current.title = title
         current.current_version = next_number
         current.updated_at = version.created_at
+        synchronize_legacy_publish(
+            session,
+            principal,
+            current,
+            title=title,
+            body=body.body,
+            base_version=next_number,
+        )
         add_audit(
             session,
             principal,

@@ -36,13 +36,32 @@ import { ProductShell } from '../shared/ProductShell';
 import { AuthProvider, useAuth } from '../../auth/AuthContext';
 import { AuthAccessDenied } from '../../auth/AuthAccessDenied';
 import { ReferenceFields, ReferenceList } from '../shared/References';
-import type { CodeCheck, CodeHealth, CodeProject, PullRequest, PullRequestContext, Repository } from '../shared/types';
+import type { CodeCheck, CodeHealth, CodeProject, ProductPrincipal, PullRequest, PullRequestContext, Repository } from '../shared/types';
 import { formatDate, formatNumber, useI18n, useLocalizedForm } from '../../i18n';
+import './code-collaboration.css';
 
 const { Paragraph, Title } = Typography;
 const { TextArea } = Input;
 const codeApi = createProductApi(productApiPrefix('code'));
 type CodeSection = 'repositories' | 'pulls';
+type CollaborationActor = { id: string; name: string; kind: 'human' | 'agent' };
+type PullCollaborationComment = { id: string; author: CollaborationActor; body: string; created_at: string };
+type PullCollaborationReview = {
+  id: string;
+  author: CollaborationActor;
+  decision: 'approve' | 'request_changes' | 'comment';
+  comment: string;
+  head_sha: string;
+  is_current: boolean;
+  created_at: string;
+};
+type PullCollaboration = {
+  pull_request_id: string;
+  head_sha: string;
+  proposer: CollaborationActor | null;
+  comments: PullCollaborationComment[];
+  reviews: PullCollaborationReview[];
+};
 
 function dateText(value?: string | null): string {
   return formatDate(value);
@@ -552,13 +571,13 @@ function CodeWorkspace() {
       <Drawer title={pullContext ? `PR #${formatNumber(pullContext.number)} · ${pullContext.title}` : t('合併請求')} open={pullDrawerOpen} onClose={() => setPullDrawerOpen(false)} width={620} className="code-pr-drawer">
         {pullError && <Alert type="error" showIcon message={t('合併請求載入失敗')} description={t(pullError)} action={<Button size="small" onClick={() => void loadPullContext()}>{t('重試')}</Button>} />}
         {pullBusy && !pullContext && <div className="product-inline-loading"><Spin /></div>}
-        {pullContext && <PullDetail context={pullContext} canReport={canWrite && giteaConfigured} onReport={() => openCheckModal()} />}
+        {pullContext && <PullDetail context={pullContext} repositoryId={repositoryId} principal={principal} canWrite={canWrite} canReport={canWrite && giteaConfigured} onReport={() => openCheckModal()} onRefreshContext={() => loadPullContext()} />}
       </Drawer>
     </>
   );
 }
 
-function PullDetail({ context, canReport, onReport }: { context: PullRequestContext; canReport: boolean; onReport: () => void }) {
+function PullDetail({ context, repositoryId, principal, canWrite, canReport, onReport, onRefreshContext }: { context: PullRequestContext; repositoryId: string; principal: ProductPrincipal | null; canWrite: boolean; canReport: boolean; onReport: () => void; onRefreshContext: () => Promise<PullRequestContext | undefined> }) {
   const { t } = useI18n();
   const href = webUrl(context.web_url);
   return (
@@ -568,11 +587,153 @@ function PullDetail({ context, canReport, onReport }: { context: PullRequestCont
       <Descriptions size="small" column={1} colon={false}><Descriptions.Item label={t('Head SHA')}><code>{context.head_sha}</code></Descriptions.Item><Descriptions.Item label={t('建立時間')}>{dateText(context.created_at)}</Descriptions.Item><Descriptions.Item label={t('更新時間')}>{dateText(context.updated_at)}</Descriptions.Item></Descriptions>
       <div className="code-detail-section-head"><div><span className="eyebrow">{t('來源引用')}</span><h3>{t('來源與 provenance')}</h3></div><span>{formatNumber(context.source_refs.length)}</span></div>
       <ReferenceList references={context.source_refs} />
+      <PullCollaborationPanel repositoryId={repositoryId} context={context} principal={principal} canWrite={canWrite} onRefreshContext={onRefreshContext} />
       <div className="code-detail-section-head check-section-head"><div><span className="eyebrow">{t('提交收據')}</span><h3>{t('Checks 與狀態')}</h3></div><Button size="small" icon={<SendOutlined />} disabled={!canReport} onClick={onReport}>{t('回報狀態')}</Button></div>
       <div className="check-receipt-note">{t('source=agent_reported 代表 Agent 提交的狀態回報；source=gitea_webhook 代表已驗證 webhook。這些資訊不會被標示成實際 CI 執行結果。')}</div>
       {!context.checks.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('此 PR 尚無 check receipt')} />}
       {context.checks.map((check) => <CheckRow key={check.id} check={check} />)}
     </div>
+  );
+}
+
+function PullCollaborationPanel({ repositoryId, context, principal, canWrite, onRefreshContext }: { repositoryId: string; context: PullRequestContext; principal: ProductPrincipal | null; canWrite: boolean; onRefreshContext: () => Promise<PullRequestContext | undefined> }) {
+  const { t } = useI18n();
+  const [collaboration, setCollaboration] = useState<PullCollaboration | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [savingComment, setSavingComment] = useState(false);
+  const [savingReview, setSavingReview] = useState(false);
+  const [error, setError] = useState('');
+  const [comment, setComment] = useState('');
+  const [reviewComment, setReviewComment] = useState('');
+  const [decision, setDecision] = useState<PullCollaborationReview['decision']>('comment');
+  const pullPath = `/repositories/${encodeURIComponent(repositoryId)}/pulls/${context.number}`;
+  const collaborationPath = `${pullPath}/collaboration`;
+
+  const loadCollaboration = useCallback(async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await codeApi.get<PullCollaboration>(collaborationPath);
+      setCollaboration(result);
+      return result;
+    } catch (loadError) {
+      setError(errorMessage(loadError));
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }, [collaborationPath]);
+
+  useEffect(() => {
+    setCollaboration(null);
+    void loadCollaboration();
+  }, [loadCollaboration]);
+
+  const proposerIsCurrentPrincipal = Boolean(
+    collaboration?.proposer
+    && principal
+    && collaboration.proposer.id === principal.id
+    && collaboration.proposer.kind === principal.kind,
+  );
+  const collaborationHeadChanged = Boolean(collaboration && collaboration.head_sha !== context.head_sha);
+
+  async function reloadReviews() {
+    await Promise.allSettled([loadCollaboration(), onRefreshContext()]);
+  }
+
+  async function submitComment() {
+    const body = comment.trim();
+    if (!canWrite || !body) return;
+    setSavingComment(true);
+    setError('');
+    try {
+      await codeApi.post(`${pullPath}/comments`, { body });
+      setComment('');
+      await loadCollaboration();
+    } catch (submitError) {
+      setError(errorMessage(submitError));
+    } finally {
+      setSavingComment(false);
+    }
+  }
+
+  async function submitReview() {
+    const body = reviewComment.trim();
+    if (!canWrite || !body || !context.head_sha || (proposerIsCurrentPrincipal && decision !== 'comment')) return;
+    setSavingReview(true);
+    setError('');
+    try {
+      await codeApi.post(`${pullPath}/reviews`, {
+        decision,
+        comment: body,
+        expected_head_sha: context.head_sha,
+      });
+      setReviewComment('');
+      await loadCollaboration();
+    } catch (submitError) {
+      setError(errorMessage(submitError));
+    } finally {
+      setSavingReview(false);
+    }
+  }
+
+  const decisionLabels: Record<PullCollaborationReview['decision'], string> = {
+    approve: '核准',
+    request_changes: '要求變更',
+    comment: '一般意見',
+  };
+
+  return (
+    <section className="code-pr-collaboration" aria-label={t('Ordivant PR 協作')}>
+      <div className="code-detail-section-head">
+        <div><span className="eyebrow">{t('Ordivant PR 協作')}</span><h3>{t('討論與審查記錄')}</h3></div>
+        <Button size="small" icon={<ReloadOutlined />} onClick={() => void loadCollaboration()} loading={busy}>{t('重新載入')}</Button>
+      </div>
+      <Alert className="code-collaboration-note" type="info" showIcon message={t('Ordivant 協作與審查紀錄由 Ordivant 保存；合併與 Gitea 自身的核准規則仍由 Gitea 管理，這些紀錄不代表 CI 結果。')} />
+      {collaborationHeadChanged && <Alert
+        className="code-collaboration-stale"
+        type="warning"
+        showIcon
+        message={t('PR head 已變更，請重新載入審查記錄。')}
+        description={<Button size="small" onClick={() => void reloadReviews()} loading={busy}>{t('重新載入審查記錄')}</Button>}
+      />}
+      {error && <Alert className="code-collaboration-error" type="error" showIcon message={t('Ordivant PR 協作載入或更新失敗')} description={t(error)} action={<Button size="small" onClick={() => void loadCollaboration()}>{t('重試')}</Button>} />}
+      {busy && !collaboration && <div className="product-inline-loading"><Spin size="small" /></div>}
+      {!busy && !collaboration && !error && <Alert type="error" showIcon message={t('協作記錄不可用')} />}
+      {collaboration && <>
+        {collaboration.proposer && <div className="code-collaboration-entry-head"><span>{t('提案者')}</span><strong>{collaboration.proposer.name}</strong><Tag color={collaboration.proposer.kind === 'agent' ? 'purple' : 'blue'}>{t(collaboration.proposer.kind === 'agent' ? 'Agent' : '真人')}</Tag></div>}
+        <div className="code-collaboration-heads">
+          <span>{t('記錄版本')} <code>{collaboration.head_sha}</code></span>
+          <span>{t('目前 head')} <code>{context.head_sha}</code></span>
+        </div>
+        <div className="code-collaboration-subhead"><strong>{t('討論')}</strong><span>{formatNumber(collaboration.comments.length)}</span></div>
+        {!collaboration.comments.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('尚無討論')} />}
+        {collaboration.comments.map((item) => <div className="code-collaboration-entry" key={item.id}>
+          <div className="code-collaboration-entry-head"><strong>{item.author.name}</strong><Tag color={item.author.kind === 'agent' ? 'purple' : 'blue'}>{t(item.author.kind === 'agent' ? 'Agent' : '真人')}</Tag><time>{dateText(item.created_at)}</time></div>
+          <MarkdownContent content={item.body} />
+        </div>)}
+        {canWrite
+          ? <div className="code-collaboration-compose"><TextArea value={comment} onChange={(event) => setComment(event.target.value)} rows={3} maxLength={20000} placeholder={t('新增討論')} /><Button type="primary" icon={<SendOutlined />} loading={savingComment} disabled={!comment.trim()} onClick={() => void submitComment()}>{t('送出討論')}</Button></div>
+          : <div className="code-collaboration-readonly">{t('目前為唯讀，可查看討論與審查記錄。')}</div>}
+
+        <div className="code-collaboration-subhead"><strong>{t('審查歷程')}</strong><span>{formatNumber(collaboration.reviews.length)}</span></div>
+        {!collaboration.reviews.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('尚無審查記錄')} />}
+        {collaboration.reviews.map((review) => {
+          const isCurrent = review.is_current && review.head_sha === collaboration.head_sha && review.head_sha === context.head_sha;
+          return <div className="code-collaboration-entry" key={review.id}>
+            <div className="code-collaboration-entry-head"><strong>{review.author.name}</strong><Tag color={review.author.kind === 'agent' ? 'purple' : 'blue'}>{t(review.author.kind === 'agent' ? 'Agent' : '真人')}</Tag><Tag color={review.decision === 'approve' ? 'green' : review.decision === 'request_changes' ? 'red' : 'default'}>{t(decisionLabels[review.decision])}</Tag><Tag color={isCurrent ? 'green' : 'default'}>{t(isCurrent ? '最新 head' : '已過期')}</Tag><time>{dateText(review.created_at)}</time></div>
+            {review.comment && <MarkdownContent content={review.comment} />}
+            <div className="code-collaboration-sha">{review.head_sha}</div>
+          </div>;
+        })}
+        {canWrite ? <div className="code-collaboration-compose code-collaboration-review">
+          {proposerIsCurrentPrincipal && <Alert type="warning" showIcon message={t('PR 提案者不能核准或要求變更自己的 PR。')} />}
+          <Select value={decision} onChange={(value: PullCollaborationReview['decision']) => setDecision(value)} options={(['approve', 'request_changes', 'comment'] as const).map((value) => ({ value, label: t(decisionLabels[value]), disabled: proposerIsCurrentPrincipal && value !== 'comment' }))} />
+          <TextArea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} rows={3} maxLength={20000} placeholder={t('請輸入審查意見')} />
+          <Button type="primary" icon={<SafetyCertificateOutlined />} loading={savingReview} disabled={!reviewComment.trim() || !context.head_sha || (proposerIsCurrentPrincipal && decision !== 'comment')} onClick={() => void submitReview()}>{t('送出審查記錄')}</Button>
+        </div> : <div className="code-collaboration-readonly">{t('目前為唯讀，可查看討論與審查記錄。')}</div>}
+      </>}
+    </section>
   );
 }
 

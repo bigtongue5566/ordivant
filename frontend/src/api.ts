@@ -15,6 +15,7 @@ import type {
   Principal,
   Project,
   ProjectContext,
+  ProjectParticipant,
   Run,
   RunEvent,
   SandboxProfile,
@@ -116,6 +117,7 @@ export const api = {
   me: () => request<Principal>('/api/me', { method: 'GET' }),
   projects: () => request<Project[]>('/api/projects', { method: 'GET' }),
   projectContext: (id: string) => request<ProjectContext>(`/api/projects/${encodeURIComponent(id)}/context`, { method: 'GET' }),
+  participants: (projectId: string) => request<ProjectParticipant[]>(`/api/projects/${encodeURIComponent(projectId)}/participants`, { method: 'GET' }),
   overview: (projectId: string) => request<Overview>(`/api/overview?project_id=${encodeURIComponent(projectId)}`, { method: 'GET' }),
   tasks: (projectId: string, status: string, query: string) => {
     const params = new URLSearchParams({ project_id: projectId });

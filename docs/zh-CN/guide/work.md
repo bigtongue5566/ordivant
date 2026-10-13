@@ -11,26 +11,30 @@ Work 用来整理项目、任务、Agent 运行、消息、成果证据与独立
 
 1. 由 Identity 管理员在 Work 创建 Project，并把成员授权到这个 Project。成员只会看到自己获授权的范围。
 2. 在 Project 的「任务」创建 Task，填写目标、描述、输入数据、运行范围、限制、验收条件和优先级。
-3. 选择具备所需能力、且已获授权此 Project 的运行 Agent；指定另一个 reviewer。需要先完成的 Task 可加为 dependency。系统拒绝循环依赖；前置任务要完成独立审核后，后续任务才可开始。
+3. 在「负责者」中选择管理员已授权此 Project 的真人同事或 Agent，也可以先留空，让符合条件的成员认领；在「指定审核者」中选择另一位获授权的真人或 Agent。需要先完成的 Task 可加为 dependency。系统拒绝循环依赖；前置任务要完成独立审核后，后续任务才可开始。
 4. 保存后在任务清单搜索或依状态查看工作。修改任务规格不会取代已保存的运行与审核历程。
+
+可指派的真人必须已受邀、处于启用状态，并具有 Work 角色和此 Project scope。即使受邀成员尚未登录 Work，管理员也可以先指派任务。角色和范围由 Identity 管理员设置，详见[团队设置](team-setup.md)。
 
 <span id="執行並提交證據"></span>
 <span id="运行并提交证据"></span>
 
 ## 运行并提交证据 {#execute-and-submit-evidence}
 
-Agent 领取任务后，每次执行都会留下独立记录。自动执行需要管理员先启用 Agent 执行服务；尚未启用时，仍可手动安排任务、提交成果与进行审核。派发操作详见[Run 与自动化](../execution-usage.md)。
+真人工作不需要 LLM 或 Agent。具有此 Project scope 的 Worker、Manager 或 Admin 可以认领未指派给其他人的「待运行」任务；如果任务已指派给自己，也可以认领。直接选择「认领任务」，不必选择 Agent。不能代替另一位同事认领。真人执行没有 Agent 租约，任务执行记录可在重新加载页面后恢复。
 
-运行者完成工作后，提交摘要及一项或多项成果，例如文字、Artifact URI 或文件／测试结果引用。提交会把 Task 移入待审核，并保留本次 Run 的事件与收据。请在成果中说明如何对照验收条件；「Run done」只代表运行已提交，不等于 Task 已被接受。
+工作期间可用「回报执行进度」记录进展和证据；需要等待外部资料时选择「标记任务受阻」。受阻或成果被退回时，原负责人仍保留。要交给其他人时，选择「交接并发布」并填写交接内容：当前执行会结束，交接记录会保留，真人负责人会清空，任务返回「待运行」，其他符合条件的同事即可认领。Manager/Admin 也可以在执行开始前重新指派负责人。
 
-Reviewer 在 Task 详情检查摘要与证据，选择接受或退回并附上说明。接受会完成 Task；退回会把它送回可运行状态并保留先前证据。提交者不能自行接受自己的成果。任务被拒绝或重试时，新的运行纪录不会覆写旧历程。
+完成后提交摘要和一项或多项成果，例如文字、Artifact URI 或文件／测试结果引用。提交会把 Task 移入待审核，并保留执行、证据和交接历史。说明成果如何符合验收条件；提交不代表任务已被接受。由另一位有权限且不是提交者的人审核，并选择接受或退回。提交者不能审核自己的成果。
+
+派发 Agent 是另一条路径：管理员须先启用 Agent 执行服务，只有自主 Pi Run 需要模型连接。Agent 执行仍使用自己的租约和 fencing token，与真人工作分开。派发操作详见[Run 与自动化](../execution-usage.md)。
 
 <span id="協作與引用"></span>
 <span id="协作与引用"></span>
 
 ## 协作与引用 {#collaboration-and-citations}
 
-在 Task 脉络使用消息向其他成员或 Agent 提问、回复、交接工作或记录决议。具备 Project 管理权或为父任务负责人的 Agent 可委派子任务；委派不会自动授予受托人其他 Project 的访问权。
+在 Task 脉络使用消息向其他成员或 Agent 提问、回复、交接工作或记录决议。Project 的 Manager／Admin，或父任务的真人、Agent 负责人，可以选择「委派子任务」把工作交给具备此 Project 执行权限的同事或 Agent；委派不会自动授予受托人其他 Project 的访问权。
 
 若工作依赖 Knowledge 文档，将该文档的**特定版本引用 URI** 放入 Task 输入或提交证据，并保留版本号。引用只是来源纪录，不会替读者授权 Knowledge Space；需要阅读原文的成员必须另外获授权。Knowledge 引用格式与操作见[Knowledge 指南](knowledge.md)。
 
@@ -50,7 +54,7 @@ Work 也能读取已设置的既有 GitHub、GitLab 或 Gitea PR/check 状态。
 ## 权限概览 {#permissions-overview}
 
 - **Manager**：管理已授权 Project 的任务与运行安排。
-- **Worker**：运行被授权的工作并提交成果。
-- **Reviewer**：审查提交的成果；不能批准自己的提交。
+- **Worker**：认领未指派或指派给自己的工作、提交成果，并可交接释放任务。
+- **Reviewer**：审查提交的成果；不能批准自己的提交。Manager 和 Admin 也可在获授权范围内审查。
 
 组织管理员负责创建 Project、邀请成员及分配产品角色。Work 访问以 Project scope 与 manager、worker、reviewer 身分为准；没有独立的 Work Reader role。人类登录工作阶段不会变成 Agent/runtime 凭证。

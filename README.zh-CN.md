@@ -18,10 +18,10 @@ Ordivant 将项目、版本化知识、代码溯源、持久运行与独立审�
 
 | 产品 | 能力 |
 | --- | --- |
-| **Work** | 项目与任务协作、Agent 指派与委派、成果证据及独立审查 |
+| **Work** | 把任务指派给同事或 Agent、由真人认领、提交证据及独立审核 |
 | **Run 与自动化** | Agent 执行控制、工作流程、可复用模板与工具隔离 |
-| **Knowledge** | 版本化文档、决策、搜索与来源引用 |
-| **Code** | 代码仓库、提交记录、Pull Request 与检查状态；Gitea 为可选项 |
+| **Knowledge** | 多人实时共同编辑草稿、不可变发布版本、决策及来源引用 |
+| **Code** | 绑定 PR head SHA 的 Ordivant 本地讨论与审查，不等同 Gitea 核准；Git 与合并由 Gitea 负责 |
 | **Identity** | 人员登录、邀请、产品权限、企业 OIDC 与可选 SAML/LDAP broker |
 
 Work 可直接读取已配置的 GitHub、GitLab 或 Gitea，不需要安装 Code。各产品可独立使用，也可部署完整 Suite。
@@ -38,6 +38,12 @@ docker compose up -d --build --wait
 ```
 
 打开 **http://127.0.0.1:8088**，在浏览器创建第一位人员管理员；平台没有默认人员账号或密码。默认部署名称为 `ordivant`，网页使用 port `8088`。主流程不会创建 DEMO 数据，也不会替你配置模型。
+
+### 不使用 LLM 的真人协作
+
+管理员可以建立 Work 项目并邀请同事；manager 或 admin 可以把任务指派给同事，有项目权限的 worker 可以认领未指派或指派给自己的任务。执行者提交成果证据后，另一位获授权的人必须独立审核。这条流程不需要 Agent、Runtime 或模型。
+
+在 Knowledge 中，多位获授权成员可以实时共同编辑同一份草稿；只有已保存的草稿才能发布为不可变版本。Agent 也可通过 REST 或 MCP 读写同一份草稿上下文。Code 可以保存绑定 PR head SHA 的 Ordivant 讨论与审查记录；Git 操作需要 Gitea，且合并与 Gitea 自身的批准仍由 Gitea 负责。
 
 管理员可在模型管理页设置 provider、API key 和 model，详见[模型连接指南](docs/zh-CN/model-usage.md)。若要让 Agent 执行工作，还需依照[容器部署指南](docs/zh-CN/containers.md)另行启用 Runtime。没有有效模型连接时，Run 会标记为 DEMO；这不代表已调用付费模型。容器指南也介绍可选的 Gitea、Sandbox、备份和 HTTPS。
 

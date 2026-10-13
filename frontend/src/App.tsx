@@ -80,7 +80,9 @@ import type {
   Principal,
   Project,
   ProjectContext,
+  ProjectParticipant,
   Task,
+  TaskAssignment,
   TaskContext,
   TaskStatus,
 } from './types';
@@ -185,6 +187,42 @@ function nameFor(
   return people.find((person) => person.id === id || person.principal_id === id)?.name ?? id.slice(0, 8);
 }
 
+function taskAssignment(task: Task, field: 'assignee' | 'reviewer', participants: ProjectParticipant[]): TaskAssignment | null {
+  const details = task[field];
+  const principalId = field === 'assignee' ? task.assignee_principal_id : task.reviewer_principal_id;
+  const agentId = field === 'assignee' ? task.assignee_id : task.reviewer_id;
+  const id = details?.id ?? principalId ?? agentId;
+  if (!id) return null;
+  const participant = participants.find((item) => item.id === id || item.principal_id === id || item.principal_id === details?.principal_id);
+  const kind = details?.kind ?? (principalId ? 'human' : 'agent');
+  return {
+    id: details?.id ?? participant?.id ?? id,
+    principal_id: details?.principal_id ?? principalId ?? participant?.principal_id ?? id,
+    name: details?.name ?? participant?.name ?? nameFor(id, participants),
+    kind,
+  };
+}
+
+function participantOption(participant: ProjectParticipant, t = translate) {
+  return {
+    value: participant.principal_id,
+    label: <Space size={6}><span>{participant.name}</span><Tag color={participant.kind === 'human' ? 'cyan' : 'purple'}>{t(participant.kind === 'human' ? '真人' : 'Agent')}</Tag></Space>,
+  };
+}
+
+function IdentityLabel({ id, participants, principal }: { id: string | null | undefined; participants: ProjectParticipant[]; principal?: Pick<Principal, 'id' | 'name'> | null }) {
+  const { t } = useI18n();
+  const participant = participants.find((person) => person.id === id || person.principal_id === id);
+  const kind = participant?.kind ?? (principal?.id === id ? 'human' : null);
+  return <Space size={6}>{kind && <Tag color={kind === 'human' ? 'cyan' : 'purple'}>{t(kind === 'human' ? '真人' : 'Agent')}</Tag>}<span>{nameFor(id, participants, principal)}</span></Space>;
+}
+
+function TaskAssignmentLabel({ assignment }: { assignment: TaskAssignment | null }) {
+  const { t } = useI18n();
+  if (!assignment) return <Text type="secondary">{t('未指派')}</Text>;
+  return <Space size={6}><Tag color={assignment.kind === 'human' ? 'cyan' : 'purple'}>{t(assignment.kind === 'human' ? '真人' : 'Agent')}</Tag><span>{assignment.name}</span></Space>;
+}
+
 function splitLines(value?: string): string[] {
   return (value ?? '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
 }
@@ -245,6 +283,9 @@ function WorkWorkspace() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
   const [projectContext, setProjectContext] = useState<ProjectContext | null>(null);
+  const [projectParticipants, setProjectParticipants] = useState<ProjectParticipant[]>([]);
+  const [participantsBusy, setParticipantsBusy] = useState(false);
+  const [participantsError, setParticipantsError] = useState('');
   const [projectBusy, setProjectBusy] = useState(false);
   const [projectError, setProjectError] = useState<string | LocalizedMessage>('');
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -261,7 +302,6 @@ function WorkWorkspace() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [leases, setLeases] = useState<Record<string, Lease>>({});
   const [claimAgentId, setClaimAgentId] = useState<string>();
-  const [dispatchAgentId, setDispatchAgentId] = useState<string>();
   const [dispatchBusy, setDispatchBusy] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -316,6 +356,7 @@ function WorkWorkspace() {
 
   useEffect(() => {
     agentExecutionOptionsSequence.current += 1;
+    setClaimAgentId(undefined);
     setAgentTemplates([]);
     setAgentToolConnections([]);
     setAgentSandboxProfiles([]);
@@ -327,24 +368,47 @@ function WorkWorkspace() {
     agentForm.resetFields();
   }, [projectId]);
 
+  useEffect(() => {
+    setClaimAgentId(undefined);
+  }, [selectedTaskId]);
+
   const currentProject = projects.find((project) => project.id === projectId) ?? projectContext?.project ?? null;
   const people = projectContext?.agents ?? agentList.filter((agent) => !projectId || agent.project_ids.includes(projectId));
+  const collaborators = projectParticipants;
   const selectedTask = taskContext?.task ?? tasks.find((task) => task.id === selectedTaskId) ?? null;
-  const lease = selectedTaskId ? leases[selectedTaskId] : undefined;
-  const canManageAgents = Boolean(principal && ['admin', 'manager'].includes(principal.role));
-  const dispatchAgents = people.filter((agent) => agent.status === 'available' && agent.role === 'worker' && agent.runtime === 'pi');
-  const activeReviewer = taskContext?.executions.find((execution) => execution.status === 'submitted') ?? null;
-  const submittedByCurrentAgent = Boolean(activeReviewer && people.some((agent) => agent.id === activeReviewer.agent_id && agent.principal_id === principal?.id));
-  const designatedReviewerPrincipal = selectedTask?.reviewer_id
-    ? people.find((agent) => agent.id === selectedTask.reviewer_id)?.principal_id
+  const activeHumanExecution = taskContext?.executions.find((execution) => execution.status === 'running'
+    && (execution.executor_kind === 'human' || Boolean(execution.claimed_by_principal_id))
+    && execution.claimed_by_principal_id === principal?.id);
+  const lease = selectedTaskId
+    ? leases[selectedTaskId] ?? (activeHumanExecution ? { execution: activeHumanExecution, lease_token: null } : undefined)
     : undefined;
+  const canManageAgents = Boolean(principal && ['admin', 'manager'].includes(principal.role));
+  const dispatchAgents = people.filter((agent) => agent.status === 'available' && agent.role === 'worker' && agent.runtime === 'pi' && agent.id === selectedTask?.assignee_id);
+  const activeReviewer = taskContext?.executions.find((execution) => execution.status === 'submitted') ?? null;
+  const submittedByCurrentPrincipal = Boolean(activeReviewer && principal && (
+    activeReviewer.submitted_by_principal_id === principal.id
+      || activeReviewer.claimed_by_principal_id === principal.id
+      || activeReviewer.executor_id === principal.id
+      || activeReviewer.agent_id === principal.id
+      || people.some((agent) => agent.id === activeReviewer.agent_id && agent.principal_id === principal.id)
+  ));
+  const designatedReviewerPrincipal = selectedTask?.reviewer_principal_id
+    ?? (selectedTask?.reviewer_id ? people.find((agent) => agent.id === selectedTask.reviewer_id)?.principal_id : undefined);
+  const humanMayClaim = Boolean(principal?.kind === 'human'
+    && ['admin', 'manager', 'worker'].includes(principal.role)
+    && !selectedTask?.assignee_id
+    && (!selectedTask?.assignee_principal_id || selectedTask.assignee_principal_id === principal.id));
+  const currentAgentId = principal?.kind === 'agent' ? people.find((agent) => agent.principal_id === principal.id)?.id : undefined;
+  const agentMayClaim = Boolean(principal?.kind === 'agent'
+    && !selectedTask?.assignee_principal_id
+    && (!selectedTask?.assignee_id || selectedTask.assignee_id === currentAgentId));
+  const mayClaimDirectly = humanMayClaim || agentMayClaim;
   const canReview = Boolean(
     selectedTask?.status === 'in_review'
       && principal
       && ['admin', 'manager', 'reviewer'].includes(principal.role)
-      && activeReviewer?.agent_id !== principal.id
-      && !submittedByCurrentAgent
-      && (!selectedTask.reviewer_id || selectedTask.reviewer_id === principal.id || designatedReviewerPrincipal === principal.id),
+      && !submittedByCurrentPrincipal
+      && (!selectedTask.reviewer_id && !selectedTask.reviewer_principal_id || selectedTask.reviewer_id === principal.id || selectedTask.reviewer_principal_id === principal.id || designatedReviewerPrincipal === principal.id),
   );
 
   useEffect(() => {
@@ -362,6 +426,8 @@ function WorkWorkspace() {
       setProjects([]);
       setProjectId('');
       setProjectContext(null);
+      setProjectParticipants([]);
+      setParticipantsError('');
       setOverview(null);
       setTasks([]);
       setTaskContext(null);
@@ -427,6 +493,24 @@ function WorkWorkspace() {
         else if (contextResult.status === 'fulfilled') setProjectError(localized('專案摘要無法載入：{{error}}', { error: localized(errorText(overviewResult.reason)) }));
       })
       .finally(() => { if (current) setProjectBusy(false); });
+    return () => { current = false; };
+  }, [principal, projectId]);
+
+  useEffect(() => {
+    if (!principal || !projectId) {
+      setProjectParticipants([]);
+      setParticipantsError('');
+      setParticipantsBusy(false);
+      return;
+    }
+    let current = true;
+    setProjectParticipants([]);
+    setParticipantsError('');
+    setParticipantsBusy(true);
+    api.participants(projectId)
+      .then((result) => { if (current) setProjectParticipants(result); })
+      .catch((error) => { if (current) setParticipantsError(errorText(error)); })
+      .finally(() => { if (current) setParticipantsBusy(false); });
     return () => { current = false; };
   }, [principal, projectId]);
 
@@ -521,7 +605,7 @@ function WorkWorkspace() {
   function openNewTask() {
     setEditingTask(null);
     taskForm.resetFields();
-    taskForm.setFieldsValue({ priority: 'medium', acceptance_criteria: '', labels: [], dependency_ids: [], budget_usd: 0 });
+    taskForm.setFieldsValue({ priority: 'medium', acceptance_criteria: '', labels: [], dependency_ids: [], budget_usd: 0, assignee: undefined, reviewer: undefined });
     setTaskModalOpen(true);
   }
 
@@ -529,6 +613,8 @@ function WorkWorkspace() {
     setEditingTask(task);
     taskForm.setFieldsValue({
       ...task,
+      assignee: taskAssignment(task, 'assignee', collaborators)?.principal_id,
+      reviewer: taskAssignment(task, 'reviewer', collaborators)?.principal_id,
       acceptance_criteria: task.acceptance_criteria.join('\n'),
       labels: task.labels,
       dependency_ids: task.dependency_ids,
@@ -576,6 +662,12 @@ function WorkWorkspace() {
   async function saveTask(values: Record<string, unknown>) {
     if (!projectId) return;
     setTaskSaving(true);
+    const currentAssignee = editingTask ? taskAssignment(editingTask, 'assignee', collaborators) : null;
+    const currentReviewer = editingTask ? taskAssignment(editingTask, 'reviewer', collaborators) : null;
+    const assignee = collaborators.find((participant) => participant.principal_id === values.assignee)
+      ?? (currentAssignee?.principal_id === values.assignee ? currentAssignee : null);
+    const reviewer = collaborators.find((participant) => participant.principal_id === values.reviewer)
+      ?? (currentReviewer?.principal_id === values.reviewer ? currentReviewer : null);
     const body = {
       title: values.title,
       description: values.description ?? '',
@@ -585,8 +677,10 @@ function WorkWorkspace() {
       constraints: values.constraints ?? '',
       acceptance_criteria: splitLines(String(values.acceptance_criteria ?? '')),
       priority: values.priority,
-      assignee_id: values.assignee_id || null,
-      reviewer_id: values.reviewer_id || null,
+      assignee_id: assignee?.kind === 'agent' ? assignee.id : null,
+      assignee_principal_id: assignee?.kind === 'human' ? assignee.principal_id : null,
+      reviewer_id: reviewer?.kind === 'agent' ? reviewer.id : null,
+      reviewer_principal_id: reviewer?.kind === 'human' ? reviewer.principal_id : null,
       dependency_ids: values.dependency_ids ?? [],
       labels: values.labels ?? [],
       budget_usd: values.budget_usd ?? 0,
@@ -606,6 +700,23 @@ function WorkWorkspace() {
     } finally {
       setTaskSaving(false);
     }
+  }
+
+  async function refreshParticipants() {
+    if (!projectId) return;
+    setParticipantsBusy(true);
+    setParticipantsError('');
+    try {
+      setProjectParticipants(await api.participants(projectId));
+    } catch (error) {
+      setParticipantsError(errorText(error));
+    } finally {
+      setParticipantsBusy(false);
+    }
+  }
+
+  async function retryParticipants() {
+    await refreshParticipants();
   }
 
   async function saveProject(values: Record<string, unknown>) {
@@ -634,21 +745,29 @@ function WorkWorkspace() {
     }
   }
 
-  async function claimTask() {
+  async function claimTask(agentId?: string) {
     if (!selectedTask || !principal) return;
     if (principal.kind === 'runtime') {
       messageApi.error(t('Runtime 身分不可代替 Agent 認領任務。'));
       return;
     }
-    if (principal.kind === 'human' && !claimAgentId) {
-      messageApi.warning(t('請先選擇要代表的 Agent。'));
+    if (agentId && (principal.kind !== 'human' || !canManageAgents || selectedTask.assignee_principal_id || (selectedTask.assignee_id && selectedTask.assignee_id !== agentId))) {
+      messageApi.error(t('目前身分不可代替 Agent 認領此任務。'));
+      return;
+    }
+    if (agentId && !people.some((agent) => agent.id === agentId && agent.role === 'worker' && agent.status === 'available')) {
+      messageApi.error(t('所選 Agent 目前無法認領任務。'));
+      return;
+    }
+    if (!agentId && !mayClaimDirectly) {
+      messageApi.error(t('此任務指派給其他執行者，無法直接認領。'));
       return;
     }
     try {
-      const result = await api.claim(selectedTask.id, principal.kind === 'human' ? { agent_id: claimAgentId } : {});
-      setLeases((current) => ({ ...current, [selectedTask.id]: { execution: result.execution, lease_token: result.lease_token } }));
+      const result = await api.claim(selectedTask.id, agentId ? { agent_id: agentId } : {});
+      setLeases((current) => ({ ...current, [selectedTask.id]: { execution: result.execution, lease_token: result.lease_token ?? null } }));
       await reloadTaskContext(selectedTask.id);
-      messageApi.success(t('已開始執行 {{key}}。', { key: selectedTask.key }));
+      messageApi.success(t(agentId ? '已代表 Agent 開始執行 {{key}}。' : '已認領 {{key}}。', { key: selectedTask.key }));
     } catch (error) {
       messageApi.error(t(errorText(error)));
     }
@@ -656,8 +775,8 @@ function WorkWorkspace() {
 
   async function dispatchSelectedTask() {
     if (!selectedTask || !principal || dispatchBusy) return;
-    if (principal.kind !== 'human' || !canManageAgents || selectedTask.status !== 'ready') return;
-    const agent = dispatchAgents.find((candidate) => candidate.id === dispatchAgentId);
+    if (principal.kind !== 'human' || !canManageAgents || selectedTask.status !== 'ready' || selectedTask.assignee_principal_id) return;
+    const agent = dispatchAgents.find((candidate) => candidate.id === selectedTask.assignee_id);
     if (!agent) return;
 
     setDispatchBusy(true);
@@ -687,7 +806,7 @@ function WorkWorkspace() {
     if (!selectedTask || !lease || !operationModal) return;
     setOperationSaving(true);
     const prefix = `/api/tasks/${encodeURIComponent(selectedTask.id)}`;
-    const leaseBody = { execution_id: lease.execution.id, lease_token: lease.lease_token };
+    const leaseBody = { execution_id: lease.execution.id, ...(lease.lease_token ? { lease_token: lease.lease_token } : {}) };
     try {
       if (operationModal === 'progress') {
         await api.post<Task>(`${prefix}/progress`, {
@@ -733,7 +852,7 @@ function WorkWorkspace() {
   }
 
   async function renewLease() {
-    if (!selectedTask || !lease) return;
+    if (!selectedTask || !lease?.lease_token) return;
     try {
       const result = await api.post<ClaimedExecution>(`/api/tasks/${encodeURIComponent(selectedTask.id)}/renew`, {
         execution_id: lease.execution.id,
@@ -881,6 +1000,7 @@ function WorkWorkspace() {
           execution_config: executionConfig,
         });
         setAgentList((current) => current.map((agent) => agent.id === updated.id ? updated : agent));
+        setProjectContext((current) => current ? { ...current, agents: current.agents.map((agent) => agent.id === updated.id ? updated : agent) } : current);
       } else {
         const modelConfig = values.runtime === 'pi' && values.modelMode === 'override'
           ? values.model_config as ModelSelection | undefined ?? null
@@ -900,9 +1020,12 @@ function WorkWorkspace() {
         setNewAgentToken(result.token ?? '');
         if (projectId) {
           const fresh = await api.agents();
-          setAgentList(fresh.filter((agent) => agent.project_ids.includes(projectId)));
+          const scopedAgents = fresh.filter((agent) => agent.project_ids.includes(projectId));
+          setAgentList(scopedAgents);
+          setProjectContext((current) => current ? { ...current, agents: scopedAgents } : current);
         }
       }
+      await refreshParticipants();
       setAgentModalOpen(false);
       setEditingAgent(null);
       agentForm.resetFields();
@@ -918,6 +1041,8 @@ function WorkWorkspace() {
     try {
       await api.patch<Agent>(`/api/agents/${encodeURIComponent(agent.id)}`, { status: 'disabled' });
       setAgentList((current) => current.map((entry) => entry.id === agent.id ? { ...entry, status: 'disabled' } : entry));
+      setProjectContext((current) => current ? { ...current, agents: current.agents.map((entry) => entry.id === agent.id ? { ...entry, status: 'disabled' } : entry) } : current);
+      await refreshParticipants();
       messageApi.success(t('{{name}} 已停用。', { name: agent.name }));
     } catch (error) {
       messageApi.error(t(errorText(error)));
@@ -973,8 +1098,10 @@ function WorkWorkspace() {
     if (!selectedTask) return;
     setDelegateSaving(true);
     try {
+      const delegate = collaborators.find((participant) => participant.principal_id === values.delegatee);
+      if (!delegate) throw new Error(t('請選擇有效的同事或 Agent。'));
       await api.post<Task>(`/api/tasks/${encodeURIComponent(selectedTask.id)}/delegate`, {
-        agent_id: values.agent_id,
+        ...(delegate.kind === 'human' ? { assignee_principal_id: delegate.principal_id } : { agent_id: delegate.id }),
         title: values.title,
         goal: values.goal,
         description: values.description ?? '',
@@ -1024,11 +1151,11 @@ function WorkWorkspace() {
       render: (value: string) => <Tag color={priorityColor[value] ?? 'default'}>{priorityLabel[value] ? t(priorityLabel[value]) : value}</Tag>,
     },
     {
-      title: t('負責 Agent'),
+      title: t('負責者'),
       dataIndex: 'assignee_id',
       key: 'assignee',
-      width: 140,
-      render: (value: string | null) => <span className="muted-cell">{nameFor(value, people)}</span>,
+      width: 190,
+      render: (_: string | null, task) => <TaskAssignmentLabel assignment={taskAssignment(task, 'assignee', collaborators)} />,
     },
     {
       title: t('進度'),
@@ -1046,7 +1173,7 @@ function WorkWorkspace() {
       width: 110,
       render: (value: string) => <span className="muted-cell">{displayDate(value)}</span>,
     },
-  ], [people, locale]);
+  ], [collaborators, locale]);
 
   const agentColumns: ColumnsType<Agent> = [
     {
@@ -1084,7 +1211,7 @@ function WorkWorkspace() {
 
   const inboxColumns: ColumnsType<ProjectMessage> = [
     { title: t('訊息'), dataIndex: 'body', key: 'body', render: (body: string, item) => <div className="message-cell"><Tag>{t(({ question: '問題', reply: '回覆', help_request: '求助', decision: '決議', handoff: '交接' })[item.kind])}</Tag><MarkdownContent content={body} />{item.task_id && <span className="subline">{t('任務 {{key}}', { key: tasks.find((task) => task.id === item.task_id)?.key ?? item.task_id.slice(0, 8) })}</span>}</div> },
-    { title: t('寄件者'), dataIndex: 'sender_id', key: 'sender_id', width: 150, render: (id: string) => nameFor(id, people, principal) },
+    { title: t('寄件者'), dataIndex: 'sender_id', key: 'sender_id', width: 190, render: (id: string) => <IdentityLabel id={id} participants={collaborators} principal={principal} /> },
     { title: t('狀態'), dataIndex: 'status', key: 'status', width: 100, render: (value: ProjectMessage['status']) => <Tag color={value === 'completed' ? 'green' : value === 'accepted' ? 'blue' : 'default'}>{t(({ delivered: '待處理', accepted: '已接收', completed: '已完成' })[value])}</Tag> },
     { title: t('時間'), dataIndex: 'created_at', key: 'created_at', width: 118, render: (value: string) => displayDate(value) },
     { title: '', key: 'actions', width: 230, render: (_: unknown, item) => <Space wrap><Button size="small" icon={<SendOutlined />} onClick={() => { messageForm.resetFields(); setMessageModal({ open: true, replyTo: item }); }}>{t('回覆')}</Button>{item.status !== 'accepted' && item.status !== 'completed' && <Button size="small" onClick={() => void acknowledgeMessage(item, 'accepted')}>{t('接收')}</Button>}{item.status !== 'completed' && <Button size="small" onClick={() => void acknowledgeMessage(item, 'completed')}>{t('完成')}</Button>}</Space> },
@@ -1226,7 +1353,7 @@ function WorkWorkspace() {
                   <div className="section-tools"><span>{eventsBusy ? t('正在載入') : t('最近 {{count}} 筆操作', { count: formatNumber(events.length) })}</span><span>{t('稽核資料由服務端記錄')}</span></div>
                   {eventsBusy && <Skeleton active />}
                   {!eventsBusy && events.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('目前沒有稽核事件')} />}
-                  {events.map((event) => <AuditRow key={event.id} event={event} actor={nameFor(event.actor_id, people, principal)} />)}
+                  {events.map((event) => <AuditRow key={event.id} event={event} actor={nameFor(event.actor_id, collaborators, principal)} />)}
                 </section>
               )}
             </>
@@ -1252,43 +1379,46 @@ function WorkWorkspace() {
               <Button icon={<CodeOutlined />} onClick={() => { delegateForm.resetFields(); delegateForm.setFieldsValue({ priority: 'medium', acceptance_criteria: '', budget_usd: 0 }); setDelegateOpen(true); }}>{t('委派子任務')}</Button>
             </div>
             <div className="claim-bar">
-              {principal.kind === 'human' && <Select aria-label={t('選擇代執行 Agent')} placeholder={t('選擇執行 Agent')} value={claimAgentId} onChange={setClaimAgentId} options={people.filter((agent) => agent.status === 'available' && agent.role === 'worker').map((agent) => ({ value: agent.id, label: agent.name }))} className="claim-agent-select" />}
-              {principal.kind !== 'runtime' && !lease && selectedTask.status === 'ready' && <Button type="primary" icon={<CheckOutlined />} onClick={() => void claimTask()} disabled={principal.kind === 'human' && !claimAgentId}>{t('認領任務')}</Button>}
-              {principal.kind === 'human' && canManageAgents && selectedTask.status === 'ready' && <>
-                <Select aria-label={t('選擇 Pi 執行 Agent')} placeholder={t('選擇 Pi 執行 Agent')} value={dispatchAgentId} onChange={setDispatchAgentId} options={dispatchAgents.map((agent) => ({ value: agent.id, label: agent.name }))} className="claim-agent-select" disabled={dispatchBusy} />
-                <Button icon={<SendOutlined />} onClick={() => void dispatchSelectedTask()} disabled={dispatchBusy || !dispatchAgents.some((agent) => agent.id === dispatchAgentId)} loading={dispatchBusy}>{t('派發給 Agent')}</Button>
+              {!lease && selectedTask.status === 'ready' && mayClaimDirectly && <Button type="primary" icon={<CheckOutlined />} onClick={() => void claimTask()}>{t('認領任務')}</Button>}
+              {!lease && principal.kind === 'human' && canManageAgents && !selectedTask.assignee_principal_id && selectedTask.status === 'ready' && <>
+                <Select aria-label={t('選擇代執行 Agent')} placeholder={t('選擇執行 Agent')} value={claimAgentId} onChange={setClaimAgentId} options={people.filter((agent) => agent.status === 'available' && agent.role === 'worker' && (!selectedTask.assignee_id || selectedTask.assignee_id === agent.id)).map((agent) => ({ value: agent.id, label: <Space size={6}><span>{agent.name}</span><Tag color="purple">{t('Agent')}</Tag></Space> }))} className="claim-agent-select" />
+                <Button icon={<UserAddOutlined />} onClick={() => void claimTask(claimAgentId)} disabled={!claimAgentId || !people.some((agent) => agent.id === claimAgentId && agent.role === 'worker' && agent.status === 'available' && (!selectedTask.assignee_id || agent.id === selectedTask.assignee_id))}>{t('代 Agent 認領')}</Button>
               </>}
-              {lease && <Tag color="green" icon={<CheckCircleOutlined />}>{t('目前工作階段持有執行租約')}</Tag>}
+              {!lease && principal.kind === 'human' && canManageAgents && selectedTask.assignee_id && !selectedTask.assignee_principal_id && selectedTask.status === 'ready' && dispatchAgents.length > 0 && <>
+                <Tag color="purple">{t('Pi Agent：{{name}}', { name: dispatchAgents[0].name })}</Tag>
+                <Button icon={<SendOutlined />} onClick={() => void dispatchSelectedTask()} disabled={dispatchBusy} loading={dispatchBusy}>{t('派發給 Agent')}</Button>
+              </>}
+              {lease && <Tag color="green" icon={<CheckCircleOutlined />}>{t(lease.lease_token ? '目前工作階段持有執行租約' : '目前由你執行')}</Tag>}
               {selectedTask.status === 'blocked' && ['admin', 'manager'].includes(principal.role) && <Button type="primary" onClick={() => void unblockTask()}>{t('解除阻塞')}</Button>}
             </div>
             {lease && (
               <div className="lease-panel">
-                <div className="lease-heading"><span><ClockCircleOutlined /> {t('執行控制')}</span><span>{t('到期 {{date}}', { date: displayDate(lease.execution.lease_expires_at) })}</span></div>
+                <div className="lease-heading"><span><ClockCircleOutlined /> {t('執行控制')}</span><span>{lease.lease_token ? t('租約到期 {{date}}', { date: displayDate(lease.execution.lease_expires_at) }) : t('真人工作由執行者持續保留')}</span></div>
                 <Progress percent={selectedTask.progress ?? lease.execution.progress ?? 0} size="small" />
                 <Space wrap>
-                  <Button size="small" icon={<ReloadOutlined />} onClick={() => void renewLease()}>{t('延長租約')}</Button>
+                  {lease.lease_token && <Button size="small" icon={<ReloadOutlined />} onClick={() => void renewLease()}>{t('延長租約')}</Button>}
                   <Button size="small" onClick={() => { operationForm.resetFields(); operationForm.setFieldsValue({ progress: selectedTask.progress, summary: lease.execution.summary ?? '' }); setOperationModal('progress'); }}>{t('回報進度')}</Button>
                   <Button size="small" onClick={() => { operationForm.resetFields(); operationForm.setFieldsValue({ kind: 'summary', artifact_title: t('{{key}} 執行摘要', { key: selectedTask.key }) }); setOperationModal('submit'); }}>{t('提交成果')}</Button>
                   <Button size="small" onClick={() => { operationForm.resetFields(); setOperationModal('release'); }}>{t('交接並釋出')}</Button>
                   <Button size="small" danger onClick={() => { operationForm.resetFields(); setOperationModal('block'); }}>{t('標記受阻')}</Button>
                 </Space>
-                <Text className="lease-footnote">{t('執行租約與 fencing token 僅保留在此分頁記憶體。重新整理後需重新認領。')}</Text>
+                <Text className="lease-footnote">{t(lease.lease_token ? 'Agent 執行租約與 fencing token 僅保留在此分頁記憶體。' : '真人執行記錄會從任務脈絡恢復，不需要 LLM 或租約。')}</Text>
               </div>
             )}
             <Tabs
               className="detail-tabs"
               items={[
                 {
-                  key: 'spec', label: t('規格'), children: taskContextBusy && !taskContext ? <Spin /> : <TaskSpecification task={selectedTask} context={taskContext} agents={people} />,
+                  key: 'spec', label: t('規格'), children: taskContextBusy && !taskContext ? <Spin /> : <TaskSpecification task={selectedTask} context={taskContext} participants={collaborators} />,
                 },
                 {
-                  key: 'execution', label: t('執行與審核'), children: <ExecutionReview context={taskContext} agents={people} canReview={canReview} projectId={selectedTask.project_id} hasLease={Boolean(lease)} onUsePullRequest={useExistingPullRequest} onReview={(decision) => { reviewForm.resetFields(); setReviewDecision(decision); }} />,
+                  key: 'execution', label: t('執行與審核'), children: <ExecutionReview context={taskContext} agents={people} participants={collaborators} canReview={canReview} projectId={selectedTask.project_id} hasLease={Boolean(lease)} onUsePullRequest={useExistingPullRequest} onReview={(decision) => { reviewForm.resetFields(); setReviewDecision(decision); }} />,
                 },
                 {
-                  key: 'collaboration', label: taskContext?.messages.length ? t('協作（{{count}}）', { count: formatNumber(taskContext.messages.length) }) : t('協作'), children: <TaskCollaboration context={taskContext} people={people} principal={principal} onReply={(item) => { messageForm.resetFields(); setMessageModal({ open: true, replyTo: item }); }} />,
+                  key: 'collaboration', label: taskContext?.messages.length ? t('協作（{{count}}）', { count: formatNumber(taskContext.messages.length) }) : t('協作'), children: <TaskCollaboration context={taskContext} people={collaborators} principal={principal} onReply={(item) => { messageForm.resetFields(); setMessageModal({ open: true, replyTo: item }); }} />,
                 },
                 {
-                  key: 'history', label: t('事件'), children: <div className="compact-event-list">{taskContext?.events.map((event) => <AuditRow key={event.id} event={event} actor={nameFor(event.actor_id, people, principal)} />) ?? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('尚無事件')} />}</div>,
+                  key: 'history', label: t('事件'), children: <div className="compact-event-list">{taskContext?.events.map((event) => <AuditRow key={event.id} event={event} actor={nameFor(event.actor_id, collaborators, principal)} />) ?? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('尚無事件')} />}</div>,
                 },
               ]}
             />
@@ -1298,6 +1428,7 @@ function WorkWorkspace() {
 
       <Modal title={t(editingTask ? '編輯任務規格' : '建立任務')} open={taskModalOpen} onCancel={() => setTaskModalOpen(false)} onOk={() => taskForm.submit()} confirmLoading={taskSaving} okText={t(editingTask ? '儲存變更' : '建立任務')} cancelText={t('取消')} width={760} destroyOnClose>
         <Form form={taskForm} layout="vertical" onFinish={(values) => void saveTask(values)} className="form-grid">
+          {participantsError && <Alert className="form-span" type="error" showIcon message={t('專案成員無法載入')} description={t(participantsError)} action={<Button size="small" loading={participantsBusy} onClick={() => void retryParticipants()}>{t('重試')}</Button>} />}
           <Form.Item name="title" label={t('任務名稱')} rules={[{ required: true, message: t('請輸入任務名稱') }]}><Input maxLength={180} /></Form.Item>
           <Form.Item name="priority" label={t('優先級')} rules={[{ required: true }]}><Select options={[{ value: 'urgent', label: t('緊急') }, { value: 'high', label: t('高') }, { value: 'medium', label: t('一般') }, { value: 'low', label: t('低') }]} /></Form.Item>
           <Form.Item name="description" label={t('描述')} className="form-span"><TextArea rows={2} /></Form.Item>
@@ -1306,8 +1437,8 @@ function WorkWorkspace() {
           <Form.Item name="scope" label={t('範圍')}><TextArea rows={2} /></Form.Item>
           <Form.Item name="constraints" label={t('限制條件')}><TextArea rows={2} /></Form.Item>
           <Form.Item name="acceptance_criteria" label={t('驗收條件')} className="form-span" extra={t('每行一項')}><TextArea rows={3} /></Form.Item>
-          <Form.Item name="assignee_id" label={t('負責 Agent')}><Select allowClear placeholder={t('未指派')} options={people.filter((agent) => agent.role === 'worker').map((agent) => ({ value: agent.id, label: agent.name }))} /></Form.Item>
-          <Form.Item name="reviewer_id" label={t('指定審核者')}><Select allowClear placeholder={t('未指定')} options={people.filter((agent) => agent.role === 'reviewer').map((agent) => ({ value: agent.id, label: agent.name }))} /></Form.Item>
+          <Form.Item name="assignee" label={t('負責者')}><Select allowClear loading={participantsBusy} placeholder={t('未指派')} options={collaborators.filter((participant) => participant.role === 'worker' || (participant.kind === 'human' && ['manager', 'admin'].includes(participant.role))).map((participant) => participantOption(participant, t))} /></Form.Item>
+          <Form.Item name="reviewer" label={t('指定審核者')}><Select allowClear loading={participantsBusy} placeholder={t('未指定')} options={collaborators.filter((participant) => participant.role === 'reviewer' || (participant.kind === 'human' && ['manager', 'admin'].includes(participant.role))).map((participant) => participantOption(participant, t))} /></Form.Item>
           <Form.Item name="dependency_ids" label={t('相依任務')} className="form-span"><Select mode="multiple" placeholder={t('選擇必須先完成的任務')} options={tasks.filter((task) => task.id !== editingTask?.id).map((task) => ({ value: task.id, label: `${task.key} · ${task.title}` }))} /></Form.Item>
           <Form.Item name="labels" label={t('標籤')}><Select mode="tags" tokenSeparators={[',']} placeholder={t('輸入後按 Enter')} /></Form.Item>
           <Form.Item name="budget_usd" label={t('預算上限 (USD)')}><InputNumber min={0} precision={2} className="full-width" /></Form.Item>
@@ -1372,10 +1503,11 @@ function WorkWorkspace() {
 
       <Modal title={t(messageModal.replyTo ? '回覆訊息' : messageModal.kind === 'help_request' ? '請求協作' : '傳送訊息')} open={messageModal.open} onCancel={() => setMessageModal({ open: false })} onOk={() => messageForm.submit()} confirmLoading={messageSaving} okText={t('送出')} cancelText={t('取消')} destroyOnClose>
         <Form form={messageForm} layout="vertical" onFinish={(values) => void sendProjectMessage(values)}>
+          {participantsError && !messageModal.replyTo && <Alert className="form-span" type="error" showIcon message={t('專案成員無法載入')} description={t(participantsError)} action={<Button size="small" loading={participantsBusy} onClick={() => void retryParticipants()}>{t('重試')}</Button>} />}
           <Form.Item label={t('專案')}>{currentProject ? `${currentProject.key} · ${currentProject.name}` : '—'}</Form.Item>
-          {messageModal.replyTo && <Form.Item label={t('回覆對象')}>{nameFor(messageModal.replyTo.sender_id, people, principal)}</Form.Item>}
+          {messageModal.replyTo && <Form.Item label={t('回覆對象')}><IdentityLabel id={messageModal.replyTo.sender_id} participants={collaborators} principal={principal} /></Form.Item>}
           {!messageModal.replyTo && <>
-            <Form.Item name="recipient_id" label={t('收件 Agent')} rules={messageModal.kind === 'help_request' ? [{ required: true, message: t('請選擇要求協作的 Agent') }] : []}><Select allowClear placeholder={t('專案訊息（不指定收件者）')} options={people.map((agent) => ({ value: agent.principal_id ?? agent.id, label: agent.name }))} /></Form.Item>
+            <Form.Item name="recipient_id" label={t('收件者')} rules={messageModal.kind === 'help_request' ? [{ required: true, message: t('請選擇要求協作的同事或 Agent') }] : []}><Select allowClear loading={participantsBusy} placeholder={t('專案訊息（不指定收件者）')} options={collaborators.map((participant) => participantOption(participant, t))} /></Form.Item>
             <Form.Item name="kind" label={t('訊息類型')} initialValue={messageModal.kind ?? 'question'}><Select options={[{ value: 'question', label: t('問題') }, { value: 'help_request', label: t('求助') }, { value: 'decision', label: t('決議') }, { value: 'handoff', label: t('交接') }]} /></Form.Item>
           </>}
           <Form.Item name="body" label={t('訊息內容')} rules={[{ required: true, whitespace: true, message: t('請輸入訊息內容') }]}><TextArea rows={5} maxLength={5000} showCount /></Form.Item>
@@ -1384,7 +1516,8 @@ function WorkWorkspace() {
 
       <Modal title={t('委派子任務')} open={delegateOpen} onCancel={() => setDelegateOpen(false)} onOk={() => delegateForm.submit()} confirmLoading={delegateSaving} okText={t('委派任務')} cancelText={t('取消')} destroyOnClose>
         <Form form={delegateForm} layout="vertical" onFinish={(values) => void delegateTask(values)}>
-          <Form.Item name="agent_id" label={t('負責 Agent')} rules={[{ required: true }]}><Select options={people.filter((agent) => agent.role === 'worker' && agent.status !== 'disabled').map((agent) => ({ value: agent.id, label: `${agent.name} · ${t(({ available: '可用', busy: '執行中', offline: '離線', disabled: '已停用' })[agent.status])}` }))} /></Form.Item>
+          {participantsError && <Alert type="error" showIcon message={t('專案成員無法載入')} description={t(participantsError)} action={<Button size="small" loading={participantsBusy} onClick={() => void retryParticipants()}>{t('重試')}</Button>} />}
+          <Form.Item name="delegatee" label={t('委派對象')} rules={[{ required: true }]}><Select loading={participantsBusy} options={collaborators.filter((participant) => participant.role === 'worker' || (participant.kind === 'human' && ['manager', 'admin'].includes(participant.role))).map((participant) => participantOption(participant, t))} /></Form.Item>
           <Form.Item name="title" label={t('子任務名稱')} rules={[{ required: true }]}><Input maxLength={180} /></Form.Item>
           <Form.Item name="goal" label={t('交付目標')} rules={[{ required: true }]}><TextArea rows={2} /></Form.Item>
           <Form.Item name="description" label={t('描述')}><TextArea rows={2} /></Form.Item>
@@ -1493,14 +1626,14 @@ function OverviewView({
   );
 }
 
-function TaskSpecification({ task, context, agents }: { task: Task; context: TaskContext | null; agents: Agent[] }) {
+function TaskSpecification({ task, context, participants }: { task: Task; context: TaskContext | null; participants: ProjectParticipant[] }) {
   const { t } = useI18n();
   const dependencyTasks = context?.dependencies ?? [];
   return (
     <div className="spec-view">
       <Descriptions column={1} size="small" colon={false}>
-        <Descriptions.Item label={t('負責 Agent')}>{nameFor(task.assignee_id, agents)}</Descriptions.Item>
-        <Descriptions.Item label={t('審核者')}>{nameFor(task.reviewer_id, agents)}</Descriptions.Item>
+        <Descriptions.Item label={t('負責者')}><TaskAssignmentLabel assignment={taskAssignment(task, 'assignee', participants)} /></Descriptions.Item>
+        <Descriptions.Item label={t('審核者')}><TaskAssignmentLabel assignment={taskAssignment(task, 'reviewer', participants)} /></Descriptions.Item>
         <Descriptions.Item label={t('預算上限')}>{money(task.budget_usd)}</Descriptions.Item>
         <Descriptions.Item label={t('建立時間')}>{displayDate(task.created_at)}</Descriptions.Item>
       </Descriptions>
@@ -1523,7 +1656,7 @@ function SpecBlock({ title, value }: { title: string; value?: string | null }) {
   return <div className="spec-block"><h4>{t(title)}</h4>{value ? <MarkdownContent content={value} /> : <span className="empty-value">{t('尚未設定')}</span>}</div>;
 }
 
-function ExecutionReview({ context, agents, canReview, projectId, hasLease, onUsePullRequest, onReview }: { context: TaskContext | null; agents: Agent[]; canReview: boolean; projectId: string; hasLease: boolean; onUsePullRequest: (result: ExistingPullRequest) => void; onReview: (decision: 'accept' | 'reject') => void }) {
+function ExecutionReview({ context, agents, participants, canReview, projectId, hasLease, onUsePullRequest, onReview }: { context: TaskContext | null; agents: Agent[]; participants: ProjectParticipant[]; canReview: boolean; projectId: string; hasLease: boolean; onUsePullRequest: (result: ExistingPullRequest) => void; onReview: (decision: 'accept' | 'reject') => void }) {
   const { t } = useI18n();
   return (
     <div className="execution-view">
@@ -1537,7 +1670,14 @@ function ExecutionReview({ context, agents, canReview, projectId, hasLease, onUs
       )}
       <div className="detail-section-heading"><h3>{t('執行歷程')}</h3><span>{t('{{count}} 筆', { count: formatNumber(context.executions.length) })}</span></div>
       {!context.executions.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('尚無執行記錄')} />}
-      {context.executions.map((execution) => <ExecutionRow key={execution.id} execution={execution} agentName={nameFor(execution.agent_id, agents)} />)}
+      {context.executions.map((execution) => {
+        const actorId = execution.executor_id ?? execution.claimed_by_principal_id ?? execution.agent_id;
+        const participant = participants.find((person) => person.id === actorId || person.principal_id === actorId || person.principal_id === execution.claimed_by_principal_id);
+        const agent = agents.find((item) => item.id === execution.agent_id || item.id === execution.executor_id);
+        const executorKind = execution.executor_kind ?? participant?.kind ?? (execution.agent_id ? 'agent' : execution.claimed_by_principal_id ? 'human' : null);
+        const executorName = execution.executor_name ?? participant?.name ?? agent?.name ?? (actorId ? nameFor(actorId, [...participants, ...agents]) : t('未知執行者'));
+        return <ExecutionRow key={execution.id} execution={execution} executorName={executorName} executorKind={executorKind} />;
+      })}
       <div className="detail-section-heading evidence-heading"><h3>{t('成果與證據')}</h3><span>{t('{{count}} 項', { count: formatNumber(context.artifacts.length) })}</span></div>
       {!context.artifacts.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('尚無提交證據')} />}
       {context.artifacts.map((artifact) => <ArtifactRow key={artifact.id} artifact={artifact} />)}
@@ -1597,7 +1737,7 @@ function ExistingPullRequestLookup({ projectId, hasLease, onUseResult }: { proje
   );
 }
 
-function ExecutionRow({ execution, agentName }: { execution: Execution; agentName: string }) {
+function ExecutionRow({ execution, executorName, executorKind }: { execution: Execution; executorName: string; executorKind: 'human' | 'agent' | 'runtime' | null }) {
   const { t } = useI18n();
   const labels: Record<string, string> = { running: '執行中', submitted: '已提交', accepted: '已通過', rejected: '已退回', expired: '租約逾期', released: '已釋出' };
   return (
@@ -1607,7 +1747,7 @@ function ExecutionRow({ execution, agentName }: { execution: Execution; agentNam
         <div className="execution-top"><strong>{labels[execution.status] ? t(labels[execution.status]) : execution.status}</strong><span>{displayDate(execution.started_at)}</span></div>
         {execution.summary && <MarkdownContent content={execution.summary} />}
         {execution.status === 'running' && <Progress percent={execution.progress} size="small" />}
-        <div className="execution-meta"><Tag>{agentName}</Tag><span>{money(execution.cost_usd)}</span><Tag color={execution.cost_source === 'self_reported' ? 'orange' : 'green'}>{t(execution.cost_source === 'self_reported' ? '自陳' : '量測')}</Tag>{execution.finished_at && <span>{displayDate(execution.finished_at)}</span>}</div>
+        <div className="execution-meta">{executorKind && <Tag color={executorKind === 'human' ? 'cyan' : 'purple'}>{t(executorKind === 'human' ? '真人' : executorKind === 'agent' ? 'Agent' : 'Runtime')}</Tag>}<Tag>{executorName}</Tag><span>{money(execution.cost_usd)}</span><Tag color={execution.cost_source === 'self_reported' ? 'orange' : 'green'}>{t(execution.cost_source === 'self_reported' ? '自陳' : '量測')}</Tag>{execution.finished_at && <span>{displayDate(execution.finished_at)}</span>}</div>
       </div>
     </div>
   );
@@ -1622,7 +1762,7 @@ function ArtifactRow({ artifact }: { artifact: Artifact }) {
   );
 }
 
-function TaskCollaboration({ context, people, principal, onReply }: { context: TaskContext | null; people: Agent[]; principal: Principal; onReply: (item: ProjectMessage) => void }) {
+function TaskCollaboration({ context, people, principal, onReply }: { context: TaskContext | null; people: ProjectParticipant[]; principal: Principal; onReply: (item: ProjectMessage) => void }) {
   const { t } = useI18n();
   if (!context) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('載入協作記錄中')} />;
   const kinds: Record<string, string> = { question: '問題', reply: '回覆', help_request: '求助', decision: '決議', handoff: '交接' };
@@ -1630,7 +1770,7 @@ function TaskCollaboration({ context, people, principal, onReply }: { context: T
   return (
     <div className="task-collaboration">
       {!context.messages.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('此任務尚無訊息')} />}
-      {context.messages.map((item) => <div className="thread-message" key={item.id}><div className="thread-message-head"><Avatar size={26}>{nameFor(item.sender_id, people, principal).slice(0, 1).toUpperCase()}</Avatar><strong>{nameFor(item.sender_id, people, principal)}</strong><Tag>{kinds[item.kind] ? t(kinds[item.kind]) : item.kind}</Tag><time>{displayDate(item.created_at)}</time></div><MarkdownContent content={item.body} /><div className="thread-message-foot"><Tag color={item.status === 'completed' ? 'green' : item.status === 'accepted' ? 'blue' : 'default'}>{statuses[item.status] ? t(statuses[item.status]) : item.status}</Tag><Button size="small" type="link" onClick={() => onReply(item)}>{t('回覆')}</Button></div></div>)}
+      {context.messages.map((item) => <div className="thread-message" key={item.id}><div className="thread-message-head"><Avatar size={26}>{nameFor(item.sender_id, people, principal).slice(0, 1).toUpperCase()}</Avatar><IdentityLabel id={item.sender_id} participants={people} principal={principal} /><Tag>{kinds[item.kind] ? t(kinds[item.kind]) : item.kind}</Tag><time>{displayDate(item.created_at)}</time></div><MarkdownContent content={item.body} /><div className="thread-message-foot"><Tag color={item.status === 'completed' ? 'green' : item.status === 'accepted' ? 'blue' : 'default'}>{statuses[item.status] ? t(statuses[item.status]) : item.status}</Tag><Button size="small" type="link" onClick={() => onReply(item)}>{t('回覆')}</Button></div></div>)}
     </div>
   );
 }

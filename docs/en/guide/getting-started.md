@@ -3,7 +3,7 @@
 
 # Getting started with Ordivant {#getting-started-with-ordivant}
 
-This page is a quick introduction. For your first workspace, follow the [complete first-project tutorial](first-project.md) to fill in project, Agent, and task fields, then complete submission and review. Administrators inviting members can use [team setup](team-setup.md) alongside it.
+This page is a quick introduction. For your first workspace, follow the [complete first-project tutorial](first-project.md) to create a project and task, then claim it as a person, submit the result, and complete an independent review. This workflow does not require an Agent. Administrators inviting members can use [team setup](team-setup.md) alongside it.
 
 Follow a product launch checklist example from signing in and creating a task through reviewing the result. Use your team's Ordivant URL. If you are self-hosting, finish installation first and open your platform address.
 
@@ -32,7 +32,7 @@ Choose **Work** in the product navigation, then open a project you are authorize
 
 On the task page, choose **Add task** and enter **Prepare product launch checklist** as the task name. Set the goal to preparing the items that must be completed before launch, then add inputs, scope, and constraints as needed.
 
-Under **Acceptance criteria**, list checkable results, such as covering all pre-launch items, naming an owner and current status for each item, and linking to supporting sources or evidence. Choose **Create task** to save it. You can leave the task unassigned until you select an Agent in the next step. See the [Work task and review guide](work.md) for field details.
+Under **Acceptance criteria**, list checkable results, such as covering all pre-launch items, naming an owner and current status for each item, and linking to supporting sources or evidence. Choose **Create task** to save it. Leave it unassigned for an authorized worker to claim, or have a manager or administrator assign it to a coworker or Agent. See the [Work task and review guide](work.md) for field details.
 
 <span id="seed-與-runtime"></span>
 <span id="seed-与-runtime"></span>
@@ -41,11 +41,13 @@ Under **Acceptance criteria**, list checkable results, such as covering all pre-
 
 ![Task details with goal, acceptance criteria, and Pi Agent dispatch](/screenshots/task-en.png)
 
-## Select an Agent and start a Run {#select-agent-and-run}
+## Choose a person or Agent to do the work {#select-agent-and-run}
 
-For automatic execution, an administrator or project manager selects an available Agent under **Select a Pi runtime agent** in the task details, then chooses **Dispatch to agent**. This creates a Run: open **Run execution** in the sidebar to follow progress, events, and results. For manual work, use **Select an execution agent** and **Claim task**; claiming does not start automatic execution. If no Agent is suitable, an administrator or a member with Agent management permission can choose **Add agent** on the Agent page, set its **Worker** role and capabilities, select **Pi Durable** under **Runtime** for automatic execution, and grant it access to the current project. If you do not have that permission, ask your administrator or project manager.
+**Work as a person:** Sign in with your own account and choose **Claim task** to claim work that is unassigned or assigned to you. You do not need to select an Agent, create a Run, or configure a model. You can reload the page and continue your active work. Human work does not use Agent leases, and you cannot claim a task assigned to another coworker. A manager or administrator can assign work to a coworker; select an Agent to claim on its behalf only when that is explicitly intended.
 
-Automatic execution depends on the administrator’s configuration. To run work automatically, the administrator must enable the Agent execution service and configure a valid model connection. Until then, work can still be assigned, completed, and submitted for review manually. A Run marked **DEMO** is not a paid model call. Administrators can see the [execution and automation guide](../execution-usage.md) for details.
+**Run an Agent automatically:** A manager or administrator selects a Pi Agent with access to the project in the task details, then chooses **Dispatch to agent**. This creates a Run. Open **Run execution** in the sidebar to follow progress, events, and results. Automatic Agent execution requires the administrator to enable Runtime and configure a valid model connection.
+
+Without a model, people can still claim and complete tasks, submit evidence, and review results. A Run marked **DEMO** is not a paid model call. Administrators can see the [execution and automation guide](../execution-usage.md) for Agent settings.
 
 <span id="檢查與停止"></span>
 <span id="检查与停止"></span>
@@ -61,9 +63,9 @@ For the launch checklist, the executor submits a summary and evidence such as th
 
 ## Product overview {#product-overview}
 
-- **Work** manages projects and tasks, assigns work to Agents, and tracks completion through evidence and independent review.
-- **Knowledge** organizes versioned documents, decisions, and source citations for members to find and reference in their work.
-- **Code** provides access to code repositories, commits, pull requests, and check status.
+- **Work** lets a manager assign a coworker or Agent, or a person claim work directly; another authorized person independently reviews submitted evidence.
+- **Knowledge** supports real-time shared drafts and immutable published versions; Agents can participate in the same draft through REST or MCP.
+- **Code** records Ordivant discussions and reviews tied to a PR head SHA; Gitea handles Git operations and merging.
 
 <span id="接下來"></span>
 <span id="接下来"></span>

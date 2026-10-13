@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.engine import Engine
 
 from .api import router
+from .collaboration import router as collaboration_router
 from .config import Settings, get_settings
 from .db import Base, make_engine, session_factory
 from .errors import DomainError
@@ -34,7 +35,9 @@ def create_app(database_url: str | None = None, *, mode: str | None = None) -> F
     application.state.settings = settings
     application.state.engine = engine
     application.state.session_factory = session_factory(engine)
+    application.state.collaboration_connections = 0
     application.include_router(router)
+    application.include_router(collaboration_router)
 
     @application.exception_handler(DomainError)
     async def domain_error_handler(_request: Request, error: DomainError) -> JSONResponse:

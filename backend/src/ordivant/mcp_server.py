@@ -47,6 +47,12 @@ async def get_project_context(project_id: str) -> dict:
 
 
 @mcp.tool()
+async def list_project_participants(project_id: str) -> list[dict]:
+    """List authorized human coworkers and agents for collaboration in this project."""
+    return await _request("GET", f"/api/projects/{project_id}/participants")
+
+
+@mcp.tool()
 async def get_vcs_pull_request(project_id: str, provider: str, repository: str, number: int) -> dict:
     """Read authorized existing GitHub/GitLab/Gitea PR evidence directly through Work."""
     return await _request("GET", f"/api/projects/{project_id}/vcs/pulls/{provider}/{number}", params={"repository": repository})
@@ -263,10 +269,10 @@ async def read_inbox(project_id: str | None = None, task_id: str | None = None) 
 @mcp.tool()
 async def delegate_task(
     task_id: str,
-    agent_id: str,
     title: str,
     goal: str,
     acceptance_criteria: list[str],
+    agent_id: str | None = None,
     description: str = "",
     inputs: str = "",
     scope: str = "",
@@ -274,10 +280,12 @@ async def delegate_task(
     priority: str = "medium",
     budget_usd: float = 0,
     request_id: str | None = None,
+    assignee_principal_id: str | None = None,
 ) -> dict:
-    """Create a child task and notify its scoped worker agent."""
+    """Delegate a child task to exactly one scoped coworker or worker agent."""
     body = {
         "agent_id": agent_id,
+        "assignee_principal_id": assignee_principal_id,
         "title": title,
         "goal": goal,
         "acceptance_criteria": acceptance_criteria,

@@ -34,6 +34,14 @@ class Settings:
     sso_backchannel_overrides: dict[str, str] = field(default_factory=dict, repr=False)
     sso_public_origin: str | None = None
     sso_ca_bundle: str | None = None
+    scim_token: str | None = field(default=None, repr=False)
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = field(default=None, repr=False)
+    smtp_sender: str | None = None
+    smtp_starttls: bool = True
+    mail_public_origin: str | None = None
 
 
 def _read_configured_secret() -> str:
@@ -159,7 +167,28 @@ def get_settings() -> Settings:
         sso_backchannel_overrides=overrides,
         sso_public_origin=public_origin,
         sso_ca_bundle=str(Path(ca_bundle).expanduser().resolve()) if ca_bundle else None,
+        scim_token=_optional_secret("ORDIVANT_SCIM_TOKEN_FILE", minimum=32),
+        smtp_host=os.getenv("ORDIVANT_SMTP_HOST", "").strip() or None,
+        smtp_port=int(os.getenv("ORDIVANT_SMTP_PORT", "587")),
+        smtp_username=os.getenv("ORDIVANT_SMTP_USERNAME", "").strip() or None,
+        smtp_password=_optional_secret("ORDIVANT_SMTP_PASSWORD_FILE"),
+        smtp_sender=os.getenv("ORDIVANT_SMTP_SENDER", "").strip() or None,
+        smtp_starttls=os.getenv("ORDIVANT_SMTP_STARTTLS", "true").lower() == "true",
+        mail_public_origin=public_origin or origins[0],
     )
+
+
+def _optional_secret(variable: str, minimum: int = 1) -> str | None:
+    path = os.getenv(variable, "").strip()
+    if not path:
+        return None
+    try:
+        secret = Path(path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise RuntimeError(f"{variable} points to an unavailable secret file") from exc
+    if len(secret.encode()) < minimum:
+        raise RuntimeError(f"{variable} secret is too short")
+    return secret
 
 
 def _parse_host_list(raw: str) -> tuple[str, ...]:

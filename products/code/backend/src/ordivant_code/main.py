@@ -5,6 +5,7 @@ import hmac
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
@@ -24,7 +25,11 @@ from .schemas import (
     ProjectCreate,
     PullRequestCommentCreate,
     PullRequestCreate,
+    PullRequestInlineCommentCreate,
+    PullRequestInlineReplyCreate,
+    PullRequestInlineResolve,
     PullRequestReviewCreate,
+    BranchProtectionUpdate,
     RepositoryCreate,
     WebhookResult,
 )
@@ -47,6 +52,7 @@ from .service import (
     report_check,
     review_pull_request,
 )
+from . import governance
 from .models import Organization, Principal, ScopeMembership
 
 
@@ -88,7 +94,10 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Ordivant Code API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Ordivant Code API", version="0.3.0", lifespan=lifespan)
+
+from .collaboration_adapter import install as install_collaboration
+install_collaboration(app, _get_database, _current_principal)
 
 
 @app.exception_handler(DomainError)
@@ -160,6 +169,34 @@ def me(principal: Principal = Depends(_current_principal), session: Session = De
 @app.get("/api/projects")
 def projects(principal: Principal = Depends(_current_principal), session: Session = Depends(_get_database)):
     return list_projects(session, principal)
+
+
+@app.get("/api/search")
+def search_index(
+    q: str = Query(default="", max_length=200),
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.search(session, principal, q)
+
+
+@app.get("/api/pulls/{pull_id}")
+def pull_by_resource(
+    pull_id: str,
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.pull_by_id(session, principal, pull_id)
+
+
+@app.get("/api/resources/{resource_kind}/{resource_id}")
+def code_resource(
+    resource_kind: str,
+    resource_id: str,
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.resolve_resource(session, principal, resource_kind, resource_id)
 
 
 @app.post("/api/projects")
@@ -284,6 +321,96 @@ def pull_review(
     session: Session = Depends(_get_database),
 ):
     return review_pull_request(session, principal, repository_id, number, request.url.path, key or "", payload)
+
+
+@app.get("/api/repositories/{repository_id}/pulls/{number}/inline-comments")
+def inline_comments(
+    repository_id: str,
+    number: int,
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.list_inline_comments(session, principal, repository_id, number)
+
+
+@app.get("/api/repositories/{repository_id}/pulls/{number}/diff")
+def pull_diff(
+    repository_id: str,
+    number: int,
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.pull_diff(session, principal, repository_id, number)
+
+
+@app.post("/api/repositories/{repository_id}/pulls/{number}/inline-comments")
+def new_inline_comment(
+    repository_id: str,
+    number: int,
+    payload: PullRequestInlineCommentCreate,
+    request: Request,
+    key: str | None = Header(default=None, alias="Idempotency-Key"),
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.create_inline_comment(session, principal, repository_id, number, request.url.path, key or "", payload)
+
+
+@app.post("/api/inline-comments/{comment_id}/replies")
+def inline_comment_reply(
+    comment_id: str,
+    payload: PullRequestInlineReplyCreate,
+    request: Request,
+    key: str | None = Header(default=None, alias="Idempotency-Key"),
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.reply_inline_comment(session, principal, comment_id, request.url.path, key or "", payload)
+
+
+@app.post("/api/inline-comments/{comment_id}/resolve")
+def inline_comment_resolve(
+    comment_id: str,
+    payload: PullRequestInlineResolve,
+    request: Request,
+    key: str | None = Header(default=None, alias="Idempotency-Key"),
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.resolve_inline_comment(session, principal, comment_id, request.url.path, key or "", payload)
+
+
+@app.get("/api/repositories/{repository_id}/pulls/{number}/governance")
+def pull_governance(
+    repository_id: str,
+    number: int,
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.pull_governance(session, principal, repository_id, number)
+
+
+@app.get("/api/repositories/{repository_id}/branch-protection")
+def branch_protection(
+    repository_id: str,
+    branch: str = Query(min_length=1, max_length=255),
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.get_branch_protection(session, principal, repository_id, branch)
+
+
+@app.patch("/api/repositories/{repository_id}/branch-protection")
+def update_branch_protection(
+    repository_id: str,
+    payload: BranchProtectionUpdate,
+    request: Request,
+    branch: str = Query(min_length=1, max_length=255),
+    key: str | None = Header(default=None, alias="Idempotency-Key"),
+    principal: Principal = Depends(_current_principal),
+    session: Session = Depends(_get_database),
+):
+    return governance.update_branch_protection(session, principal, repository_id, branch, request.url.path + "?" + urlencode({"branch": branch}), key or "", payload)
 
 
 @app.post("/api/repositories/{repository_id}/checks")

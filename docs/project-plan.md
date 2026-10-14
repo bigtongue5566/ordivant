@@ -99,12 +99,32 @@
 
 候選功能、目前實作界線與建議優先順序記錄在[功能缺口研究](feature-gap-research.md)。該研究不會將候選功能標示為已實作，也不會將其加入已完成的任務清單。
 
-- 各客戶自己的 IdP 租戶與 LDAP／AD 目錄驗收；SCIM 2.0 及自動離職停權流程。原生 SAML 端點與已驗證的 Keycloak SAML broker 是不同實作。
+- SCIM 2.0 Users／Groups、SMTP outbox、OIDC acr／amr 驗證及 Identity 稽核匯出／保留已加入目前程式，但客戶 IdP／目錄佈建及企業租戶生命週期整合驗收仍待完成。原生 SAML 端點與 Keycloak SAML broker 是不同實作。
 - 更多正式環境 Provider／模型組合、已確認的費率／發票整合，以及硬性成本上限。使用者授權的測試 Provider／gpt-6.1-sol 合成即時執行及 token 收據記錄在 `model-validation.md`；這不代表一般帳單控制已完成。
 - 既有 GitHub／GitLab／Jira 的正式同步憑證、MCP gateway、外部 A2A、物件儲存及備份還原演練。
 - 可擴充套件的派送所有權／分片、負載測試及營運監控。
 
 不能只因為存在介面或佔位元件，就將這些門檻標記為已完成。
+
+## P0/P1 驗收清單 {#p0-p1-acceptance-ledger}
+
+這份清單補充 2026-10-15 P0/P1 契約的交付界線。本機整合與驗收已完成；未驗證的客戶 IdP／SCIM 租戶及 GitHub／GitLab 部署 provider／CI 仍不在通過範圍內，這份清單也不代表功能已發布至 v0.2.0 或可用於其他部署。
+
+2026-10-15 本機驗收快照（尚未推送或發布）：backend／Runtime 共 220 項測試通過（Work 82、Identity 38、Knowledge 32、Code 40、Sandbox 3、Runtime 25）；tool guards 20 項通過、1 項略過。Work 真實 PostgreSQL API 53 項及瀏覽器 51 項、Code 真實 Gitea API 65 項及瀏覽器 34 項、Knowledge 真實 PostgreSQL authoring 4 組及瀏覽器 336 項、Enterprise STARTTLS SMTP／SCIM 30 項及瀏覽器 10 項（含稽核 API 游標分頁）通過。整合與產品 smoke、四個產品 build、i18n 1,750 項／3 語系／7 項行為檢查通過。四個 API 服務重啟後健康；4 個資料庫共 103 張資料表、4,836 筆資料的逐表 row count 與完整資料 hash 均一致，沒有異動或非預期表格；既有協作 context API 讀回 7/7 通過。
+
+| ID | 範圍 | 狀態 |
+|---|---|---|
+| P0-1 | Work 規劃欄位、同專案 Epic 防循環、Sprint／里程碑／欄位／階段設定與 rank 排序 | 本機驗收通過：真實 PostgreSQL API 53 項及瀏覽器 51 項；資料庫重啟持久性比對通過 |
+| P0-2 | Work／Knowledge／Code 資源附件、提及、訂閱、通知、通知中心與協作中心跨產品搜尋；SMTP 邀請／復原 outbox | 本機驗收通過：tool guards 20 項通過、1 項略過；整合與產品 smoke、Work／Knowledge UI 及協作 context 讀回 7/7 通過 |
+| P0-3 | Knowledge 頁面樹與封存、引用錨定留言／回覆／解決、Space 範本、Markdown 格式工具、版本差異與還原 | 本機驗收通過：真實 PostgreSQL authoring 4 組、瀏覽器 336 項及資料庫重啟持久性比對通過 |
+| P1-1 | 專案提報表單、自訂欄位、階段與同步事件規則 | 本機驗收通過：Work 真實 PostgreSQL API 53 項、瀏覽器 51 項及資料庫重啟持久性比對通過 |
+| P1-2 | 授權範圍內搜尋、個人儲存查詢、具作者歸屬的工時、觀察報表及安全原子 CSV | 本機驗收通過：Work 真實 PostgreSQL API 53 項、瀏覽器 51 項及資料庫重啟持久性比對通過 |
+| P1-3 | 上游 Git checks／actions／pipelines／部署證據、head SHA 綁定 inline review 與真實 branch protection | 本機真實 Gitea API 65 項及瀏覽器 34 項通過；GitHub／GitLab 部署 provider 成功結果與外部 CI 未驗證 |
+| P1-4 | SCIM Users／Groups、外部 IdP ACR／AMR MFA 政策、郵件寄送及受控稽核保留／匯出 | 本機驗收通過：STARTTLS SMTP／SCIM 30 項及瀏覽器 10 項，含稽核 API 游標分頁；客戶 IdP／SCIM 租戶仍待驗收 |
+
+驗收前置條件已通過：REST 與 MCP 經同一服務授權；管理設定與資源讀寫重驗目前權限；涵蓋循環、跨 Space／Project、併發唯一性、冪等、過期或 stale 版本、未發佈共同草稿及原有資料升級保留。QA 已明確驗證沒有已設定的 LLM provider 時 provider 清單為空；真人認領、提交證據、獨立審查及共同 Markdown 編輯可正常運作。四個 API 服務重啟後健康；4 個資料庫共 103 張表、4,836 筆資料逐表 row count 與完整資料 hash 完全一致，沒有異動或非預期表格；既有協作 context API 讀回 7/7 通過。這批沒有執行付費 LLM，也未驗證客戶 IdP／SCIM 租戶或 GitHub／GitLab 部署 provider／CI 成功結果。不得以 Agent 自報值冒充已驗證支出或 CI。
+
+企業驗收另需證明：SMTP 未設定時不會寄信，測試郵件只投遞至合成 sink；SCIM 不會依 email 認領既有帳號、一般 user PATCH 不可變更權限、明確 SSO 連結使用 `managed_permissions=false` 保留 SCIM 群組權限來源、停用會撤銷 session 且群組不能授予 admin；MFA 只接受符合設定的已驗證 IdP acr／amr；稽核匯出有界且不含機密。Git checks、review 與 deployment 結果必須對得上真實上游 URL／SHA／來源，head 改變後 inline comment 清楚標示過期。以上狀態代表本機整合驗收，不代表已發布至 v0.2.0 或通過客戶專屬 IdP／SCIM 租戶及 GitHub／GitLab 部署 provider／CI 驗收。
 
 ## 國際化交付（2026-10-08） {#internationalization-delivery-2026-10-08}
 

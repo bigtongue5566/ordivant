@@ -1,0 +1,339 @@
+.planning-workspace {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.planning-workspace > .ant-tabs,
+.planning-workspace .ant-tabs-content-holder,
+.planning-workspace .ant-tabs-content,
+.planning-workspace .ant-tabs-tabpane {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.planning-toolbar {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.planning-toolbar > .ant-space:first-child {
+  align-items: center;
+}
+
+.planning-toolbar .ant-input-affix-wrapper {
+  width: 200px;
+}
+
+.planning-toolbar .ant-select {
+  min-width: 138px;
+}
+
+.planning-toolbar .planning-saved-query {
+  width: 176px;
+  min-width: 0;
+  max-width: 176px;
+}
+
+.planning-saved-query .ant-select-selection-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planning-saved-query-popup .ant-select-item-option-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planning-toolbar .planning-query-name {
+  width: 150px;
+}
+
+.planning-board-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 4px 1px 14px;
+}
+
+.planning-board {
+  display: grid;
+  width: max-content;
+  grid-auto-columns: minmax(250px, 280px);
+  grid-auto-flow: column;
+  gap: 12px;
+  align-items: start;
+  min-height: 300px;
+}
+
+.planning-column {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 280px;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  background: color-mix(in srgb, var(--component-background, #fff) 94%, #90a4ae 6%);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
+}
+
+.planning-column > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  font-size: 13px;
+}
+
+.planning-column > header strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.planning-column > header span {
+  flex: 0 0 auto;
+  color: var(--text-secondary, #6b7280);
+  font-variant-numeric: tabular-nums;
+}
+
+.planning-column-cards {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  align-content: start;
+  min-height: 80px;
+}
+
+.planning-task-card {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  gap: 8px;
+  border-radius: 5px;
+}
+
+.planning-task-card .ant-card-body {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+
+.planning-task-card > .ant-card-body > .ant-select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.planning-card-title,
+.planning-task-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.planning-card-title strong,
+.planning-task-title span:last-child {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.planning-card-key,
+.planning-task-title strong {
+  color: var(--text-secondary, #6b7280);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.planning-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 10px;
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+}
+
+.planning-card-actions,
+.planning-section-actions {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.planning-card-actions > .ant-select {
+  flex: 0 1 124px;
+  width: min(124px, 100%);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.planning-card-actions > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.planning-lifecycle-note {
+  font-size: 11px;
+}
+
+.planning-section-actions {
+  margin: 0 0 12px;
+}
+
+.planning-section-actions > .ant-typography {
+  max-width: 720px;
+}
+
+.planning-settings .ant-tabs-content-holder {
+  min-width: 0;
+}
+
+.planning-settings .ant-table-wrapper {
+  overflow-x: auto;
+}
+
+.planning-intake {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 18px 0;
+}
+
+.planning-intake > div:first-child {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 320px;
+}
+
+.planning-intake h4.ant-typography {
+  margin: 0;
+}
+
+.planning-intake-select {
+  width: min(280px, 100%);
+}
+
+.planning-report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 16px;
+}
+
+.planning-report-grid .ant-statistic-title {
+  overflow-wrap: anywhere;
+}
+
+.planning-import-result {
+  margin-bottom: 12px;
+}
+
+.planning-import-result ul {
+  max-height: 180px;
+  overflow: auto;
+  padding-left: 20px;
+  margin-bottom: 0;
+}
+
+.planning-file-input {
+  display: none;
+}
+
+.planning-full-width {
+  width: 100%;
+}
+
+.planning-form-section-title {
+  margin: 4px 0 10px;
+  font-weight: 600;
+}
+
+.planning-worklog-list {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.planning-worklog-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 2fr;
+  gap: 12px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.planning-worklog-row > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.planning-worklog-row > div:last-child {
+  overflow-wrap: anywhere;
+}
+
+.planning-worklog-row span {
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+}
+
+.planning-report-week {
+  display: block;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 760px) {
+  .planning-toolbar .ant-input-affix-wrapper,
+  .planning-toolbar .planning-query-name,
+  .planning-toolbar .planning-saved-query {
+    width: 100%;
+  }
+
+  .planning-toolbar > .ant-space,
+  .planning-toolbar .ant-space-item {
+    max-width: 100%;
+  }
+
+  .planning-toolbar .ant-select {
+    min-width: min(100%, 150px);
+  }
+
+  .planning-section-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .planning-worklog-row {
+    grid-template-columns: 1fr;
+  }
+}

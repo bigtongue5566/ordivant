@@ -63,15 +63,25 @@ def test_official_mcp_stdio_bridge_uses_scoped_rest_api(api, credentials, reposi
                 tool_list = await session.list_tools()
                 names = {tool.name for tool in tool_list.tools}
                 assert names == {
-                    "list_code_projects", "list_repositories", "create_repository", "create_branch",
+                    "list_code_projects", "search_code_index", "list_repositories", "create_repository", "create_branch",
                     "commit_file", "create_pull_request", "get_pull_request",
                     "get_pull_request_collaboration", "comment_on_pull_request", "review_pull_request",
-                    "report_check", "get_code_events",
+                    "get_pull_request_diff", "list_pull_request_inline_comments", "comment_on_pull_request_line",
+                    "reply_to_inline_comment", "resolve_inline_comment", "get_pull_request_governance",
+                    "get_branch_protection", "update_branch_protection", "report_check", "get_code_events",
+                    "list_collaboration_attachments", "upload_collaboration_attachment",
+                    "set_collaboration_subscription", "list_collaboration_participants",
+                    "read_collaboration_discussion", "send_collaboration_discussion",
+                    "read_collaboration_notifications", "mark_collaboration_notification_read",
                 }
                 result = await session.call_tool("list_code_projects", {})
                 assert not result.isError
                 text = "\n".join(item.text for item in result.content if hasattr(item, "text"))
                 assert "code-demo" in text and "DEMO Code Repository Pilot" in text
+                search = await session.call_tool("search_code_index", {"q": "code-demo"})
+                assert not search.isError
+                search_text = "\n".join(item.text for item in search.content if hasattr(item, "text"))
+                assert "project" in search_text and "code_index" in search_text
                 collaboration = await session.call_tool("get_pull_request_collaboration", {
                     "repository_id": repository["id"], "number": 321,
                 })

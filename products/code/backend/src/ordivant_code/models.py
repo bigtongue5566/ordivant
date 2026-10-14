@@ -116,6 +116,21 @@ class PullRequestReview(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class PullRequestInlineComment(Base):
+    __tablename__ = "pull_request_inline_comments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    pull_request_id: Mapped[str] = mapped_column(ForeignKey("pull_requests.id"), nullable=False, index=True)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("pull_request_inline_comments.id"), index=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey("principals.id"), nullable=False, index=True)
+    head_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    line: Mapped[int] = mapped_column(Integer, nullable=False)
+    side: Mapped[str] = mapped_column(String(8), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CheckReceipt(Base):
     __tablename__ = "check_receipts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

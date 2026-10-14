@@ -1,6 +1,6 @@
 # 企业身分修订（2026-10-07） {#enterprise-identity-revision-2026-10-07}
 
-用户要求补齐企业登录需求，并说明必须支持大多数身分服务。本修订为既有共用 Identity 服务提供真正可设置、符合标准的 OIDC SSO，包含 Entra ID／Google Workspace／Okta／Auth0／Keycloak／通用 OIDC 设置范本、范围受限的账号布建、群组权限、生命周期撤销与身分稽核。保留 Work／Knowledge／Code 服务独立性及既有本机账号／数据。SAML 与 LDAP／AD 身分提供者通过选配且独立容器化的 Keycloak broker 串接；QA 须实际运行 SAML 到 OIDC 的完整往返。不可宣称原生支持 SAML 或 SCIM，也不可声称未设置的供应商租户已经测试。
+本契约记录 2026-10-07 的 OIDC 企业身分修订：在共用 Identity 服务中提供可配置的 provider 范本、范围受限的布建、群组授权、生命周期撤销与身分稽核。SAML 与 LDAP／AD 身分提供者使用选配的 Keycloak broker；平台没有原生 SAML 端点。当时尚不支持 SCIM；2026-10-15 的 SCIM 与 assurance 扩充见下方契约。不得声称未设置的供应商租户已经测试。
 
 ## 责任范围 {#ownership}
 
@@ -70,12 +70,20 @@ PUT 接受这些可编辑字段及只能写入的 `client_secret`；不接受衍
 
 ## 稽核与用户接口 {#audit-and-user-interface}
 
-成功变更 Identity 时，在同一个 transaction 写入持久化身分稽核事件。记录 SSO 成功／失败、设置变更／测试、布建／链接／解除链接、logout／backchannel logout、本机登录、邀请与管理权限／停用变更。绝不可包含密码、secret、authorization code／state／nonce、Cookie 或 Provider token。`GET /audit?limit=100` 仅限 admin，回传 `{events:[{id,created_at,actor_id:string|null,user_id:string|null,action,details:object}]}`；limit 上限为 200。
+成功变更 Identity 时，在同一个 transaction 写入持久化身份审计事件。记录 SSO 成功／失败、设置变更／测试、布建／链接／解除链接、logout／backchannel logout、本机登录、邀请与管理权限／停用变更。绝不可包含密码、secret、authorization code／state／nonce、Cookie 或 Provider token。审计导出仅限 admin；Identity 服务路径为 `GET /api/auth/audit/export?limit=100`，浏览器／proxy 路径为 `GET /auth-api/audit/export?limit=100`。limit 范围为 1 至 10000。分页以 `before` 和 `before_id` 作为 `(created_at,id)` 复合游标；有下一页时，响应标头 `X-Next-Before` 与 `X-Next-Before-Id` 提供下一组值。
 
 登录页显示已设置的企业登录按钮；SSO-only 政策会明显优先显示此按钮，并保留清楚标示的管理员密码复原入口。消耗／移除有界限的 auth_error query parameter，并显示易懂的繁体中文消息。不可捏造登录成功。Admin 账号／安全 UI 包含完整的 Enterprise SSO 设置页签、连接测试、手动 subject 链接／解除链接与身分稽核页签。默认／群组权限使用既有资源选择器，并清楚说明精确电子邮件网域与权限管理。SSO-only 账号隐藏密码／复原操作。保存或卸载后清除 client_secret 输入值。既有四种建置模式都必须通过，且表单／下拉列表须适合 390px viewport。
 
+## SCIM 与验证强度扩充（2026-10-15） {#scim-and-mfa-extension-2026-10-15}
+
+此扩充定义目前 SCIM 2.0 Users／Groups 范围，以及由外部 IdP 强制 MFA 的登录验证条件。SCIM 入口为 /api/scim/v2，使用部署管理员另行配置的 ORDIVANT_SCIM_TOKEN_FILE。支持 Users、Groups 与受限筛选；不支持 bulk。新增用户若 email 已属于现有 Ordivant 账号，必须返回冲突，不会依 email 自动认领或合并。管理员需先明确链接／迁移；群组只应用明确配置的产品与资源授权，不得授予 admin。停用用户或撤销授权会撤销现有 sessions。
+
+OIDC required_acr 的值须符合配置值之一，required_amr 指定方式须全部出现在已验证的 ID token 中。启用任一 assurance 要求时，成员必须使用 SSO-only 政策；Ordivant 验证 IdP claims，不自行提供第二因素。客户租户互通性仍需逐一验收，fixture 或 API 存在不能替代该验收。
+
+SMTP 邀请／恢复使用 Identity 持久 outbox；未配置邮件服务时不发送。管理员可查看寄送状态并重试符合条件的邮件。Identity 审计导出受权限保护、有记录数／时间范围限制且排除机密字段；只有明确应用保留期时才删除旧资料。整合状态见[项目计划验收清单](./project-plan.md#p0-p1-acceptance-ledger)。
+
 ## 验收 {#acceptance}
 
-使用隔离的 QA PostgreSQL 数据库、产生的合成身分，以及固定版本的真实 Keycloak container；其中设置要求 PKCE S256 的 confidential OIDC client 与 groups mapper。不可初始化或修改用户主要人类账号／Provider 设置。验证 Work／Knowledge／Code 的实际 redirect／login／code exchange／签署 JWT／session、产品 scope、reload／logout／disable、群组权限降级、invited-only 与 JIT、明确链接、SSO-only 复原途径、secret 加密／CAS／无外泄、状态持久化／重启，以及伪造 state／nonce／audience／issuer／signature、backchannel logout／重播与本机账号回归。Fixture 测试是安全性证据；Keycloak 集成是通信协定互通性证据，不代表已验证未设置的客户租户。文档须列出具体 Entra／Keycloak 设置、由 IdP 强制的 MFA、备份／密钥需求，以及明确列出仍未完成的原生 SAML／SCIM／客户租户工作。
+使用隔离的 QA PostgreSQL 数据库、产生的合成身分，以及固定版本的真实 Keycloak container；其中设置要求 PKCE S256 的 confidential OIDC client 与 groups mapper。不可初始化或修改用户主要人类账号／Provider 设置。验证 Work／Knowledge／Code 的实际 redirect／login／code exchange／签署 JWT／session、产品 scope、reload／logout／disable、群组权限降级、invited-only 与 JIT、明确链接、SSO-only 复原途径、secret 加密／CAS／无外泄、状态持久化／重启，以及伪造 state／nonce／audience／issuer／signature、backchannel logout／重播与本机账号回归。新增 SCIM 验收需覆盖既有 email 冲突、User／Group 授权、停用撤销、不得授予 admin 与不支持 bulk。Fixture 测试是安全性证据；Keycloak 集成是通信协定互通性证据，不代表已验证未设置的客户租户。文档须列出具体 Entra／Keycloak 设置、由 IdP 强制的 MFA、备份／密钥需求，以及仍未完成的原生 SAML／客户租户工作。
 
 主要参考数据：[OIDC Core](https://openid.net/specs/openid-connect-core-1_0.html)、[PKCE](https://www.rfc-editor.org/rfc/rfc7636.html)、[OAuth security BCP](https://www.rfc-editor.org/rfc/rfc9700.html)、[Keycloak containers](https://www.keycloak.org/server/containers)。

@@ -1,6 +1,6 @@
 # Validation record
 
-Date: 2026-10-08 (Asia/Taipei). Status: the local Suite includes native accounts, organization/Agent model settings and enterprise OIDC with an optional Keycloak SAML/LDAP/AD broker. The latest Work revision delivers Run controls/receipts, versioned Agent and workflow templates, durable interval scheduling, external MCP connections and per-run Docker sandboxes. Actual model/tool execution, independent review, container restart, concurrency, workspace cleanup and desktop/mobile browser checks passed. Both existing local environments are updated with their account/SSO/model/project data preserved. Earlier pilot, model and SSO gates below remain historical evidence; current execution contracts and results are in `docs/execution-contracts.md` and `docs/execution-validation.md`. Customer-specific IdP/directory, SCIM and operational gates remain separate.
+Date: 2026-10-08 (Asia/Taipei). Status: the local Suite includes native accounts, organization/Agent model settings and enterprise OIDC with an optional Keycloak SAML/LDAP/AD broker. The latest Work revision delivers Run controls/receipts, versioned Agent and workflow templates, durable interval scheduling, external MCP connections and per-run Docker sandboxes. Actual model/tool execution, independent review, container restart, concurrency, workspace cleanup and desktop/mobile browser checks passed. Both existing local environments are updated with their account/SSO/model/project data preserved. Earlier pilot, model and SSO gates below remain historical evidence; current execution contracts and results are in `docs/execution-contracts.md` and `docs/execution-validation.md`. After this report, Identity SMTP/SCIM implementation passed 11 isolated checks; customer-specific IdP/directory and production operations acceptance remain open in the [current P0/P1 ledger](project-plan.md#p0-p1-acceptance-ledger).
 
 ## Required gates
 
@@ -71,3 +71,18 @@ The enterprise revision uses the separate `ordivant-sso-qa` project on `8092/809
 The model revision verifies the exact user-authorized HTTPS endpoint and requested/returned `gpt-6.1-sol`, actual Pi model-issued Work tools, evidence and independent test review. Its final run reported 17,157 input tokens (10,496 cached), 97 output and 17,254 total; currency remains unknown. Provider invoices/underlying routing, hard budget enforcement, customer-specific enterprise IdP tenants, configured live enterprise GitHub/GitLab credentials, external CI, backup restore, load testing and production observability are not established. Earlier Pi tests remain explicitly demo. The test model connection is configured only in development. See [model acceptance](model-validation.md) and [model usage](model-usage.md). No remote deployment, publication or push was performed.
 
 The execution revision's separate authorized live run reported 40,000 input tokens (16,128 cached), 744 output and 40,744 total; the USD cost remains unknown. MCP test endpoints and sandbox content are synthetic but their actual calls, outputs and exits were verified; DEMO checks remain labeled separately. Pause is cooperative at tool boundaries, workflow scheduling uses minute intervals, external tools use Streamable HTTP with bearer authentication, and job containers have no network. Approval policies, hard monetary quotas, interactive MCP OAuth, arbitrary repository/network checkout and VM isolation remain separate work. The owned `ordivant-execution-qa` containers/network were removed after acceptance, with named volumes and reports retained; main development/local production databases, Gitea and services remain healthy. See [execution usage](execution-usage.md) and [execution validation](execution-validation.md).
+
+## P0/P1 local acceptance snapshot (2026-10-15) {#p0-p1-local-acceptance-2026-10-15}
+
+These results are from the local working tree, which has not been pushed or published. Earlier entries remain historical results for their recorded dates.
+
+| Scope | Result |
+|---|---|
+| Backend/Runtime tests | 220 passed: Work 82, Identity 38, Knowledge 32, Code 40, sandbox 3, Runtime 25 |
+| Tool guards | 20 passed, 1 skipped |
+| Work/Knowledge | 53 real-PostgreSQL Work API and 51 browser checks passed; four real-PostgreSQL Knowledge authoring check groups and 336 browser checks passed. All four API services restarted healthy; across four databases, all 103 tables and 4,836 rows had matching per-table row counts and full data hashes before and after restart; collaboration-context API readback passed 7/7 |
+| Code | 65 real-Gitea API checks and 34 browser checks passed; successful GitHub/GitLab deployment-provider or CI results were not verified |
+| Enterprise Identity | 30 real STARTTLS SMTP/SCIM checks and 10 browser checks passed, including audit API cursor pagination; customer IdP/SCIM tenant acceptance remains pending |
+| Integration and i18n | Integration/product smoke checks and four product builds passed; 1,750 messages across three locales and seven locale behavior checks passed |
+
+QA verified an empty provider list when no LLM provider is configured. Human claims, evidence submission, independent review, and shared Markdown editing work without an LLM. No paid LLM run, customer IdP/SCIM tenant, or successful GitHub/GitLab deployment-provider/CI result was tested.

@@ -5,6 +5,8 @@
 
 日期：2026-10-07（Asia/Taipei）。范围是本机 Ordivant 共用 Identity、标准 OIDC 与可选 Keycloak SAML 身分代理。一个 Identity 环境使用一组组织身分服务；Work、Knowledge、Code 各自保有数据库与授权边界。
 
+本报告记录截至 2026-10-07 的 OIDC／SAML 验收，不包含之后加入的 SCIM 与 SMTP outbox。后续 Identity 检查及待验客户租户范围见[现行 P0/P1 清单](project-plan.md#p0-p1-acceptance-ledger)。
+
 <span id="已通過的協定與安全驗收"></span>
 <span id="已通过的协定与安全验收"></span>
 
@@ -57,6 +59,6 @@ SAML fixture 保持 `validateSignature`、`wantAssertionsSigned`，使用 `saml.
 
 Entra ID、Google Workspace、Okta、Auth0、Keycloak 与通用 OIDC 已提供界面模板及 provider-specific claim 提示。协定兼容性由真实 Keycloak 验证，特定企业 tenant 仍须使用该组织的 Issuer、Client ID、Secret、claims 与 MFA 政策完成验收。Google issuer alias 另有实际签章 fixture；不是已连到用户的 Google Workspace。
 
-SAML 使用 Keycloak broker 的实际签章 round trip 已通过。LDAP／AD 透过 Keycloak User Federation 串接，已提供运维设置，尚未连接真实目录。原生 SAML endpoint、SCIM 2.0、企业离职同步、备份还原、负载测试与正式运维监控仍是独立工作。Identity/Keycloak restart persistence 不等同完整 backup restore。
+SAML 使用 Keycloak broker 的实际签章 round trip 已通过。LDAP／AD 透过 Keycloak User Federation 串接，已提供运维设置，尚未连接真实目录。以本报告日期为准，原生 SAML endpoint、SCIM 2.0、企业离职同步、备份还原、负载测试与正式运维监控仍是独立工作；后续 SCIM／SMTP 实作检查见现行[验收清单](project-plan.md#p0-p1-acceptance-ledger)。Identity/Keycloak restart persistence 不等同完整 backup restore。
 
 验收后已注销合成账号、重设暂时 viewport 并关闭 QA 分页；用户原有 `5173/work` 分页保留。QA 登录政策恢复 `password_and_sso` 后，使用 `down` 停止 `ordivant-sso-qa` 容器／网络，保留具名 volumes、service secrets 与本地报告供重现。主环境没有加入合成账号、企业 provider 设置或 QA realm。开发与本机正式模式数据各自独立；此次没有远程部署、发布或 push。设置流程见 [企业登录](enterprise-sso.md)，容器流程见 [容器开发与部署](containers.md)。

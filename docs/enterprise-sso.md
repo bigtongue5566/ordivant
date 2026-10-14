@@ -99,9 +99,9 @@ docker compose -f compose.yaml -f compose.identity-broker.yaml --profile identit
 
 停用帳號、變更權限、解除企業身分或停用／更換身分服務會撤銷相關工作階段。啟用 SSO-only 時撤銷一般成員的密碼工作階段。若 IdP 支援 OIDC Back-Channel Logout，可將 URL 設為 `https://APP_HOST/auth-api/oidc/backchannel-logout`；只有通過簽章與重放檢查的登出通知才能撤銷對應企業登入。
 
-Ordivant 登出會撤銷三個模組共用的工作階段；企業其他應用的工作階段由 IdP 管理。企業 MFA、Conditional Access、密碼規則與人員離職流程需在 IdP 設定；若 IdP 不發送 backchannel logout，管理員應在平台同步停用成員，而不能把 IdP 停用誤認為現有平台 session 立即失效。
+Ordivant 登出會撤銷三個模組共用的工作階段；企業其他應用的工作階段由 IdP 管理。企業 MFA、Conditional Access、密碼規則與人員離職流程需在 IdP 設定。若平台的 SSO 政策填入 required_acr／required_amr，Identity 會驗證已簽署的 IdP claims；acr 必須符合其中一個要求值，amr 必須包含全部指定方式。這些 claim 只是驗證條件，實際 MFA 因子由 IdP 執行。若 IdP 不發送 backchannel logout，管理員應在平台同步停用成員，而不能把 IdP 停用誤認為現有平台 session 立即失效。
 
-「身分稽核」記錄登入、佈建、設定與權限變更、連結／解除連結及登出事件。只有管理員可以檢視，不含密碼、cookie、client secret 或 provider token。
+「身分稽核」記錄登入、佈建、設定與權限變更、連結／解除連結及登出事件。只有管理員可以檢視或從「帳號與安全性」→「企業治理」匯出 Identity 記錄；匯出不包含 Work、Knowledge 或 Code 的產品事件，也不含密碼、cookie、client secret 或 provider token。
 
 <span id="維運與備份"></span>
 <span id="运维与备份"></span>
@@ -114,4 +114,4 @@ Ordivant 登出會撤銷三個模組共用的工作階段；企業其他應用�
 
 私有企業 CA 可將 PEM trust bundle 掛載到 Identity 容器，再設定 `ORDIVANT_SSO_CA_BUNDLE` 為該檔案路徑；TLS 憑證驗證持續啟用。Compose 信任指定的 `web` proxy，由 Nginx 覆寫 `X-Real-IP`，依實際來源進行登入限流。自訂反向代理需在 `ORDIVANT_AUTH_TRUSTED_PROXY_HOSTS` 列出精確 proxy host／IP，並由它覆寫此 header；直接連到 Identity API 的偽造 header 不會被採用。
 
-Ordivant 以 OIDC 作為身分整合協定，SAML 與 LDAP／AD 透過選配的 Keycloak broker 聯邦。原生 SAML 協定端點及 SCIM 2.0 自動離職同步尚未實作；各客戶的 IdP tenant 與 LDAP／AD 目錄也尚未逐一驗證。上線前請在各組織環境核對 claims、MFA、網域限制與資源授權政策。
+Ordivant 以 OIDC 作為身分整合協定，SAML 與 LDAP／AD 透過選配的 Keycloak broker 聯邦；平台沒有原生 SAML 端點。Identity 提供 SCIM 2.0 Users／Groups 佈建端點，但不支援 bulk，且不會依 email 自動連結既有帳號；各客戶的 IdP tenant 與 LDAP／AD 目錄尚未逐一驗證。上線前請依[管理指南](./guide/administration.md)設定 SCIM 專用憑證、群組資源授權、郵件、稽核與由 IdP 執行的 MFA，並逐一核對各組織的 claims、網域限制及資源授權政策。

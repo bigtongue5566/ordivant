@@ -8,10 +8,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.engine import Engine
 
-from .api import router
+from .api import get_principal, get_session, router
 from .collaboration import router as collaboration_router
+from .collaboration_adapter import install as install_features
 from .config import Settings, get_settings
-from .db import Base, make_engine, session_factory
+from .db import make_engine, migrate_schema, session_factory
 from .errors import DomainError
 from . import models as _models  # noqa: F401
 from . import identity as _identity  # noqa: F401
@@ -27,17 +28,18 @@ def create_app(database_url: str | None = None, *, mode: str | None = None) -> F
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        Base.metadata.create_all(bind=engine)
+        migrate_schema(engine)
         yield
         engine.dispose()
 
-    application = FastAPI(title="Ordivant Knowledge", version="0.2.0", lifespan=lifespan)
+    application = FastAPI(title="Ordivant Knowledge", version="0.3.0", lifespan=lifespan)
     application.state.settings = settings
     application.state.engine = engine
     application.state.session_factory = session_factory(engine)
     application.state.collaboration_connections = 0
     application.include_router(router)
     application.include_router(collaboration_router)
+    install_features(application, get_session, get_principal)
 
     @application.exception_handler(DomainError)
     async def domain_error_handler(_request: Request, error: DomainError) -> JSONResponse:

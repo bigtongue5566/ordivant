@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 — 2026-10-15
+
+- **Work**：新增看板／Backlog 排序、工作類型與 Epic、Sprint／里程碑、日期、自訂欄位／階段、登入後任務提報及事件規則；提供個人儲存查詢、工時、明確設定的每週容量、觀察報表和安全 CSV 匯入／匯出。
+- **跨模組協作**：Work、Knowledge、Code 新增具資源權限的附件、提及、訂閱與通知，並提供跨產品搜尋及通知中心；真人操作不需設定 LLM。
+- **Knowledge**：新增頁面階層／封存、引用錨定留言／回覆／解決、文件範本、Markdown 工具與預覽、版本差異及受控還原，保留多人共同 Markdown 草稿。
+- **Code**：新增綁定目前 head SHA 的行內討論、上游分支保護管理與讀回，以及 Gitea Actions／GitHub／GitLab 部署證據的讀取。這些功能不會代替上游執行 CI 或部署。
+- **企業身分**：新增 SCIM 2.0 Users／Groups、已驗證 OIDC ACR／AMR 政策、SMTP 邀請／復原寄送 outbox，以及 Identity 稽核匯出／保留。可透過選用的 `compose.enterprise.yaml` 分別掛載 Identity 與 Code 機密。
+- 新功能提供繁體中文、簡體中文與英文。升級與設定方式見三語使用者文件；真實客戶 IdP／SCIM 目錄，以及 GitHub／GitLab 成功部署資料仍需在各自環境驗證。
+
 ## 0.2.0 — 2026-10-14
 
 讓團隊可先以真人協作使用 Work、Knowledge 與 Code；只有自主 Agent 執行需要模型設定。

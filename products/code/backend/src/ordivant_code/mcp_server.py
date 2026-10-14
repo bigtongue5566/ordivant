@@ -39,6 +39,12 @@ async def list_code_projects() -> list[dict]:
 
 
 @mcp.tool()
+async def search_code_index(q: str) -> list[dict]:
+    """Search Code projects, repositories, and pull requests visible to the configured principal."""
+    return await _request("GET", f"/search?{urlencode({'q': q})}")
+
+
+@mcp.tool()
 async def list_repositories(project_id: str) -> list[dict]:
     """List repositories bound to a Code project."""
     return await _request("GET", f"/repositories?{urlencode({'project_id': project_id})}")
@@ -109,6 +115,95 @@ async def get_pull_request_collaboration(repository_id: str, number: int) -> dic
 
 
 @mcp.tool()
+async def get_pull_request_diff(repository_id: str, number: int) -> dict:
+    """Get the live Gitea diff and line anchors for a pull request's current head."""
+    return await _request("GET", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}/diff")
+
+
+@mcp.tool()
+async def list_pull_request_inline_comments(repository_id: str, number: int) -> dict:
+    """List local inline comment threads with current or stale head indicators."""
+    return await _request("GET", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}/inline-comments")
+
+
+@mcp.tool()
+async def comment_on_pull_request_line(
+    repository_id: str,
+    number: int,
+    head_sha: str,
+    file_path: str,
+    line: int,
+    side: Literal["LEFT", "RIGHT"],
+    body: str,
+    request_id: str | None = None,
+) -> dict:
+    """Add a local inline comment after the service verifies the exact live diff location."""
+    return await _request(
+        "POST", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}/inline-comments",
+        body={"head_sha": head_sha, "file_path": file_path, "line": line, "side": side, "body": body},
+        request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def reply_to_inline_comment(comment_id: str, body: str, request_id: str | None = None) -> dict:
+    """Reply to a local inline comment thread."""
+    return await _request(
+        "POST", f"/inline-comments/{quote(comment_id, safe='')}/replies", body={"body": body}, request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def resolve_inline_comment(comment_id: str, resolved: bool, request_id: str | None = None) -> dict:
+    """Resolve or reopen a local inline comment thread."""
+    return await _request(
+        "POST", f"/inline-comments/{quote(comment_id, safe='')}/resolve", body={"resolved": resolved}, request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def get_pull_request_governance(repository_id: str, number: int) -> dict:
+    """Read real Gitea branch policy, current upstream reviews/checks, Actions, and deployments."""
+    return await _request("GET", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}/governance")
+
+
+@mcp.tool()
+async def get_branch_protection(repository_id: str, branch: str) -> dict:
+    """Read the actual upstream Gitea branch protection policy."""
+    return await _request("GET", f"/repositories/{quote(repository_id, safe='')}/branch-protection?{urlencode({'branch': branch})}")
+
+
+@mcp.tool()
+async def update_branch_protection(
+    repository_id: str,
+    branch: str,
+    required_approvals: int | None = None,
+    status_check_contexts: list[str] | None = None,
+    enable_status_check: bool | None = None,
+    block_on_outdated_branch: bool | None = None,
+    block_on_rejected_reviews: bool | None = None,
+    dismiss_stale_approvals: bool | None = None,
+    require_signed_commits: bool | None = None,
+    request_id: str | None = None,
+) -> dict:
+    """Update upstream Gitea branch protection; the Code service enforces manager authorization."""
+    body = {
+        "required_approvals": required_approvals,
+        "status_check_contexts": status_check_contexts,
+        "enable_status_check": enable_status_check,
+        "block_on_outdated_branch": block_on_outdated_branch,
+        "block_on_rejected_reviews": block_on_rejected_reviews,
+        "dismiss_stale_approvals": dismiss_stale_approvals,
+        "require_signed_commits": require_signed_commits,
+    }
+    return await _request(
+        "PATCH", f"/repositories/{quote(repository_id, safe='')}/branch-protection?{urlencode({'branch': branch})}",
+        body={key: value for key, value in body.items() if value is not None},
+        request_id=request_id,
+    )
+
+
+@mcp.tool()
 async def comment_on_pull_request(
     repository_id: str, number: int, body: str, request_id: str | None = None,
 ) -> dict:
@@ -172,6 +267,11 @@ async def pull_request_resource(repository_id: str, number: int) -> str:
     """Pull request context and status receipts."""
     value = await _request("GET", f"/repositories/{quote(repository_id, safe='')}/pulls/{number}")
     return json.dumps(value, ensure_ascii=False)
+
+
+from .collaboration_mcp import install_tools as install_collaboration_tools
+
+install_collaboration_tools(mcp, _request, api_prefix="")
 
 
 def main():

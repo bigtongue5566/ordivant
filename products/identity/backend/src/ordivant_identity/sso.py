@@ -76,6 +76,8 @@ _DEFAULT_SETTINGS: dict = {
     "default_permissions": {},
     "group_mappings": [],
     "login_policy": "password_and_sso",
+    "required_acr": [],
+    "required_amr": [],
 }
 _ALLOWED_ALGORITHMS = {"RS256", "ES256"}
 _GOOGLE_ENDPOINT_HOSTS = {"oauth2.googleapis.com", "www.googleapis.com"}
@@ -626,6 +628,16 @@ def _audit_failure(db: Session, code: str) -> None:
     db.commit()
 
 
+def _verify_authentication_assurance(values: dict, claims: dict) -> None:
+    acr = values.get("required_acr", [])
+    amr = values.get("required_amr", [])
+    if acr and claims.get("acr") not in acr:
+        raise SSOFailure("sso_error")
+    methods = claims.get("amr", [])
+    if amr and (not isinstance(methods, list) or not all(isinstance(item, str) for item in methods) or not set(amr).issubset(methods)):
+        raise SSOFailure("sso_error")
+
+
 def _effective_name(claims: dict, email: str) -> str:
     raw_name = claims.get("name") or claims.get("preferred_username") or email
     if not isinstance(raw_name, str):
@@ -822,7 +834,7 @@ def put_sso_settings(
             db.flush()
         policy_changed = any(
             previous.get(field) != values.get(field)
-            for field in ("enabled", "allowed_email_domains", "default_permissions", "group_mappings", "provisioning", "login_policy", "issuer_url", "client_id")
+            for field in ("enabled", "allowed_email_domains", "default_permissions", "group_mappings", "provisioning", "login_policy", "issuer_url", "client_id", "required_acr", "required_amr")
         )
         if policy_changed:
             db.execute(
@@ -946,6 +958,7 @@ def oidc_start(
             "nonce": nonce,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
+            **({"acr_values": " ".join(values["required_acr"]), "claims": json.dumps({"id_token": {"acr": {"essential": True, "values": values["required_acr"]}}})} if values.get("required_acr") else {}),
         }
     )
     response.set_cookie(
@@ -1043,6 +1056,7 @@ def oidc_callback(
             expected_nonce_hash=flow.nonce_hash,
             settings=settings,
         )
+        _verify_authentication_assurance(values, claims)
         user, _permissions_changed = _provision_or_sync(db, settings, values, values["issuer_url"], claims)
         if not user.active:
             raise SSOFailure("sso_disabled")
@@ -1199,6 +1213,8 @@ def create_sso_link(
     user = db.get(User, body.user_id)
     if user is None:
         raise DomainError(404, "user_not_found", "User not found")
+    if user.permissions_source == "scim" and body.managed_permissions:
+        raise DomainError(409, "scim_managed_user", "Provisioning groups manage this account's permissions; link with managed_permissions disabled")
     if db.scalar(select(IdentityLink.id).where(IdentityLink.issuer == values["issuer_url"], IdentityLink.subject == body.subject)):
         raise DomainError(409, "sso_link_conflict", "That enterprise subject is already linked")
     now = _now()

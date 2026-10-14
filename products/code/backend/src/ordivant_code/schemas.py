@@ -116,6 +116,67 @@ class PullRequestReviewCreate(InputModel):
         return value
 
 
+class PullRequestInlineCommentCreate(InputModel):
+    head_sha: str = Field(min_length=40, max_length=64, pattern=r"^[a-fA-F0-9]+$")
+    file_path: str = Field(min_length=1, max_length=1024)
+    line: int = Field(ge=1, le=10_000_000)
+    side: Literal["LEFT", "RIGHT"]
+    body: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("file_path")
+    @classmethod
+    def safe_inline_path(cls, value: str) -> str:
+        if value.startswith("/") or "\\" in value or "\x00" in value or any(part in {"", ".", ".."} for part in value.split("/")) or any(part.lower() == ".git" for part in value.split("/")):
+            raise ValueError("file_path must be a relative POSIX repository path")
+        return value
+
+    @field_validator("body")
+    @classmethod
+    def safe_inline_body(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("comment cannot contain NUL")
+        value.encode("utf-8", errors="strict")
+        return value
+
+
+class PullRequestInlineReplyCreate(InputModel):
+    body: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("body")
+    @classmethod
+    def safe_inline_reply(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("comment cannot contain NUL")
+        value.encode("utf-8", errors="strict")
+        return value
+
+
+class PullRequestInlineResolve(InputModel):
+    resolved: bool
+
+
+class BranchProtectionUpdate(InputModel):
+    required_approvals: int | None = Field(default=None, ge=0, le=100)
+    enable_status_check: bool | None = None
+    status_check_contexts: list[str] | None = Field(default=None, max_length=100)
+    block_on_outdated_branch: bool | None = None
+    block_on_rejected_reviews: bool | None = None
+    dismiss_stale_approvals: bool | None = None
+    require_signed_commits: bool | None = None
+
+    @field_validator("status_check_contexts")
+    @classmethod
+    def valid_status_contexts(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        normalized = [item.strip() for item in value]
+        if any(not item or len(item) > 255 or any(ord(char) < 32 or ord(char) == 127 for char in item) for item in normalized):
+            raise ValueError("status check contexts must be nonblank printable names")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("status check contexts must be unique")
+        return normalized
+
+
 class CheckCreate(InputModel):
     commit_sha: str = Field(min_length=40, max_length=64, pattern=r"^[a-fA-F0-9]+$")
     context: str = Field(min_length=1, max_length=255)

@@ -53,6 +53,13 @@ services:
       ORDIVANT_SSO_BACKCHANNEL_OVERRIDES: ${ORDIVANT_SSO_BACKCHANNEL_OVERRIDES:-}
       ORDIVANT_SSO_CA_BUNDLE: ${ORDIVANT_SSO_CA_BUNDLE:-}
       ORDIVANT_AUTH_TRUSTED_PROXY_HOSTS: ${ORDIVANT_AUTH_TRUSTED_PROXY_HOSTS:-web}
+      ORDIVANT_SCIM_TOKEN_FILE: ${ORDIVANT_SCIM_TOKEN_FILE:-}
+      ORDIVANT_SMTP_HOST: ${ORDIVANT_SMTP_HOST:-}
+      ORDIVANT_SMTP_PORT: ${ORDIVANT_SMTP_PORT:-587}
+      ORDIVANT_SMTP_USERNAME: ${ORDIVANT_SMTP_USERNAME:-}
+      ORDIVANT_SMTP_PASSWORD_FILE: ${ORDIVANT_SMTP_PASSWORD_FILE:-}
+      ORDIVANT_SMTP_SENDER: ${ORDIVANT_SMTP_SENDER:-}
+      ORDIVANT_SMTP_STARTTLS: ${ORDIVANT_SMTP_STARTTLS:-true}
     secrets: [identity_database_url, identity_service_token]
     volumes: [identity_data:/data]
     depends_on:
@@ -130,6 +137,7 @@ services:
       ORDIVANT_CODE_DATA_DIR: /data
       ORDIVANT_CODE_DATABASE_URL_FILE: /run/secrets/code_database_url
       ORDIVANT_CODE_GITEA_CONFIG: /run/secrets/gitea_connection
+      ORDIVANT_CODE_DEPLOYMENT_CONFIG_FILE: ${ORDIVANT_CODE_DEPLOYMENT_CONFIG_FILE:-}
       ORDIVANT_IDENTITY_ORG_ID: ${ORDIVANT_CODE_IDENTITY_ORG_ID:-}
     secrets: [code_database_url, gitea_connection, identity_service_token]
     volumes: [code_data:/data]

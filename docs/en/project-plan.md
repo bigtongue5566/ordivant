@@ -99,12 +99,32 @@ The release source was exported from the Git index into a clean directory and st
 
 Feature candidates, current implementation boundaries and proposed priorities are recorded in [feature gap research](feature-gap-research.md). This research does not mark candidate features as implemented or add them to the completed task ledger.
 
-- Customer-specific IdP tenant and LDAP/AD directory acceptance; SCIM 2.0 and automated offboarding. Native SAML endpoints are separate from the verified Keycloak SAML broker.
+- SCIM 2.0 Users/Groups, the SMTP outbox, OIDC acr/amr validation, and Identity audit export/retention are present in the current source tree, but customer IdP/directory provisioning and enterprise tenant lifecycle acceptance remain open. Native SAML endpoints are separate from the Keycloak SAML broker.
 - Additional production provider/model combinations, verified rates/invoice integration and hard cost ceilings. The user-authorized Test Provider / `gpt-6.1-sol` synthetic live run and token receipts are recorded in `model-validation.md`; that does not establish general billing controls.
 - Live existing GitHub/GitLab/Jira synchronization credentials, MCP gateway, external A2A, object storage and backup restore exercises.
 - Scaled dispatch ownership/partitioning, load tests and operational monitoring.
 
 Do not mark these gates complete merely because an interface or placeholder exists.
+
+## P0/P1 acceptance ledger {#p0-p1-acceptance-ledger}
+
+This ledger adds the delivery boundaries from the 2026-10-15 P0/P1 contract. Local integration and acceptance are complete. Customer IdP/SCIM tenants and GitHub/GitLab deployment-provider/CI results were not tested; this ledger does not mean the features have shipped in v0.2.0 or are available to other deployments.
+
+Local acceptance snapshot (2026-10-15; not pushed or published): 220 backend/Runtime tests passed (Work 82, Identity 38, Knowledge 32, Code 40, sandbox 3, Runtime 25); tool guards had 20 passes and 1 skip. Passed: 53 real-PostgreSQL Work API and 51 browser checks; 65 real-Gitea Code API and 34 browser checks; four real-PostgreSQL Knowledge authoring check groups and 336 browser checks; and 30 Enterprise STARTTLS SMTP/SCIM checks plus 10 browser checks, including audit API cursor pagination. Integration and product smoke checks, four product builds, and i18n checks for 1,750 messages across three locales and seven behavior checks passed. All four API services restarted healthy. Across four databases, all 103 tables and 4,836 rows had matching per-table row counts and full data hashes before and after restart, with no changed or unexpected tables; existing collaboration-context API readback passed 7/7.
+
+| ID | Scope | Status |
+|---|---|---|
+| P0-1 | Work planning fields, same-Project cycle-safe Epics, Sprint/milestone/field/stage settings, and rank ordering | Local acceptance passed: 53 real-PostgreSQL API and 51 browser checks; database restart persistence passed |
+| P0-2 | Resource attachments, mentions, subscriptions, notices, collaboration center, authorized cross-product search, and SMTP invitation/recovery outbox | Local acceptance passed: 20 tool-guard checks passed, 1 skipped; integration/product smoke, Work/Knowledge UI, and collaboration-context readback 7/7 passed |
+| P0-3 | Knowledge page trees and archiving, quote-anchored comments/replies/resolution, Space templates, Markdown tools, version diff, and restore | Local acceptance passed: four real-PostgreSQL authoring check groups, 336 browser checks, and database restart persistence |
+| P1-1 | Project intake forms, custom fields, stages, and synchronous event rules | Local acceptance passed: 53 real-PostgreSQL Work API checks, 51 browser checks, and database restart persistence |
+| P1-2 | Authorized search, actor-owned saved queries, attributed worklogs, observed reports, and safe atomic CSV | Local acceptance passed: 53 real-PostgreSQL Work API checks, 51 browser checks, and database restart persistence |
+| P1-3 | Upstream Git checks/actions/pipelines/deployment evidence, head-SHA-bound inline review, and real branch protection | Local Gitea acceptance passed: 65 API and 34 browser checks; GitHub/GitLab deployment-provider success and external CI were not tested |
+| P1-4 | SCIM Users/Groups, external-IdP ACR/AMR MFA policy, mail, and controlled audit retention/export | Local acceptance passed: 30 STARTTLS SMTP/SCIM and 10 browser checks, including audit API cursor pagination; customer IdP/SCIM tenants were not tested |
+
+Acceptance requires REST and MCP to use the same service authorization; management writes and resource reads must recheck current access. Coverage includes cycles, cross-Space/Project access, concurrent uniqueness, idempotency, expired or stale versions, unpublished shared drafts, and preservation of existing data through upgrades. QA explicitly verified an empty provider list when no LLM provider is configured; human claims, evidence submission, independent review, and shared Markdown editing work without an LLM. Work UI (51 checks) and Knowledge UI (336 checks) passed. All four API services restarted healthy; across four databases, 103 tables and 4,836 rows had matching row counts and full data hashes before and after restart, with no changed or unexpected tables; collaboration-context API readback passed 7/7. No paid LLM run, customer IdP/SCIM tenant, or successful GitHub/GitLab deployment-provider/CI result was tested. Agent-reported values must not masquerade as verified spend or CI.
+
+Enterprise checks must show that no mail is sent when SMTP is absent and test mail goes only to a synthetic sink; SCIM does not claim an existing account by email, regular user PATCH cannot change permissions, explicit SSO linking uses `managed_permissions=false` to preserve SCIM group permission ownership, deactivation revokes sessions, and groups cannot grant admin; MFA accepts only verified IdP acr/amr claims that meet policy; and audit export is bounded and secret-free. Git checks, reviews, and deployment results must match a real upstream URL, SHA, and source, with stale inline comments clearly marked after a head change. These statuses describe local integration acceptance only; they do not mean the features shipped in v0.2.0 or passed customer-specific IdP/SCIM tenant or GitHub/GitLab deployment-provider/CI acceptance.
 
 ## Internationalization delivery (2026-10-08)
 

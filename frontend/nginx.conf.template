@@ -16,6 +16,15 @@ server {
     set $code_upstream "${CODE_UPSTREAM}";
     set $identity_upstream "${IDENTITY_UPSTREAM}";
 
+    location ^~ /api/scim/ {
+        access_log off;
+        error_log /dev/null;
+        proxy_pass $identity_upstream;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 128k;
+    }
+
     location ^~ /auth-api/ {
         # Authorization codes/state and logout tokens must not enter proxy logs.
         access_log off;
@@ -39,6 +48,7 @@ server {
     }
 
     location /api/ {
+        client_max_body_size 15m;
         proxy_pass $api_upstream;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -74,6 +84,7 @@ server {
     }
 
     location ^~ /knowledge-api/ {
+        client_max_body_size 15m;
         rewrite ^/knowledge-api/(.*)$ /api/$1 break;
         proxy_pass $knowledge_upstream;
         proxy_http_version 1.1;
@@ -107,6 +118,7 @@ server {
     }
 
     location ^~ /code-api/ {
+        client_max_body_size 15m;
         rewrite ^/code-api/(.*)$ /api/$1 break;
         proxy_pass $code_upstream;
         proxy_http_version 1.1;

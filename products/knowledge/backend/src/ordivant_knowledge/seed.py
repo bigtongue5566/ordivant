@@ -10,7 +10,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from .config import Settings, get_settings
-from .db import Base, make_engine
+from .db import make_engine, migrate_schema
 from .models import AccessToken, KnowledgeSpace, Organization, Principal, SpaceMembership
 from .security import issue_token, new_token, now_iso, token_hash
 from . import models as _models  # noqa: F401
@@ -75,7 +75,7 @@ def seed_knowledge(database_url: str | None = None, *, settings: Settings | None
     }
     engine: Engine = make_engine(database_url or active_settings.database_url)
     try:
-        Base.metadata.create_all(bind=engine)
+        migrate_schema(engine)
         with Session(engine, expire_on_commit=False, autoflush=False) as session:
             _seed_rows(session, bootstrap)
             session.commit()

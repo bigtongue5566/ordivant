@@ -40,6 +40,19 @@ async def _request(
     return response.json()
 
 
+async def _request_text(method: str, path: str, *, body: dict | None = None, request_id: str | None = None) -> str:
+    if not API_TOKEN:
+        raise RuntimeError("ORDIVANT_API_TOKEN is required for the Ordivant MCP bridge")
+    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    if request_id:
+        headers["Idempotency-Key"] = request_id
+    async with httpx.AsyncClient(base_url=API_URL, timeout=30) as client:
+        response = await client.request(method, path, json=body, headers=headers)
+    if response.is_error:
+        raise RuntimeError(f"Ordivant API returned HTTP {response.status_code}: {response.text[:2000]}")
+    return response.text
+
+
 @mcp.tool()
 async def get_project_context(project_id: str) -> dict:
     """Read a project, its tasks, scoped agents, and decisions."""
@@ -59,6 +72,12 @@ async def get_vcs_pull_request(project_id: str, provider: str, repository: str, 
 
 
 @mcp.tool()
+async def get_project_planning(project_id: str) -> dict:
+    """Read scoped sprints, milestones, custom fields, stages, rules, and intake forms."""
+    return await _request("GET", f"/api/projects/{project_id}/planning")
+
+
+@mcp.tool()
 async def create_task(
     project_id: str,
     title: str,
@@ -70,6 +89,7 @@ async def create_task(
     acceptance_criteria: list[str] | None = None,
     priority: str = "medium",
     request_id: str | None = None,
+    planning: dict[str, Any] | None = None,
 ) -> dict:
     """Create a scoped task; actor identity comes from the configured agent token."""
     body = {
@@ -83,13 +103,154 @@ async def create_task(
         "acceptance_criteria": acceptance_criteria or [],
         "priority": priority,
     }
-    return await _request("POST", "/api/tasks", body=body, request_id=request_id)
+    if planning:
+        body.update(planning)
+    return await _request("POST", "/api/tasks", body=body, request_id=request_id or (str(uuid.uuid4()) if planning else None))
 
 
 @mcp.tool()
 async def update_task(task_id: str, patch: dict[str, Any], request_id: str | None = None) -> dict:
     """Update manager-editable task specification fields."""
-    return await _request("PATCH", f"/api/tasks/{task_id}", body=patch, request_id=request_id)
+    uses_planning = bool(set(patch) & {"work_type", "epic_id", "due_at", "start_at", "sprint_id", "milestone_id", "estimate_points", "rank", "stage_id", "custom_fields"})
+    return await _request("PATCH", f"/api/tasks/{task_id}", body=patch, request_id=request_id or (str(uuid.uuid4()) if uses_planning else None))
+
+
+@mcp.tool()
+async def create_sprint(project_id: str, value: dict[str, Any], request_id: str | None = None) -> dict:
+    """Create a project sprint; only one sprint can be active at a time."""
+    return await _request("POST", f"/api/projects/{project_id}/sprints", body=value, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def update_sprint(sprint_id: str, patch: dict[str, Any], request_id: str | None = None) -> dict:
+    """Update a sprint without changing task execution status."""
+    return await _request("PATCH", f"/api/sprints/{sprint_id}", body=patch, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def create_milestone(project_id: str, value: dict[str, Any], request_id: str | None = None) -> dict:
+    """Create a project milestone."""
+    return await _request("POST", f"/api/projects/{project_id}/milestones", body=value, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def update_milestone(milestone_id: str, patch: dict[str, Any], request_id: str | None = None) -> dict:
+    """Update a project milestone."""
+    return await _request("PATCH", f"/api/milestones/{milestone_id}", body=patch, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def create_project_field(project_id: str, value: dict[str, Any], request_id: str | None = None) -> dict:
+    """Create a validated text, number, boolean, or select task field."""
+    return await _request("POST", f"/api/projects/{project_id}/fields", body=value, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def update_project_field(field_id: str, patch: dict[str, Any], request_id: str | None = None) -> dict:
+    """Update a project task field; used keys and kinds are immutable."""
+    return await _request("PATCH", f"/api/fields/{field_id}", body=patch, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def create_project_stage(project_id: str, value: dict[str, Any], request_id: str | None = None) -> dict:
+    """Create a planning stage mapped to an existing task lifecycle status."""
+    return await _request("POST", f"/api/projects/{project_id}/stages", body=value, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def update_project_stage(stage_id: str, patch: dict[str, Any], request_id: str | None = None) -> dict:
+    """Update a planning stage without bypassing task execution or review."""
+    return await _request("PATCH", f"/api/stages/{stage_id}", body=patch, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def reorder_project_tasks(project_id: str, task_ids: list[str], request_id: str | None = None) -> list[dict]:
+    """Set an ordered list of task ranks; every task must belong to the project."""
+    return await _request("POST", f"/api/projects/{project_id}/reorder", body={"task_ids": task_ids}, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def create_task_rule(project_id: str, value: dict[str, Any], request_id: str | None = None) -> dict:
+    """Create an authorized, synchronous task rule. Rules never invoke an LLM."""
+    return await _request("POST", f"/api/projects/{project_id}/rules", body=value, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def update_task_rule(rule_id: str, patch: dict[str, Any], request_id: str | None = None) -> dict:
+    """Update a task rule."""
+    return await _request("PATCH", f"/api/rules/{rule_id}", body=patch, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def create_intake_form(project_id: str, value: dict[str, Any], request_id: str | None = None) -> dict:
+    """Create an authenticated project intake form."""
+    return await _request("POST", f"/api/projects/{project_id}/forms", body=value, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def update_intake_form(form_id: str, patch: dict[str, Any], request_id: str | None = None) -> dict:
+    """Update an authenticated project intake form."""
+    return await _request("PATCH", f"/api/forms/{form_id}", body=patch, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def get_intake_form(form_id: str) -> dict:
+    """Read a form only when the current actor can access its project."""
+    return await _request("GET", f"/api/forms/{form_id}")
+
+
+@mcp.tool()
+async def submit_intake_form(form_id: str, value: dict[str, Any], request_id: str | None = None) -> dict:
+    """Submit a scoped intake request as a backlog task."""
+    return await _request("POST", f"/api/forms/{form_id}/submit", body=value, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def add_task_worklog(task_id: str, minutes: int, started_at: str, description: str = "", request_id: str | None = None) -> dict:
+    """Record observed time against an authorized task; attribution comes from the token."""
+    return await _request("POST", f"/api/tasks/{task_id}/worklogs", body={"minutes": minutes, "started_at": started_at, "description": description}, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def get_task_worklogs(task_id: str) -> list[dict]:
+    """Read worklogs for a task in the caller's authorized project."""
+    return await _request("GET", f"/api/tasks/{task_id}/worklogs")
+
+
+@mcp.tool()
+async def get_project_reports(project_id: str) -> dict:
+    """Read observed task totals, accepted execution elapsed time, capacity, and worklogs."""
+    return await _request("GET", f"/api/projects/{project_id}/reports")
+
+
+@mcp.tool()
+async def export_project_tasks_csv(project_id: str) -> str:
+    """Export authorized tasks as spreadsheet-safe CSV."""
+    return await _request_text("GET", f"/api/projects/{project_id}/tasks/export")
+
+
+@mcp.tool()
+async def import_project_tasks_csv(project_id: str, csv: str, request_id: str | None = None) -> dict:
+    """Atomically validate and import a bounded CSV batch of tasks."""
+    return await _request("POST", f"/api/projects/{project_id}/tasks/import", body={"csv": csv}, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def list_saved_queries() -> list[dict]:
+    """List saved queries owned by the current actor and still in accessible projects."""
+    return await _request("GET", "/api/saved-queries")
+
+
+@mcp.tool()
+async def create_saved_query(name: str, project_id: str, filters: dict[str, Any], request_id: str | None = None) -> dict:
+    """Save a scoped task query for the current actor."""
+    return await _request("POST", "/api/saved-queries", body={"name": name, "project_id": project_id, "filters": filters}, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def delete_saved_query(query_id: str, request_id: str | None = None) -> dict:
+    """Delete a saved query owned by the current actor."""
+    return await _request("DELETE", f"/api/saved-queries/{query_id}", request_id=request_id or str(uuid.uuid4()))
 
 
 @mcp.tool()
@@ -374,6 +535,12 @@ async def list_sandbox_profiles(project_id: str | None = None) -> list[dict]:
     return await _request("GET", "/api/sandbox-profiles", params=params)
 
 
+@mcp.tool()
+async def set_member_capacity(project_id: str, principal_id: str, weekly_minutes: int, request_id: str | None = None) -> dict:
+    """Configure an explicitly agreed weekly capacity. No LLM or inferred availability."""
+    return await _request("POST", f"/api/projects/{project_id}/capacity", body={"principal_id": principal_id, "weekly_minutes": weekly_minutes}, request_id=request_id or str(uuid.uuid4()))
+
+
 @mcp.resource("ordivant://projects/{project_id}/context")
 async def project_context_resource(project_id: str) -> str:
     result = await get_project_context(project_id)
@@ -404,6 +571,11 @@ def review_task_prompt(task_id: str) -> str:
         "Compare submitted artifacts with the acceptance criteria. The submitting actor must not approve their own work. "
         "Use review_result to accept or reject with a concise evidence-based comment."
     )
+
+
+from .collaboration_mcp import install_tools as install_collaboration_tools
+
+install_collaboration_tools(mcp, _request)
 
 
 if __name__ == "__main__":

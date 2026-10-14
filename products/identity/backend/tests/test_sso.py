@@ -260,6 +260,33 @@ def redirect_error(response) -> str | None:
     return query.get("auth_error", [None])[0]
 
 
+def test_mfa_policy_enforced_on_verified_provider_callback_before_provisioning(identity, provider):
+    client, app, settings = identity
+    admin = setup_admin(client)
+    configured = sso_settings(client, admin, provider, login_policy='sso_only')
+    body = {key: value for key, value in configured.items()
+        if key not in {'client_secret_configured', 'redirect_uri', 'backchannel_logout_uri'}}
+    body.update(required_acr=['urn:company:mfa'], required_amr=['mfa'])
+    saved = client.put('/api/auth/sso/settings', json=body, headers=origin_headers(admin['csrf_token']))
+    assert saved.status_code == 200, saved.text
+    for assurances in [{}, {'acr': 'weak', 'amr': ['mfa']}, {'acr': 'urn:company:mfa', 'amr': ['pwd']}]:
+        auth = begin_login(client)
+        assert auth['acr_values'] == 'urn:company:mfa'
+        assert json.loads(auth['claims'])['id_token']['acr']['essential'] is True
+        issue_login_claims(provider, auth, **assurances)
+        result = callback(client, settings, auth)
+        assert redirect_error(result) is not None
+        with app.state.session_factory() as db:
+            assert db.scalar(select(User.id).where(User.normalized_email == 'alice@example.com')) is None
+    auth = begin_login(client)
+    issue_login_claims(provider, auth, acr='urn:company:mfa', amr=['pwd', 'mfa'])
+    assert redirect_error(callback(client, settings, auth)) is None
+    session = client.get('/api/auth/me')
+    assert session.status_code == 200
+    assert session.json()['user']['email'] == 'alice@example.com'
+    assert session.json()['authentication']['method'] == 'oidc'
+
+
 def test_sso_settings_cas_secret_encryption_and_canonical_origin(identity, provider):
     client, app, settings = identity
     admin = setup_admin(client)

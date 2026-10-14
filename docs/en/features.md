@@ -2,6 +2,8 @@
 
 This guide explains where to find each feature, what it produces, and the limits to keep in mind. Work, Knowledge, and Code support people and Agents collaborating in the same product workflows; routine human work does not need an LLM. Work manages tasks, human execution, and Agent Runs; Knowledge manages shared drafts, document versions, and decisions; Code manages repositories and PRs connected to Gitea and keeps Ordivant discussion and review records. Start with the [project overview](./overview.md), then follow the scenarios below.
 
+This guide describes v0.3.0. If an entry is missing from your screen, ask your administrator to check the installed version, product permissions, and required integrations.
+
 ## Human and Agent collaboration {#human-and-agent-collaboration}
 
 ### Scenario {#human-and-agent-collaboration-scenario}
@@ -156,7 +158,7 @@ An engineering team wants to prepare a configuration change in Gitea, link its W
 
 ### Result and limits {#code-pull-requests-result}
 
-Code repositories, branches, commits, and PRs are stored by the configured Gitea service. Write operations are unavailable until Gitea is configured. People and Agents can discuss and review in Ordivant; each review is bound to the PR head SHA and becomes expired when the head changes. An Ordivant record does not create a Gitea approval or represent CI or Work task acceptance. A status entered with Report status is labeled agent-reported; it does not prove that CI ran tests. A signature-verified Gitea webhook has a distinct source label, and the upstream check record is still needed to confirm what ran. If you only need to inspect existing GitHub, GitLab, or Gitea PR status, Work can use its configured read-only integration without deploying Code.
+Code repositories, branches, commits, and PRs are stored by the configured Gitea service. Write operations are unavailable until Gitea is configured. PR details also read Gitea branch rules, approvals, status checks, and Actions for the current head SHA; when a GitHub or GitLab deployment source is configured for that repository, they also show deployment records for the same SHA. Code reads this evidence; it does not start CI or create deployments. Without provider configuration, the page clearly reports that evidence as unavailable. People and Agents can discuss and review in Ordivant; each review is bound to the PR head SHA and becomes expired when the head changes. An Ordivant record does not create a Gitea approval or represent CI or Work task acceptance. A status entered with Report status is labeled agent-reported; it does not prove that CI ran tests. A signature-verified Gitea webhook has a distinct source label, and the upstream check record is still needed to confirm what ran. If you only need to inspect existing GitHub, GitLab, or Gitea PR status, Work can use its configured read-only integration without deploying Code.
 
 ## Permissions, members, and enterprise SSO {#permissions-and-sso}
 
@@ -172,9 +174,9 @@ An administrator wants people to sign in with the company identity provider whil
 
 ### Result and limits {#permissions-and-sso-result}
 
-An organization administrator grants product roles and resource scopes. Roles are separate for each product: Work has Manager, Worker, and Reviewer; Knowledge has Manager, Writer, and Reader; Code has Manager, Writer, and Reader. SSO creates a platform session; it does not automatically grant access to a Project, Space, agent, runtime, or Gitea. An administrator must share an invitation code with an invited member; the platform does not send email.
+An organization administrator grants product roles and resource scopes. Roles are separate for each product: Work has Manager, Worker, and Reviewer; Knowledge has Manager, Writer, and Reader; Code has Manager, Writer, and Reader. SSO creates a platform session; it does not automatically grant access to a Project, Space, agent, runtime, or Gitea. Invited members use a one-time invitation created by an administrator. Identity sends the invitation email when SMTP is configured; otherwise, no email is sent and the administrator must securely deliver the code.
 
-OIDC is the sign-in protocol. SAML or LDAP / Active Directory can connect through the optional Keycloak broker. Native SAML endpoints and SCIM provisioning are not provided. Follow the [enterprise sign-in guide](./enterprise-sso.md) to check the actual identity-provider tenant and policies.
+OIDC is the sign-in protocol. SAML or LDAP / Active Directory can connect through the optional Keycloak broker; there is no native SAML endpoint. Identity provides SCIM 2.0 Users/Groups, without bulk operations or automatic account claims by email. Each customer IdP and directory still needs validation. See the [enterprise sign-in guide](./enterprise-sso.md) and [administration guide](./guide/administration.md) for tenant setup and limits.
 
 ## External tools and isolated sandboxes {#tools-and-sandbox}
 
@@ -197,6 +199,22 @@ In Tools and sandbox, create a project sandbox profile and set limits such as co
 The sandbox has no network access or host-directory access. It cannot download dependencies or clone arbitrary repositories; only tools and packages already in the environment are available. The workspace is removed when the Run ends, stops, or times out, so submit files and test output as artifacts before then. A Docker sandbox shares the host kernel and is not equivalent to VM or microVM isolation.
 
 ![Tool connections and sandbox settings](/screenshots/tools-en.png)
+
+## Work planning and intake {#work-planning-and-intake}
+
+Open **Planning workspace** in the Work sidebar to organize tasks, stories, bugs, and epics on a board or in Backlog order, filter by Sprint, milestone, assignee, or due date, and save your own queries. Managers can configure custom fields, stages, event rules, and intake forms. Signed-in Project members submit requests through a form, creating backlog tasks for triage. Worklogs and reports show recorded observations; CSV import validates a whole batch before writing, and export protects spreadsheet formulas. Planning does not replace execution and review or dispatch Agents. See the [Work guide](./guide/work.md) for the full workflow and limits.
+
+## Knowledge page trees and comments {#knowledge-page-tree-and-comments}
+
+When creating a document, choose a PRD, meeting, ADR, or SOP template, or select a parent in the same Space. Archived pages are hidden from the default search list. Writers and Managers can add comments tied to a published-version quote, reply and resolve a thread, compare versions, or restore old content as a new version. The shared draft keeps Markdown as its single canonical content; toolbar actions insert formatting, links, image URLs, or tables and update a live preview. This is not a full WYSIWYG editor. See the [Knowledge guide](./guide/knowledge.md).
+
+## Attachments, follow notices, and cross-product search {#shared-attachments-notifications-search}
+
+Work Tasks, Knowledge documents, and Code pull requests have a collaboration panel for authorized attachments, following updates, comments, and mentioning eligible members. The shared collaboration center shows notices and lets people mark them read; its search spans Work, Knowledge, and Code resources currently available to the account. Service failures are listed clearly. Attachments have a per-file size limit. Notices stay in the platform and are not sent through SMTP; full-text search needs no LLM.
+
+## Enterprise provisioning, MFA, and audit {#enterprise-provisioning-mfa-audit}
+
+Administrators use **Account and security → Enterprise governance** to configure explicit SCIM group grants to product resources, inspect the mail queue, set audit retention, and export Identity records as JSONL. SCIM requires a dedicated credential configured by the deployment administrator. It never claims or merges an existing account just because its email matches, and provisioning groups cannot grant admin. When MFA is required, Identity enforces OIDC acr/amr claims from the verified external IdP token; the IdP supplies the actual second factor. If SMTP is not configured, invitation and recovery mail are not sent. See the [administration guide](./guide/administration.md) and [enterprise sign-in guide](./enterprise-sso.md).
 
 ## More user guides {#next-steps}
 

@@ -39,7 +39,7 @@ docker compose up -d --build --wait
 
 打开 **http://127.0.0.1:8088**，在浏览器创建第一位人员管理员；平台没有默认人员账号或密码。默认部署名称为 `ordivant`，网页使用 port `8088`。主流程不会创建 DEMO 数据，也不会替你配置模型。
 
-### 从 v0.1.0 升级
+### 从 v0.2.0 或更早版本升级
 
 先依照[运维指南](docs/zh-CN/guide/operations.md)备份当前 Compose 项目的所有数据卷、服务机密及自定义 `.env`。更新原有 repository 后，沿用相同的 Compose 项目名称、`.env`、配置文件、profiles 与机密目录，从 repository root 执行：
 
@@ -48,7 +48,7 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-不要运行 `docker compose down -v`，它会删除数据卷。完整步骤见 [v0.2.0 版本与升级说明](docs/zh-CN/release.md)。
+不要运行 `docker compose down -v`，它会删除数据卷。完整步骤见 [v0.3.0 版本与升级说明](docs/zh-CN/release.md)。
 
 ### 不使用 LLM 的真人协作
 
@@ -81,7 +81,7 @@ docker compose down
 
 ## 版本与边界
 
-当前版本为 **v0.2.0（2026-10-14）**。Work、Knowledge 与 Code 的真人协作不需要模型配置；只有自主 Agent Run 需要有效的模型连接。Knowledge 使用文本搜索；Code 的 Ordivant 审查不会创建 Gitea 批准或 CI 结果。企业 IdP、Git、模型供应商和公开 HTTPS 环境仍需由部署团队根据实际设置验证。详见[版本与升级说明](docs/zh-CN/release.md)、[路线图](docs/zh-CN/roadmap.md)和[版本记录](CHANGELOG.md)。
+当前版本为 **v0.3.0（2026-10-15）**。Work、Knowledge 与 Code 的真人协作不需要模型配置；只有自主 Agent Run 需要有效的模型连接。Knowledge 使用文本搜索；Code 的 Ordivant 审查不会创建 Gitea 批准或 CI 结果。企业 IdP、Git、模型供应商和公开 HTTPS 环境仍需由部署团队根据实际设置验证。详见[版本与升级说明](docs/zh-CN/release.md)、[路线图](docs/zh-CN/roadmap.md)和[版本记录](CHANGELOG.md)。
 
 ## 参与项目
 

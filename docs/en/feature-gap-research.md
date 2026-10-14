@@ -4,6 +4,8 @@
 
 Updated: 2026-10-08 (Asia/Taipei). The PM and three luna workers reviewed the code, contracts, and acceptance records on 2026-10-07, using official protocol and product documentation as references. The user selected **F03 Run console, F04 workflows and Agent templates, and F05 tool connections and sandboxes**; implementation and local integration acceptance are complete. This page distinguishes the first-release capabilities from work that remains.
 
+This page's gap list and F11 SCIM candidate are a historical snapshot from 2026-10-08. SCIM implementation was added on 2026-10-15; current customer-tenant acceptance status is in the [project plan](project-plan.md#p0-p1-acceptance-ledger).
+
 See [execution features](execution-usage.md) and [acceptance](execution-validation.md) for this release's behavior and evidence. The next priority candidates are **pre-execution approvals, total-token and cost governance, notifications, and real CI integration**. Enterprise document import, existing VCS integration, SCIM, and other requirements remain on the roadmap.
 
 Priorities assume a private deployment used by one enterprise team. If one service is to host multiple customers, tenant isolation and per-tenant Identity/IdP configuration must move earlier.
@@ -84,7 +86,7 @@ Acceptance must cover no new model request when the budget is insufficient; conc
 | Candidate | Current state | Trigger and minimum deliverable |
 |---|---|---|
 | Local administrator MFA/passkeys | Enterprise MFA can be delegated to the IdP; local accounts have no TOTP/WebAuthn | If administrator recovery accounts also need a second factor, deliver enrollment, verification, recovery policy, and security audit. |
-| Audit export, SIEM, and retention policy | Database audit and restricted reads exist; export, retention, and tamper protection are missing | Start with paginated JSON/CSV, configurable retention, and reliable event export. Add signatures/hash chains/WORM storage and verification when tamper resistance is required. |
+| Audit integration, SIEM, and tamper resistance | Identity has restricted JSONL export with a composite cursor and explicitly applied retention; SIEM delivery and signature/hash-chain/WORM tamper protection are not available | When organizations need to correlate Identity and product events centrally, add bounded, retryable SIEM/event export. Add signatures, hash chains, or WORM storage and verification if tamper resistance is required. |
 | Vault/KMS/Secret Manager | Client secrets/model keys are encrypted locally; Compose secrets are mounted from files | Add an external secret backend, key rotation, and recovery when key management must be centralized or shared across nodes. |
 | Automated backup, restore exercises, monitoring, and HA | Health checks, named volumes, restart persistence, and manual backup instructions exist; full restore/HA is unverified | Define RPO/RTO before production; verify that databases, keys, Pi, and Git/attachments restore consistently; add alerts/metrics, then address worker partitioning/HA if required. Pi storage must retain a single owner. |
 

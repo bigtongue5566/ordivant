@@ -12,7 +12,7 @@ Ordivant 的浏览器登录由共用 Identity 服务提供；Work、Knowledge、
 
 每个 Compose 项目／环境都有自己的 Identity 数据。第一次打开 Web 时，请为该环境创建第一位管理员；系统没有预设用户账号。管理员可邀请成员、禁用账号、撤销会话，并授予产品角色，以及 Work Project、Knowledge Space、Code Project 的明确资源范围。
 
-管理员需安全地将一次性邀请码提供给受邀成员；邀请码会过期，本地脚本不会发送邮件。普通成员只能查看明确授权的资源。创建新的 Project 或 Space 由管理员负责。密码恢复使用登录时设置的恢复码；目前不提供未实现的电子邮件重置流程。
+如果管理员已设置 SMTP，Identity 会将邀请和本地账号恢复邮件放入持久队列并发送；否则不会尝试发送邮件，管理员须安全地通过其他方式提供一次性邀请码。邮件链接会过期且只能使用一次；本地账号仍可使用登录时提供的恢复码。普通成员只能查看明确授权的资源。创建新的 Project 或 Space 由管理员负责。
 
 <span id="產品角色"></span>
 <span id="产品角色"></span>
@@ -44,7 +44,21 @@ Identity 的组织管理员（`admin`）可管理成员和授权；产品角色�
 4. 输入该组织的 `Issuer`、`Client ID`、`Client Secret`、允许网域与成员布建政策；需要群组时，设置 IdP 的 `groups` claim 及明确的产品／范围对应。
 5. 保存后运行连接测试，再以普通成员测试登录、产品访问及注销。确认管理员恢复路径可用后，才考虑启用 `SSO-only`。
 
-成员依据受邀或明确设置的 JIT 政策加入；相同电子邮件网域本身不会授予全组织权限。`Client Secret` 会加密保存，表单不会回填明文。直接 OIDC 是登录协议；若企业只提供 SAML 或 LDAP／Active Directory，可选择 Keycloak broker。详细设置与交互式初始化要求见[企业登录说明](../enterprise-sso.md)。目前尚未提供 SCIM 布建功能。
+成员依据受邀或明确设置的 JIT 政策加入；相同电子邮件网域本身不会授予全组织权限。Client Secret 会加密保存，表单不会回填明文。直接 OIDC 是登录协议；若企业只提供 SAML 或 LDAP／Active Directory，可选择 Keycloak broker。启用 required_acr 或 required_amr 时，成员登录政策必须是 SSO-only；Identity 会检查已验证 IdP 权杖中的 assurance claim，平台本身不提供 MFA 因子。详细设置见[企业登录说明](../enterprise-sso.md)。
+
+## SCIM、MFA、邮件与审计治理 {#enterprise-provisioning-mfa-mail-audit}
+
+管理员在右上角打开「账号与安全性」→「企业治理」，可查看 SCIM／邮件服务状态、设置群组权限对应与审计保留政策、导出 Identity 审计记录，以及查看或重试可重试的邮件。SCIM 端点会显示在此页面；部署管理员须另外提供 ORDIVANT_SCIM_TOKEN_FILE，并将该专用 bearer credential 配置在企业布建服务。SCIM 支持 Users 和 Groups；目前不支持 SCIM bulk 操作。
+
+在保存群组授权之前，先按 IdP 提供的群组完整名称创建对应，再用权限编辑器选择明确的产品角色及资源 ID。SCIM 群组不会取得组织 admin；使用通配资源范围也会被拒绝。一般 SCIM User PATCH 若尝试修改由 SCIM 管理的产品权限，会返回 HTTP 409；不能通过一般 PATCH 手动切换权限管理来源。请修改 IdP 群组成员或这里的群组对应，再由 SCIM 同步。明确链接 OIDC 账号时，须使用 `managed_permissions=false`，保留 SCIM 作为群组权限的管理来源。SCIM 创建用户时若同一电子邮件已属于现有 Ordivant 账号，布建会返回冲突，不会自动认领、合并或改变账号；请先通过明确的管理员账号链接／迁移流程处理。SCIM 停用用户或改变群组授权会撤销其既有 Identity sessions。
+
+Docker Compose 部署可选用只读的 `compose.enterprise.yaml`，分别挂载 Identity 与 Code 的机密目录。SCIM token 与 SMTP 密码文件放在 Identity 挂载目录；Code 部署配置及其 token 文件放在 Code 目录。操作步骤见[容器部署指南](../containers.md#enterprise-secret-mounts)与[Code 部署证据设置](code.md#upstream-governance-and-deployment-evidence)。不要把机密值写入 `.env`。
+
+MFA 由企业 IdP 执行。在「账号与安全性」→「企业 SSO」设置必须符合的登录强度 acr 值，以及必须包含的验证方式 amr（例如 mfa），然后要求成员使用 SSO-only 登录。acr 必须符合列表中的某一个值，amr 必须包含全部指定方式；请先确认 IdP 实际签发的已验证登录权杖包含这些 claims，再测试普通成员和管理员恢复路径。
+
+发送邀请与账号恢复邮件之前，部署管理员须设置 SMTP host、port、sender、TLS，以及需要时的账号与密码文件（ORDIVANT_SMTP_HOST、ORDIVANT_SMTP_PORT、ORDIVANT_SMTP_SENDER、ORDIVANT_SMTP_STARTTLS、ORDIVANT_SMTP_USERNAME、ORDIVANT_SMTP_PASSWORD_FILE）。生产环境要求 STARTTLS；缺少必要设置时 Identity 不会发送邮件。到「企业治理」查看邮件队列状态；待发送或失败项目可以重试，过期邮件不可重试。资源追踪与协作中心通知只显示在 Ordivant，不会通过此 SMTP 通道发送。
+
+审计导出是受管理员权限保护的 JSONL 文件，内容只含 Identity 审计允许导出的字段，不是 Work、Knowledge、Code 三个产品事件的合并导出。界面会自动分页，但最多导出 100,000 条或 50 MiB；超过任一上限时会拒绝生成不完整文件。更大的导出请使用 Identity 管理员 API：`GET /auth-api/audit/export` 接受 `limit=1..10000`。后续页使用响应标头 `X-Next-Before` 与 `X-Next-Before-Id` 的值，成对作为 `before` 和 `before_id` 复合游标。先导出需要保存的记录，再设置 30 至 3650 天保留期并明确选择应用；应用后会删除超出期限的 Identity 审计行。
 
 <span id="agent-與模型連線"></span>
 <span id="agent-与模型连接"></span>

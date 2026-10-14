@@ -34,6 +34,10 @@ export default defineConfig(({ mode }) => {
         ? { usePolling: true, interval: watchInterval }
         : undefined,
       proxy: {
+        '/api/scim': {
+          target: env.VITE_IDENTITY_API_TARGET || 'http://127.0.0.1:8030',
+          changeOrigin: false,
+        },
         '/auth-api': {
           target: env.VITE_IDENTITY_API_TARGET || 'http://127.0.0.1:8030',
           changeOrigin: false,

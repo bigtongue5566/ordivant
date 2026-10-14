@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import asyncio
+from contextlib import suppress
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
@@ -10,6 +12,9 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from . import models as _models  # noqa: F401
+from . import enterprise_models as _enterprise_models  # noqa: F401
+from .enterprise import router as enterprise_router, mail_worker
+from .scim import router as scim_router, ScimError, scim_error_handler
 from .api import router
 from .config import Settings, get_settings
 from .db import Base, make_engine, session_factory
@@ -53,14 +58,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         application.state.settings = active_settings
         application.state.engine = engine
         application.state.session_factory = session_factory(engine)
+        delivery = asyncio.create_task(mail_worker(application.state.session_factory, active_settings))
         try:
             yield
         finally:
+            delivery.cancel()
+            with suppress(asyncio.CancelledError):
+                await delivery
             engine.dispose()
 
-    application = FastAPI(title="Ordivant Identity", version="0.2.0", lifespan=lifespan)
+    application = FastAPI(title="Ordivant Identity", version="0.3.0", lifespan=lifespan)
     application.include_router(router, prefix="/api/auth")
     application.include_router(sso_router, prefix="/api/auth")
+    application.include_router(enterprise_router, prefix="/api/auth")
+    application.include_router(scim_router, prefix="/api/scim/v2")
+    application.add_exception_handler(ScimError, scim_error_handler)
 
     @application.exception_handler(DomainError)
     async def domain_error_handler(_request: Request, error: DomainError) -> JSONResponse:
@@ -79,12 +91,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.middleware("http")
     async def auth_response_and_origin_policy(request: Request, call_next):
-        is_auth = request.url.path.startswith("/api/auth/")
+        is_auth = request.url.path.startswith(("/api/auth/", "/api/scim/"))
         origin_exempt = {
             "/api/auth/introspect",
             "/api/auth/oidc/backchannel-logout",
         }
-        if is_auth and request.method in {"POST", "PATCH", "PUT", "DELETE"} and request.url.path not in origin_exempt:
+        if request.url.path.startswith("/api/auth/") and request.method in {"POST", "PATCH", "PUT", "DELETE"} and request.url.path not in origin_exempt:
             trusted_origins = (settings or getattr(request.app.state, "settings", None))
             allowed = trusted_origins.auth_origins if trusted_origins else ()
             if request.headers.get("origin") not in allowed:

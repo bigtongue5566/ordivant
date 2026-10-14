@@ -20,7 +20,7 @@ An administrator can manage people and invitations. A regular member can use onl
    | Knowledge | Manager, Writer, or Reader | One or more Knowledge Spaces |
    | Code | Manager, Writer, or Reader | One or more Code Projects |
 
-4. Choose **Create invitation**. The one-time code appears once, with its expiry. Reveal and copy it, then deliver it to the intended person through an approved secure channel. Ordivant does not send invitation email. Close the dialog only after you have safely delivered the code.
+4. Choose **Create invitation**. The one-time code appears once, with its expiry. If Identity has SMTP configured, it sends a one-time invitation email. Otherwise, no email is sent; deliver the code through an approved secure channel. Close the dialog only after safe delivery.
 5. The invitee chooses **Accept invitation** on the sign-in page, enters the code, and sets a personal password. They should then see only the resources included in their grant.
 
 Grant the smallest role and scope that lets each person do their work. If a project or Space does not appear, an administrator should edit that member's **Product roles and resources** grant. A role in one product does not authorize access in another.

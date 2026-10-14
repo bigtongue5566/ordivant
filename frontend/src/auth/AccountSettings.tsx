@@ -7,6 +7,8 @@ import { useAuth } from './AuthContext';
 import type { AuthPermissions, IdentitySessionRecord, IdentityUser, ProductKey } from './types';
 import { PermissionEditor, usePermissionCatalogs } from './permissions';
 import { EnterpriseSsoPanel, IdentityAuditPanel } from './SsoSettings';
+import { EnterpriseGovernance } from './EnterpriseGovernance';
+import { CollaborationCenter } from '../products/shared/CollaborationCenter';
 import { formatDate, useI18n, useLocalizedForm } from '../i18n';
 import './auth.css';
 
@@ -73,6 +75,7 @@ export function AccountControl({
     <>
       {contextHolder}
       <div className="auth-account-control" data-product={product}>
+        <CollaborationCenter product={product} />
         <Tooltip title={t('帳號與安全性')}>
           <Button type="text" size="small" icon={<SettingOutlined />} aria-label={t('帳號與安全性')} onClick={() => setOpen(true)} />
         </Tooltip>
@@ -93,6 +96,7 @@ export function AccountControl({
             { key: 'profile', label: t('帳號'), children: <ProfilePanel businessRole={businessRole} /> },
             ...(auth.session?.user.role === 'admin' ? [{ key: 'users', label: t('使用者與邀請'), children: <AdminPanel /> }] : []),
             ...(auth.session?.user.role === 'admin' ? [{ key: 'sso', label: t('企業 SSO'), children: <EnterpriseSsoPanel /> }, { key: 'identity-audit', label: t('身分稽核'), children: <IdentityAuditPanel /> }] : []),
+            ...(auth.session?.user.role === 'admin' ? [{ key: 'governance', label: t('企業治理'), children: <EnterpriseGovernance /> }] : []),
           ]}
         />
       </Drawer>
@@ -111,7 +115,7 @@ function ProfilePanel({ businessRole }: { businessRole: string }) {
         <Descriptions.Item label={t('Suite 角色')}>{t(auth.session?.user.role === 'admin' ? '管理員' : '成員')}</Descriptions.Item>
         <Descriptions.Item label={t('目前產品角色')}>{businessRoleLabel(businessRole || '尚未授權', t)}</Descriptions.Item>
         <Descriptions.Item label={t('登入來源')}>{auth.session?.authentication?.method === 'oidc' ? t('企業 SSO · {{provider}}', { provider: auth.session.authentication.provider_name || auth.sso?.display_name || 'OIDC' }) : t('Ordivant 帳號')}</Descriptions.Item>
-        <Descriptions.Item label={t('權限管理')}>{t(auth.session?.user.permissions_source === 'sso' ? '由企業群組同步' : '由管理員設定')}</Descriptions.Item>
+        <Descriptions.Item label={t('權限管理')}>{t(auth.session?.user.permissions_source === 'scim' ? '由 SCIM 群組同步' : auth.session?.user.permissions_source === 'sso' ? '由企業群組同步' : '由管理員設定')}</Descriptions.Item>
         <Descriptions.Item label={t('工作階段到期')}>{auth.session ? dateText(auth.session.expires_at) : '—'}</Descriptions.Item>
       </Descriptions>
       <Paragraph type="secondary">{t('產品角色與可存取資源由各產品 API 分別授權。')}</Paragraph>
@@ -317,7 +321,7 @@ function AdminPanel() {
   }
 
   const columns: ColumnsType<IdentityUser> = [
-    { title: t('使用者'), key: 'user', render: (_value, user) => <div className="auth-user-cell"><strong>{user.name}</strong><span>{user.email}</span><span>{user.credential_type === 'sso' ? t('企業登入 · {{mode}}', { mode: t(user.permissions_source === 'sso' ? '群組管理' : '手動管理') }) : t('Ordivant 帳號登入')}</span></div> },
+    { title: t('使用者'), key: 'user', render: (_value, user) => <div className="auth-user-cell"><strong>{user.name}</strong><span>{user.email}</span><span>{user.credential_type === 'sso' ? t('企業登入 · {{mode}}', { mode: t(user.permissions_source === 'scim' ? 'SCIM 群組管理' : user.permissions_source === 'sso' ? '群組管理' : '手動管理') }) : t('Ordivant 帳號登入')}</span></div> },
     { title: t('角色'), dataIndex: 'role', key: 'role', width: 84, render: (role: IdentityUser['role']) => <Tag color={role === 'admin' ? 'purple' : 'default'}>{t(role === 'admin' ? '管理員' : '成員')}</Tag> },
     { title: t('啟用'), dataIndex: 'active', key: 'active', width: 72, render: (active: boolean, user) => <Tooltip title={t(user.id === auth.session?.user.id ? '無法停用目前登入的帳號' : active ? '停用帳號' : '啟用帳號')}><Switch size="small" checked={active} disabled={user.id === auth.session?.user.id || togglingUser === user.id} loading={togglingUser === user.id} onChange={(value) => void setUserActive(user, value)} /></Tooltip> },
     { title: '', key: 'actions', width: 78, render: (_value, user) => <Button size="small" onClick={() => openEdit(user)}>{t('管理')}</Button> },
@@ -347,7 +351,7 @@ function AdminPanel() {
         {editError && <Alert className="auth-drawer-alert" type="error" showIcon message={t(editError)} />}
         {editingUser?.credential_type === 'sso' && editingUser.permissions_source === 'sso' && <Alert className="auth-drawer-alert" type="warning" showIcon message={t('變更產品權限會改由 Ordivant 管理')} description={t('只有調整產品角色或資源範圍時，才會停止依企業群組同步權限；只修改姓名不會改變管理方式。')} />}
         <Form layout="vertical"><Form.Item label={t('顯示名稱')}><Input value={editName} maxLength={120} onChange={(event) => setEditName(event.target.value)} /></Form.Item></Form>
-        <PermissionEditor value={editPermissions} catalogs={catalogs} onChange={setEditPermissions} />
+        {editingUser?.permissions_source === 'scim' ? <Alert type="info" message={t('此帳號的產品權限由 SCIM 群組管理，請至企業治理或身分服務調整。')} /> : <PermissionEditor value={editPermissions} catalogs={catalogs} onChange={setEditPermissions} />}
       </Modal>
 
       <Modal

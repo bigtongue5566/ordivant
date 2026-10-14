@@ -182,10 +182,37 @@ def event_json(event: AuditEvent) -> dict:
 
 def _event(session: Session, project_id: str | None, actor_id: str | None, action: str, entity_type: str, entity_id: str, data: dict):
     # Callers pass allow-listed metadata only; credentials and file contents never belong in audit data.
-    session.add(AuditEvent(
+    event = AuditEvent(
         id=new_id(), project_id=project_id, actor_id=actor_id, action=action,
         entity_type=entity_type, entity_id=str(entity_id), data=data, created_at=now_utc(),
-    ))
+    )
+    session.add(event)
+    pull = session.get(PullRequest, str(entity_id))
+    if pull is None and entity_type.startswith("pull_request"):
+        repository_id = data.get("repository_id")
+        pull_number = data.get("pull_number")
+        if isinstance(repository_id, str) and repository_id and isinstance(pull_number, int):
+            pull = session.scalar(select(PullRequest).where(
+                PullRequest.repository_id == repository_id,
+                PullRequest.number == pull_number,
+            ))
+        elif isinstance(data.get("repo"), dict) and isinstance(pull_number, int):
+            repo = data["repo"]
+            owner, name = repo.get("owner"), repo.get("name")
+            if isinstance(owner, str) and owner and isinstance(name, str) and name:
+                repository = session.scalar(select(Repository).where(
+                    Repository.owner == owner,
+                    Repository.name == name,
+                ))
+                if repository is not None:
+                    pull = session.scalar(select(PullRequest).where(
+                        PullRequest.repository_id == repository.id,
+                        PullRequest.number == pull_number,
+                    ))
+    if pull is not None:
+        from .collaboration import emit
+
+        emit(session, "pull", pull.id, event.id, actor_id, action)
 
 
 def _gitea(config: GiteaConfig | None = None) -> GiteaClient:
@@ -221,12 +248,16 @@ def _save_idempotency(session: Session, principal: Principal, route: str, key: s
 def _local_mutation(
     session: Session, principal: Principal, route: str, key: str, payload: dict,
     action: str, entity_type: str, entity_id: str, project_id: str | None, create,
+    *, event_details: dict | None = None,
 ) -> dict:
     cached = _cached(session, principal, route, key, payload)
     if cached is not None:
         return cached
     response = create()
-    _event(session, project_id, principal.id, action, entity_type, entity_id, {"request_idempotency": True})
+    details = {"request_idempotency": True}
+    if event_details:
+        details.update(event_details)
+    _event(session, project_id, principal.id, action, entity_type, entity_id, details)
     _save_idempotency(session, principal, route, key, payload, response)
     try:
         session.commit()
@@ -851,6 +882,7 @@ def comment_on_pull_request(
     return _local_mutation(
         session, actor, route, key, data, "code.pull_request_comment_added",
         "pull_request_comment", comment_id, project.id, create,
+        event_details={"repository_id": repository.id, "pull_number": pull.number},
     )
 
 
@@ -889,6 +921,7 @@ def review_pull_request(
     return _local_mutation(
         session, actor, route, key, data, "code.pull_request_review_recorded",
         "pull_request_review", review_id, project.id, create,
+        event_details={"repository_id": repository.id, "pull_number": pull.number},
     )
 
 
@@ -999,6 +1032,8 @@ def process_webhook(session: Session, raw_body: bytes, signature: str | None, de
                 raise DomainError(422, "invalid_webhook_pull_request", "Pull request webhook data is invalid")
             pull = _sync_pull(session, repository, pr_data)
             details["number"] = pull.number
+            details["repository_id"] = repository.id
+            details["pull_number"] = pull.number
             details["state"] = pull.state
             details["head_sha"] = pull.head_sha
             entity_type, entity_id = "pull_request", str(pull.number)

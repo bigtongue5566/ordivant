@@ -101,7 +101,7 @@ An Agent's `model_config` overrides the default; `null` inherits organization se
 
 Identity's native prefix is `/api/auth`; the suite web prefix is `/auth-api`. `status` / `setup` initialize the first administrator, `login` / `me` / `logout` / `sessions` manage sessions, and `invitations` / `users` manage members. Administrators configure product access, which each product checks on every request.
 
-Administrators use `sso/settings` and `sso/test` for OIDC configuration; `oidc/start` and `oidc/callback` complete sign-in. The platform directly supports OIDC. SAML or LDAP / AD can use the optional Keycloak broker; native SAML and SCIM are not available yet. See [enterprise SSO](./enterprise-sso.md) and the [account guide](./human-login.md) for configuration and provider limits.
+Administrators use `sso/settings` and `sso/test` for OIDC configuration; `oidc/start` and `oidc/callback` complete sign-in. The platform directly supports OIDC. SAML or LDAP / AD can use the optional Keycloak broker; there is no native SAML endpoint. Identity provides SCIM 2.0 Users/Groups at `/api/scim/v2`, without bulk operations or automatic account claims by email. Each customer IdP tenant still needs validation. See [enterprise SSO](./enterprise-sso.md), the [administration guide](./guide/administration.md), and the [account guide](./human-login.md) for configuration and limits.
 
 ## MCP
 

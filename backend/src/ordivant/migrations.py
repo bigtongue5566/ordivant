@@ -16,10 +16,29 @@ def migrate_collaboration(engine: Engine) -> None:
         elif engine.dialect.name == "sqlite":
             connection.exec_driver_sql("BEGIN IMMEDIATE")
         columns = {item["name"] for item in inspect(connection).get_columns("tasks")}
-        for name in ("assignee_principal_id", "reviewer_principal_id"):
+        additions = {
+            "assignee_principal_id": "VARCHAR(36) REFERENCES principals(id)",
+            "reviewer_principal_id": "VARCHAR(36) REFERENCES principals(id)",
+            "work_type": "VARCHAR(20) NOT NULL DEFAULT 'task'",
+            "epic_id": "VARCHAR(36) REFERENCES tasks(id) ON DELETE SET NULL",
+            "due_at": "TIMESTAMP WITH TIME ZONE",
+            "start_at": "TIMESTAMP WITH TIME ZONE",
+            "sprint_id": "VARCHAR(36) REFERENCES project_sprints(id) ON DELETE SET NULL",
+            "milestone_id": "VARCHAR(36) REFERENCES project_milestones(id) ON DELETE SET NULL",
+            "estimate_points": "FLOAT",
+            "rank": "FLOAT NOT NULL DEFAULT 0",
+            "stage_id": "VARCHAR(36) REFERENCES project_stages(id) ON DELETE SET NULL",
+            "custom_fields_json": "TEXT NOT NULL DEFAULT '{}'",
+        }
+        for name, definition in additions.items():
             if name not in columns:
-                connection.exec_driver_sql(f"ALTER TABLE tasks ADD COLUMN {name} VARCHAR(36) REFERENCES principals(id)")
+                connection.exec_driver_sql(f"ALTER TABLE tasks ADD COLUMN {name} {definition}")
         connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_tasks_assignee_principal_id ON tasks (assignee_principal_id)")
+        connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_tasks_epic_id ON tasks (epic_id)")
+        connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_tasks_sprint_id ON tasks (sprint_id)")
+        connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_tasks_milestone_id ON tasks (milestone_id)")
+        connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_tasks_stage_id ON tasks (stage_id)")
+        connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_tasks_project_rank_created ON tasks (project_id, rank, created_at)")
         if engine.dialect.name == "postgresql":
             connection.exec_driver_sql("ALTER TABLE executions ALTER COLUMN agent_id DROP NOT NULL")
             connection.exec_driver_sql("ALTER TABLE executions ALTER COLUMN lease_expires_at DROP NOT NULL")

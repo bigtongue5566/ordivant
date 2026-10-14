@@ -1,0 +1,9 @@
+# Optional server-only credentials. Each product receives only its own directory.
+# docker compose -f compose.yaml -f compose.enterprise.yaml up -d --build
+services:
+  identity-api:
+    volumes:
+      - ${ORDIVANT_ENTERPRISE_SECRETS_DIR:-./.data/enterprise-secrets}/identity:/run/ordivant-enterprise:ro
+  code-api:
+    volumes:
+      - ${ORDIVANT_ENTERPRISE_SECRETS_DIR:-./.data/enterprise-secrets}/code:/run/ordivant-enterprise:ro

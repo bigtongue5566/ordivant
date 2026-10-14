@@ -101,7 +101,7 @@ Agent 的 `model_config` 可覆盖默认值，设为 `null` 则继承组织设�
 
 Identity 原生端点以 `/api/auth` 为前缀，套件网页使用 `/auth-api`。`status`／`setup` 用于第一次创建管理员，`login`／`me`／`logout`／`sessions` 管理会话，`invitations`／`users` 管理成员。产品授权由管理员设置，仍由各产品逐次检查。
 
-`sso/settings` 与 `sso/test` 供管理员设置 OIDC，`oidc/start` 与 `oidc/callback` 完成登录。平台直接支持 OIDC；SAML 或 LDAP／AD 可通过可选的 Keycloak 代理，原生 SAML 与 SCIM 尚未提供。设置及供应商限制见[企业 SSO](./enterprise-sso.md)与[账号指南](./human-login.md)。
+`sso/settings` 与 `sso/test` 供管理员设置 OIDC，`oidc/start` 与 `oidc/callback` 完成登录。平台直接支持 OIDC；SAML 或 LDAP／AD 可通过可选的 Keycloak 代理，平台没有原生 SAML 端点。Identity 在 `/api/scim/v2` 提供 SCIM 2.0 Users／Groups；不支持 bulk，也不会按 email 自动认领现有账号。每个客户 IdP tenant 仍须单独验证。设置及供应商限制见[企业 SSO](./enterprise-sso.md)、[管理指南](./guide/administration.md)与[账号指南](./human-login.md)。
 
 ## MCP
 

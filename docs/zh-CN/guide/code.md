@@ -36,3 +36,11 @@ PR 状态可以帮助跟踪工作，但不能替代实际测试、Gitea 审查�
 每条 Ordivant 审核都会绑定提交时 PR 的 **head SHA**。PR head 变化后，旧审核仍保留以便追溯，但会标记为「已过期」；请重新加载审核记录，检查最新 head，并针对当前版本提交新记录。Ordivant 的讨论与审核记录不代表 Gitea approval、CI 执行结果或 Work 任务验收。
 
 真人和 Agent 都可根据 Code Project 权限参与讨论与审核。查看和撰写这些记录不需要 Agent 或模型；Git repository 和 PR 操作仍需要可用的 Gitea 服务。真人角色和项目范围见[团队设置](team-setup.md)。
+
+## 上游规则与部署证据 {#upstream-governance-and-deployment-evidence}
+
+在 PR 详情打开“分支规则与执行证据”，检查当前 head SHA 对应的 Gitea 分支保护、上游核准、状态检查和 Actions。若部署管理员已为该 repository 配置 GitHub 或 GitLab 部署来源，同一区域也会列出与当前 head SHA 匹配的部署结果。如果配置、凭证或上游服务不可用，页面会明确显示证据不可用。需要配置时请联系部署管理员；不要把 Agent 回报或 Ordivant webhook 收据当成 CI。
+
+此区域读取上游治理与部署记录。Ordivant 不会启动 CI 工作或创建部署。GitHub 使用固定的 `api.github.com`；GitLab 仅支持 GitLab.com 的固定 API `gitlab.com/api/v4`，不支持自架 GitLab 或自定义 API host。provider 配置须以 Ordivant 本地 repository UUID 对应上游 repository；每个 `token_file` 都必须指向 Code 只读挂载目录中的文件。正式核准与合并仍依组织的 Gitea 规则进行。
+
+若要读取 GitHub／GitLab 部署记录，部署管理员须在服务器准备 Code 专用的只读 provider 配置文件，并设置 `ORDIVANT_CODE_DEPLOYMENT_CONFIG_FILE=/run/ordivant-enterprise/deployment-providers.json`。配置中的 `repositories` 以本地 repository UUID 为 key，对应 GitHub owner/name 或 GitLab.com project；`token_file` 路径必须指向 Code 只读挂载目录内的文件。配置文件及 token 文件都放在 enterprise secrets 的 `code/` 目录；Compose 只读挂载该目录，Code 无法读取 Identity 的机密。启用方式见[容器部署指南](../containers.md#enterprise-secret-mounts)。不要把 provider token 写入 `.env`。

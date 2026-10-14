@@ -114,18 +114,32 @@ Connect your company's OIDC provider directly without an extra container. SAML a
 
 For external MCP tools, add exact hostnames to `.env`'s `ORDIVANT_TOOL_ALLOWED_HOSTS`, then restart Work and the execution service. Do not put model keys or human passwords in `.env`; enter model keys in the administration interface. [Tool connections](execution-usage.md#external-mcp-tools)
 
+### Enterprise secret files and deployment providers {#enterprise-secret-mounts}
+
+Enterprise integrations can use the optional read-only Compose overlay. By default, create `.data/enterprise-secrets/identity/` and `.data/enterprise-secrets/code/` in the repository root. If using another location, set `ORDIVANT_ENTERPRISE_SECRETS_DIR` in `.env` first. Put the SCIM token and SMTP password file in `identity/`; put Code's `deployment-providers.json` and its `token_file` files in `code/`. The directories are mounted read-only at `/run/ordivant-enterprise` in their respective Identity and Code containers, so neither service can read the other's files.
+
+`.env.compose.example` lists the path settings. Common paths are `ORDIVANT_SCIM_TOKEN_FILE=/run/ordivant-enterprise/scim-token`, `ORDIVANT_SMTP_PASSWORD_FILE=/run/ordivant-enterprise/smtp-credential`, and `ORDIVANT_CODE_DEPLOYMENT_CONFIG_FILE=/run/ordivant-enterprise/deployment-providers.json`. These settings point to files inside the containers; store credential values only in server-side files, never in `.env`.
+
+After preparing the files and `.env` paths, build and start with the same Compose overlay:
+
+```sh
+docker compose -f compose.yaml -f compose.enterprise.yaml up -d --build
+```
+
+Include both `-f` files in later starts, updates, and rebuilds to preserve the read-only mounts.
+
 ## Status, stopping, and backups {#actions-and-data}
 
 Use the same repository directory, `.env`, and Compose configuration as installation:
 
 ```sh
-docker compose ps
-docker compose logs --tail 100 work-api identity-api
-docker compose down
-docker compose up -d --wait
+docker compose -f compose.yaml -f compose.enterprise.yaml ps
+docker compose -f compose.yaml -f compose.enterprise.yaml logs --tail 100 work-api identity-api
+docker compose -f compose.yaml -f compose.enterprise.yaml down
+docker compose -f compose.yaml -f compose.enterprise.yaml up -d --wait
 ```
 
-`down` preserves volumes. Do not add `-v`, which deletes data. Back up product databases, data volumes, and `.data/container-secrets/` or your configured secrets directory together with model and SSO encryption keys. [Backup and restore](guide/operations.md)
+Use the commands above only when the enterprise overlay is enabled; regular deployments should follow the [basic container operations](guide/operations.md). With the overlay, include the same `-f compose.yaml -f compose.enterprise.yaml` on every start, stop, update, and rebuild. `down` preserves volumes. Do not add `-v`, which deletes data. Back up product databases, data volumes, `.data/container-secrets/` (or its configured path), and `.data/enterprise-secrets/` (or the path in `ORDIVANT_ENTERPRISE_SECRETS_DIR`). Preserve the Identity and Code configuration and token files in the enterprise secrets directory together with model and SSO encryption keys. [Backup and restore](guide/operations.md)
 
 Only in a fresh trial installation with no real accounts or business data, you may add DEMO examples before initializing execution or signing in for the first time:
 

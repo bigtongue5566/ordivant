@@ -3,7 +3,7 @@ import { t } from '../i18n';
 import { describeApiError } from '../i18n/errors';
 
 const authApiPrefix = import.meta.env.VITE_AUTH_API_PREFIX || '/auth-api';
-const publicAuthPaths = new Set(['/status', '/me', '/setup', '/login', '/accept-invitation', '/recover']);
+const publicAuthPaths = new Set(['/status', '/me', '/setup', '/login', '/accept-invitation', '/recover', '/request-recovery']);
 let csrfToken: string | null = null;
 
 export class AuthApiError extends Error {
@@ -42,6 +42,10 @@ function describeError(payload: unknown, status: number): { message: string; cod
     const value = detail as { message?: unknown; code?: unknown };
     const code = typeof value.code === 'string' ? value.code : undefined;
     const translations: Record<string, string> = {
+      scim_managed_user: '此外部帳號的權限由 SCIM 群組管理。',
+      mail_not_retryable: '此郵件已寄出、已過期或目前無法重試。',
+      invalid_mapping: '群組授權設定不正確，請指定確切的產品角色與資源。',
+      invalid_cursor: '稽核查詢時間必須包含時區。',
       account_exists: '此電子郵件已經有帳號。',
       admin_required: '只有管理員可以管理使用者和邀請。',
       auth_throttled: '嘗試次數過多，請稍後再試。',
@@ -100,6 +104,10 @@ function post<T>(path: string, body: unknown) {
 }
 
 export const authApi = {
+  get: <T>(path: string) => request<T>(path),
+  put: <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  post: <T>(path: string, body: unknown) => post<T>(path, body),
+  requestRecovery: (email: string) => post<{ accepted: boolean }>('/request-recovery', { email }),
   status: () => request<IdentityStatus>('/status'),
   me: () => request<IdentitySession>('/me'),
   setup: (body: { name: string; email: string; password: string }) => post<IdentitySession>('/setup', body),

@@ -23,6 +23,7 @@ function decodeHtmlText(value) {
 let server;
 try {
   server = await createServer({
+    configLoader: 'runner',
     configFile: resolve(frontendRoot, 'vite.config.ts'),
     root: frontendRoot,
     server: { middlewareMode: true, hmr: false, watch: null },

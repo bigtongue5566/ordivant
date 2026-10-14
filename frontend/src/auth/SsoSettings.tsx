@@ -261,6 +261,8 @@ export function EnterpriseSsoPanel() {
             <Form.Item name="groups_claim" label={t('群組 claim')}><Input placeholder="groups" /></Form.Item>
           </div>
           <Form.Item name="require_email_verified" label={t('要求企業服務確認電子郵件')} valuePropName="checked"><Switch checkedChildren={t('要求')} unCheckedChildren={t('不要求')} /></Form.Item>
+          <Form.Item name="required_acr" label={t('允許的登入強度（acr）')} extra={t('填入身分服務實際提供的強度值；登入時必須符合其中一個。')}><Select mode="tags" /></Form.Item>
+          <Form.Item name="required_amr" label={t('必要驗證方式（amr）')} extra={t('例如 mfa；必須全部出現在已驗證的登入權杖中。設定登入強度時，成員須使用僅企業登入政策。')}><Select mode="tags" /></Form.Item>
           <Form.Item name="provisioning" label={t('帳號建立方式')} rules={[{ required: true }]} extra={t('僅限允許網域內的已驗證帳號。JIT 帳號會套用下方預設與群組授權；沒有產品授權就無法進入產品。')}><Select options={[{ value: 'invited_only', label: t('僅限受邀成員') }, { value: 'jit', label: t('首次登入自動建立成員（JIT）') }]} /></Form.Item>
           <div className="auth-sso-subsection"><div className="auth-section-heading"><div><strong>{t('預設產品權限')}</strong><span>{t('JIT 新帳號套用；只會授予明確選取的資源。')}</span></div></div><PermissionEditor value={defaultPermissions} catalogs={catalogs} onChange={setDefaultPermissions} /><Button size="small" onClick={() => void reloadCatalogs()}>{t('重新載入資源')}</Button></div>
           <div className="auth-sso-subsection"><div className="auth-section-heading"><div><strong>{t('群組權限對應')}</strong><span>{t('使用群組 claim 的完整名稱；對應權限只套用到列出的產品與資源。')}</span></div><Button size="small" icon={<PlusOutlined />} onClick={() => openMapping(null)}>{t('新增群組')}</Button></div><Table rowKey="group" size="small" dataSource={groupMappings} columns={mappingColumns} pagination={false} locale={{ emptyText: t('尚未設定群組對應') }} scroll={{ x: 450 }} /></div>

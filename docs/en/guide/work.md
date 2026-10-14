@@ -58,3 +58,21 @@ See the [execution guide](../execution-usage.md) for Run states, waiting and sto
 - **Reviewer:** reviews submissions and cannot accept their own. Managers and Administrators can also review within their authorized scope.
 
 Organization administrators create Projects, invite members, and grant product roles. Work access is based on Project scope and manager, worker, or reviewer identity; there is no separate Work Reader role. A human sign-in session does not become an Agent or Runtime credential.
+
+## Planning workspace {#planning-workspace}
+
+In the Work sidebar, open **Planning workspace** and select a Project. Use **Board** to review task lifecycle columns and **Backlog order** to adjust project priority. Search and filters narrow the list by status, work type, Sprint, milestone, assignee, and overdue state. Enter a name and choose **Save query** to load your own saved filters later.
+
+Managers can choose **Planning** on a task row to edit its work type (task, story, bug, or epic), Epic link, start and due dates, Sprint, milestone, estimate points, planning stage, and project custom fields. Moving an item up or down in Backlog changes its order only. A stage must match the task's current status. Board status controls allow backlog, ready, and cancelled transitions; execution, blocked, review, and completion remain governed by the existing execution and review flows.
+
+Members with management permission can create Sprints, milestones, custom fields, planning stages, event rules, and task intake forms under **Planning settings**. A Project can have only one active Sprint at a time; closing a Sprint does not complete its tasks. After a task uses a custom field, its key and type cannot be changed. Rules run synchronously when a task is created or updated and can apply a label, assign an owner, or move a backlog task to ready. They do not dispatch Agent Runs, claim tasks, or complete reviews.
+
+**Task intake** lets a signed-in Project member select an active form and submit a title, description, and its configured fields. Submission creates a backlog task for authorized members to triage, order, and assign. This is not an anonymous public form.
+
+Choose **Worklogs** on a task row to record minutes, start time, and a summary under the signed-in person's identity. Managers can review worklogs, cycle time, and member capacity under **Worklogs and reports**, and import or export CSV. Managers must explicitly set weekly capacity in minutes for each Project participant (person or Agent); utilization remains blank until set, with no system estimate. Cycle time starts at a task's first execution and ends when an independent review accepts it, including rework and review wait; it is not effort spent. CSV import validates the whole batch before writing, so invalid input does not create partial rows; export protects spreadsheet formulas. Reports show recorded observations rather than forecasts of future effort or cost, and Agent-reported cost is not verified spend.
+
+## Attachments, following, and the collaboration center {#resource-collaboration-center}
+
+In a Task's **Attachments and collaboration** panel, upload or download an attachment while you retain access, follow updates, or post a comment that mentions an eligible teammate or Agent. Each file is limited to 10 MiB; the list shows its filename, size, and SHA-256 digest. Comment and attachment notices appear in the shared collaboration center. Following a resource does not send email.
+
+Use the bell at the top right to open **Notification center**, review notices, and mark them read. The search button searches content across Work, Knowledge, and Code services available to your account. Results include only resources you can currently access. If a service is unavailable, its error is shown separately instead of treating missing results as a successful search. Search needs no LLM. Resource links recheck access when opened; revoked permissions do not expose previously available content.

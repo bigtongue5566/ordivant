@@ -5,6 +5,10 @@
 
 This page explains what is available today and what is not supported yet. It does not promise delivery dates. Use [GitHub Issues](https://github.com/ordivant-ai/ordivant/issues) to suggest needs, discuss them, or follow progress; a request does not guarantee development.
 
+## New in v0.3.0 {#unreleased-development}
+
+v0.3.0 adds Work planning, Knowledge document organization, and cross-product attachments, mentions, subscriptions, notifications, and search. It also adds SCIM, SMTP, OIDC login policies, and audit administration. See the [feature tour](./features.md) for operating steps and the [upgrade guide](./release.md) before updating an existing installation. Enterprise integrations require administrator configuration; validate your own IdP/directory and external Git services in your actual environment.
+
 <span id="v0-1-已交付"></span>
 
 ## Available today {#delivered-in-v0-1}
@@ -29,8 +33,8 @@ Regular sign-in, manual tasks, shared document editing, and code collaboration d
 | Work execution | One execution service handles work. | Distributing work across multiple execution services or scaling them automatically. |
 | Approval before actions | A different person can review submitted results. | A pre-approval flow that covers all actions taken through external tools. |
 | Model usage and cost | Set per-response output, run-turn, and time limits; view usage records. | Reliable price calculation across all providers or a hard organization-wide spending limit. |
-| Notifications and code checks | View run events and reported check results. | Built-in email or chat notifications, or a code build service. |
-| Account management | Control access through OIDC groups and account disabling. | Automatic user and group synchronization through SCIM. |
+| Notifications and code checks | In-platform collaboration notifications, SMTP invitation/recovery mail, and upstream Git checks and Actions evidence. | Email/chat notifications for all collaboration events; running CI on behalf of upstream services. |
+| Account management | OIDC groups, account disabling, SCIM 2.0 Users/Groups, and login policies. | Validate each customer IdP/directory lifecycle integration; SCIM bulk and automatic account claims by email are unsupported. |
 | External tool sign-in | Connect MCP tools using an access token. | Interactive tool sign-in or Agent-to-Agent (A2A) connections. |
 | Knowledge import | Save and search text documents. | Automatic document parsing, image text recognition, semantic indexing, or batch source synchronization. |
 | Sandbox isolation | Docker execution denies network access by default and shares the host kernel. | Virtual-machine-level isolation or execution distributed across multiple services. |

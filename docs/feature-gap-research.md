@@ -4,6 +4,8 @@
 
 更新：2026-10-08（Asia/Taipei）。原研究於 2026-10-07 由 PM 與三位 luna-worker 盤點程式、契約及驗收紀錄，參考官方協定與產品文件。使用者已選定 **F03 Run 控制台、F04 自動流程／Agent 範本、F05 工具連接／沙箱**，已完成實作與本機整合驗收；本頁同步區分第一版能力與仍待開發的範圍。
 
+本頁的功能缺口與 F11 SCIM 候選是 2026-10-08 的歷史快照。2026-10-15 已加入 SCIM 實作；目前的客戶租戶驗收狀態見[專案計畫](project-plan.md#p0-p1-acceptance-ledger)。
+
 本輪功能說明與證據見 [執行功能](execution-usage.md)／[驗收](execution-validation.md)。接續優先候選是 **執行前審批、總 token／金額治理、通知與真實 CI 整合**；企業文件匯入、既有版控、SCIM 等需求仍保留。
 
 排序先假設「一家企業私有部署，團隊共同使用」。如果改為同一套服務承載多家客戶，租戶隔離與每個租戶的 Identity／IdP 設定必須提前。
@@ -84,7 +86,7 @@ P0 是下一輪核心操作能力；P1 是企業日常使用與導入功能；P2
 | 候選 | 現況 | 建議啟動條件與最小交付 |
 |---|---|---|
 | 本機管理員 MFA／Passkey | 企業 MFA 可交給 IdP；本機帳號沒有 TOTP／WebAuthn | 若管理員復原帳號也必須第二因素，提供 enrollment／驗證／復原政策及安全審計。 |
-| 稽核匯出、SIEM 與保留政策 | 有資料庫 audit 與受限讀取，缺匯出／保留／防竄改機制 | 先做可分頁 JSON／CSV、可配置保留、可靠的事件匯出；有防竄改要求時再加簽章／hash chain／WORM 儲存與驗證。 |
+| 稽核整合、SIEM 與防竄改 | Identity 已有受限 JSONL 匯出、複合游標分頁及明確套用的保留期；尚無 SIEM 推送、簽章／hash chain 或 WORM 防竄改儲存 | 當組織需集中關聯 Identity 與產品事件時，先提供有界、可重試的 SIEM／事件匯出整合；如需防竄改，再加入簽章／hash chain／WORM 儲存與驗證。 |
 | Vault／KMS／Secret Manager | 用戶端密鑰／模型金鑰已在本機加密；Compose 機密以掛載檔案提供 | 當金鑰管理要集中或跨節點時，增加外部機密後端、憑證輪替與復原流程。 |
 | 自動備份、還原演練、監控與 HA | 有 health、具名 volumes、重啟持久化及手動備份說明；完整 restore／HA 未驗收 | 正式運行前制定 RPO／RTO，驗證資料庫、key、Pi 與 Git／附件一致還原；加入告警／metrics，需求升高後再處理 worker partition／HA。Pi storage 維持單一擁有者。 |
 

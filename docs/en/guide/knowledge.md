@@ -56,3 +56,17 @@ Create a title and body in “Decision records,” optionally linking related do
 - **Reader:** reads shared drafts and history, searches, and copies citations; cannot edit or publish.
 
 Identity administrators grant membership in explicit Space scopes. Signing in to Knowledge does not grant access to every Space, and a URI is not cross-product authorization. See the [administration guide](administration.md) for managing members.
+
+## Page trees and templates {#page-tree-and-templates}
+
+In the document library, choose **New document** and select a built-in PRD, meeting notes, Architecture Decision Record (ADR), or Standard Operating Procedure (SOP) from **Document template**, or write from scratch. During creation, you can choose a **Parent document** in the same Space; the list displays the hierarchy with indentation. Writers and Managers can choose **Document structure** in the reader to change the parent or archive the document. Trees cannot cross Spaces or contain cycles.
+
+Archived documents are hidden from the default search list. Turn on **Show archived** to manage them again. Archiving does not delete a document or its versions. If it has children, move each child to another parent before archiving it. A Space Writer or Manager can also choose **Create space template** in the new-document flow, then enter a name, description, and Markdown body. A custom template belongs only to that Space.
+
+## Comments, Markdown, and version comparisons {#comment-format-compare-restore}
+
+Select text in the rendered document preview, then add a comment under **Document comments**. The comment keeps the quoted text and the published version it refers to. Readers can view comments; Writers and Managers can comment, reply one level deep, resolve a thread, or reopen it. Comments are displayed as plain text. When the document changes, an older-version quote is marked as stale and is not silently moved to the new version.
+
+The latest shared draft has bold, italic, link, image-Markdown, and table tools, plus a live preview. These controls insert Markdown into the same shared draft. The image tool inserts a URL and alt text; it does not upload an image. Canonical content remains the live-collaborative Markdown draft. This is not a second synchronized document or a full WYSIWYG block editor.
+
+Writers and Managers can choose **Compare versions** in the reader and select two published versions to inspect their diff. After selecting a historical version, **Restore version** creates a new immutable version using that content; it never rewrites the old version. A stale current version or unpublished collaborator changes in the shared draft causes a conflict and stops the restore. Resolve the shared-draft conflict before trying again.

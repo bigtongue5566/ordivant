@@ -125,8 +125,136 @@ export type Task = {
   progress: number;
   handoff: string | null;
   budget_usd: number;
+  work_type?: 'task' | 'story' | 'bug' | 'epic';
+  epic_id?: string | null;
+  due_at?: string | null;
+  start_at?: string | null;
+  sprint_id?: string | null;
+  milestone_id?: string | null;
+  estimate_points?: number | null;
+  rank?: number;
+  stage_id?: string | null;
+  custom_fields?: Record<string, string | number | boolean | null>;
   created_at: string;
   updated_at: string;
+};
+
+export type PlanningSprint = {
+  id: string;
+  project_id: string;
+  name: string;
+  goal: string;
+  start_at: string | null;
+  end_at: string | null;
+  status: 'planned' | 'active' | 'closed';
+};
+
+export type PlanningMilestone = {
+  id: string;
+  project_id: string;
+  name: string;
+  due_at: string | null;
+  description: string;
+  status: 'open' | 'closed';
+};
+
+export type PlanningField = {
+  id: string;
+  project_id: string;
+  key: string;
+  name: string;
+  kind: 'text' | 'number' | 'boolean' | 'select';
+  required: boolean;
+  options: string[];
+  active: boolean;
+};
+
+export type PlanningStage = {
+  id: string;
+  project_id: string;
+  name: string;
+  category: TaskStatus;
+  rank: number;
+  active: boolean;
+};
+
+export type PlanningRule = {
+  id: string;
+  project_id: string;
+  name: string;
+  event: 'task.created' | 'task.updated';
+  conditions: { work_type?: string; priority?: Priority; status?: TaskStatus; label?: string };
+  action: 'label' | 'assign' | 'ready';
+  parameters: { label?: string; assignee_principal_id?: string };
+  enabled: boolean;
+};
+
+export type IntakeFormDefinition = {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  work_type: Task['work_type'];
+  fields: string[];
+  active: boolean;
+};
+
+export type PlanningMetadata = {
+  sprints: PlanningSprint[];
+  milestones: PlanningMilestone[];
+  fields: PlanningField[];
+  stages: PlanningStage[];
+  rules: PlanningRule[];
+  forms: IntakeFormDefinition[];
+};
+
+export type SavedTaskQuery = {
+  id: string;
+  name: string;
+  project_id: string;
+  filters: Record<string, string | boolean>;
+};
+
+export type TaskWorklog = {
+  id: string;
+  task_id: string;
+  principal_id: string;
+  minutes: number;
+  started_at: string;
+  description: string;
+  created_at: string;
+};
+
+export type PlanningCapacityRow = {
+  principal_id: string;
+  name: string;
+  kind: 'human' | 'agent';
+  observed_minutes: number;
+  weekly_minutes: number | null;
+  observed_week_minutes: number;
+  assigned_open_tasks: number;
+  assigned_estimate_points: number;
+  utilization_percent: number | null;
+};
+
+export type PlanningReports = {
+  totals: {
+    tasks: number;
+    by_status: Record<string, number>;
+    estimate_points: number;
+  };
+  cycle_time: {
+    basis: string;
+    samples: number;
+    average_seconds: number | null;
+    median_seconds: number | null;
+  };
+  capacity: PlanningCapacityRow[];
+  week_start: string;
+  worklogs: {
+    entries: number;
+    observed_minutes: number;
+  };
 };
 
 export type Execution = {

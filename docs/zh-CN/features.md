@@ -2,6 +2,8 @@
 
 本指南结合日常场景，说明各项功能的入口、操作结果和现有限制。Work、Knowledge 和 Code 都支持真人与 Agent 在同一产品流程中协作；常规人工操作不需要 LLM。Work 管理任务、真人执行和 Agent Run；Knowledge 管理共同草稿、文档版本与决策；Code 管理连接到 Gitea 的仓库与 PR，并保存 Ordivant 讨论和审核记录。先查看[项目介绍](./overview.md)，再按以下场景操作。
 
+本指南介绍 v0.3.0 的功能。如果画面没有下述入口，请向管理员确认已安装版本、产品权限和所需的集成配置。
+
 ## 真人与 Agent 协作 {#human-and-agent-collaboration}
 
 ### 场景 {#human-and-agent-collaboration-scenario}
@@ -156,7 +158,7 @@ ordivant://knowledge/spaces/{space_id}/documents/{document_id}/versions/{version
 
 ### 结果与限制 {#code-pull-requests-result}
 
-Code 的 repository、branch、commit 和 PR 由部署端配置的 Gitea 保存；尚未配置 Gitea 时无法执行写入操作。真人和 Agent 都可在 Ordivant 中讨论和审核；每条审核绑定 PR head SHA，head 更新后旧审核会过期。Ordivant 记录不会成为 Gitea approval，也不代表 CI 或 Work Task 验收。使用“回报状态”记录的状态会标记为 Agent 回报，并不证明 CI 真正执行过测试。已验证签名的 Gitea webhook 会显示不同的来源标签；仍需打开上游 check 记录确认实际运行内容。如果只需查看现有 GitHub、GitLab 或 Gitea PR 状态，可使用已配置的 Work 只读集成，无须部署 Code。
+Code 的 repository、branch、commit 和 PR 由部署端配置的 Gitea 保存；尚未配置 Gitea 时无法执行写入操作。PR 详情也会读取当前 head SHA 的 Gitea 分支规则、核准、状态检查和 Actions；若为该 repository 配置了 GitHub／GitLab 部署来源，也会显示相同 SHA 的部署记录。Code 只读取这些证据，不会启动 CI 或创建部署；没有 provider 配置时，页面会明确显示证据不可用。真人和 Agent 都可在 Ordivant 中讨论和审核；每条审核绑定 PR head SHA，head 更新后旧审核会过期。Ordivant 记录不会成为 Gitea approval，也不代表 CI 或 Work Task 验收。使用“回报状态”记录的状态会标记为 Agent 回报，并不证明 CI 真正执行过测试。已验证签名的 Gitea webhook 会显示不同的来源标签；仍需打开上游 check 记录确认实际运行内容。如果只需查看现有 GitHub、GitLab 或 Gitea PR 状态，可使用已配置的 Work 只读集成，无须部署 Code。
 
 ## 权限、成员与企业 SSO {#permissions-and-sso}
 
@@ -172,9 +174,9 @@ Code 的 repository、branch、commit 和 PR 由部署端配置的 Gitea 保存�
 
 ### 结果与限制 {#permissions-and-sso-result}
 
-组织管理员授予产品角色和资源范围。各产品的角色分别生效：Work 使用 Manager、Worker、Reviewer；Knowledge 使用 Manager、Writer、Reader；Code 使用 Manager、Writer、Reader。SSO 只建立平台 session，不会自动授予 Project、Space、Agent、Runtime 或 Gitea 权限。管理员须另行向受邀成员提供邀请码；平台不会发送邮件。
+组织管理员授予产品角色和资源范围。各产品的角色分别生效：Work 使用 Manager、Worker、Reviewer；Knowledge 使用 Manager、Writer、Reader；Code 使用 Manager、Writer、Reader。SSO 只建立平台 session，不会自动授予 Project、Space、Agent、Runtime 或 Gitea 权限。受邀成员须使用管理员创建的一次性邀请；Identity 设置 SMTP 后会发送邀请邮件，未设置时不会寄信，管理员须通过安全渠道另行交付邀请码。
 
-平台使用 OIDC 连接身份服务；SAML 或 LDAP／Active Directory 可通过选配的 Keycloak broker 接入。产品未提供原生 SAML 端点或 SCIM 帐号同步。请依照[企业登录指南](./enterprise-sso.md)检查实际身份服务租户和策略。
+平台使用 OIDC 连接身份服务；SAML 或 LDAP／Active Directory 可通过选配的 Keycloak broker 接入，平台没有原生 SAML 端点。Identity 提供 SCIM 2.0 Users／Groups，不支持 bulk，也不会按 email 自动认领现有账号；每个客户的 IdP／目录仍须单独验证。请依照[企业登录指南](./enterprise-sso.md)和[管理指南](./guide/administration.md)核对租户设置与限制。
 
 ## 外部工具与隔离沙箱 {#tools-and-sandbox}
 
@@ -197,6 +199,22 @@ Token 会加密保存，之后不会再次显示。当前连接使用 Bearer tok
 沙箱不联网，也不能访问主机目录；不能在线下载依赖或任意 clone repository，只能使用环境中已有的命令和依赖。Run 结束、停止或超时后工作区会清理；需要保留的文件和测试输出须先提交为成果。Docker 沙箱与主机共用 kernel，不等同于 VM／microVM 级隔离。
 
 ![工具连接与沙箱设置](/screenshots/tools-zh-CN.png)
+
+## Work 规划与提报 {#work-planning-and-intake}
+
+在 Work 侧栏打开「规划工作区」，团队可用看板与 Backlog 排序管理 task、story、bug 和 epic，按 Sprint、里程碑、负责人或截止日期筛选，并保存自己的查找。管理员可设置自定义字段、阶段、事件规则和提报表单；已登录的项目成员通过表单提交需求，送出后会创建 backlog 任务。工时与报表显示已记录的观察数据，CSV 导入会先验证整个批次，导出会防止公式注入。这些规划设置不会替代运行／审核流程，也不会派发 Agent；完整操作和限制见[Work 指南](./guide/work.md)。
+
+## Knowledge 页面树与留言 {#knowledge-page-tree-and-comments}
+
+创建文档时可选择 PRD、会议、ADR、SOP 范本或同一 Space 的父文档；Reader 默认搜索不显示已封存页面。Writer／Manager 可添加带版本引用的留言、回复并解决讨论、比较版本，或以旧版内容创建新的还原版本。共同草稿保留 Markdown 作为唯一内容来源，工具栏插入格式、链接、图片 URL 或表格并实时预览；这不是完整 WYSIWYG 编辑器。详见[Knowledge 指南](./guide/knowledge.md)。
+
+## 附件、追踪通知与跨产品搜索 {#shared-attachments-notifications-search}
+
+Work Task、Knowledge 文档和 Code PR 可使用附件与协作面板，查看／上传有权限的附件、追踪更新、留言并提及符合条件的成员。共用协作中心可查看通知并标记已读，也可跨当前账号有权限的产品搜索工作、文档和代码协作；服务无法连接时会明确显示错误。附件有单个文件大小限制，通知只显示在平台中，不会通过 SMTP 发送；全文搜索不需要 LLM。
+
+## 企业布建、MFA 与审计 {#enterprise-provisioning-mfa-audit}
+
+管理员在「账号与安全性」的「企业治理」中配置 SCIM 群组到产品／资源的明确授权、查看邮件队列、设置审计保留并以 JSONL 导出 Identity 记录。SCIM 必须使用部署管理员配置的专用凭证；它不会因 email 相同而自动认领或合并现有账号，群组也不能授予 admin。要求 MFA 时，Identity 会依据外部 IdP 已验证的 OIDC acr／amr claims 强制登录政策；实际第二因素由 IdP 提供。未设置 SMTP 时不会发送邀请或恢复邮件。设置步骤见[管理指南](./guide/administration.md)和[企业登录指南](./enterprise-sso.md)。
 
 ## 更多用户指南 {#next-steps}
 

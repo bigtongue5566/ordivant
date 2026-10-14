@@ -68,6 +68,12 @@ def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
+def _set_task_status(task: Task, status: str) -> None:
+    if task.status != status:
+        task.status = status
+        task.stage_id = None
+
+
 def project_json(project: Project) -> dict:
     return {
         "id": project.id,
@@ -139,6 +145,16 @@ def task_json(session: Session, task: Task) -> dict:
         "progress": task.progress,
         "handoff": task.handoff,
         "budget_usd": task.budget_usd,
+        "work_type": task.work_type,
+        "epic_id": task.epic_id,
+        "due_at": _iso(task.due_at),
+        "start_at": _iso(task.start_at),
+        "sprint_id": task.sprint_id,
+        "milestone_id": task.milestone_id,
+        "estimate_points": task.estimate_points,
+        "rank": task.rank,
+        "stage_id": task.stage_id,
+        "custom_fields": _loads(task.custom_fields_json, {}),
         "created_at": _iso(task.created_at),
         "updated_at": _iso(task.updated_at),
     }
@@ -245,6 +261,13 @@ def add_audit(
         created_at=now_utc(),
     )
     session.add(item)
+    if entity_type == "task":
+        task = session.get(Task, entity_id)
+        if task is not None:
+            from .collaboration import emit
+
+            mentions = [task.assignee_principal_id] if task.assignee_principal_id else []
+            emit(session, "task", entity_id, item.id, actor.id, action, mentions=mentions)
     return item
 
 
@@ -527,25 +550,50 @@ def _task_values(value: dict) -> dict:
         "progress": value.get("progress", 0),
         "handoff": value.get("handoff"),
         "budget_usd": value.get("budget_usd", 0),
+        "work_type": value.get("work_type", "task"),
+        "epic_id": value.get("epic_id"),
+        "due_at": value.get("due_at"),
+        "start_at": value.get("start_at"),
+        "sprint_id": value.get("sprint_id"),
+        "milestone_id": value.get("milestone_id"),
+        "estimate_points": value.get("estimate_points"),
+        "rank": value.get("rank", 0),
+        "stage_id": value.get("stage_id"),
+        "custom_fields_json": json.dumps(value.get("custom_fields", {}), ensure_ascii=False, separators=(",", ":")),
         "created_at": now,
         "updated_at": now,
     }
 
 
 def create_task(session: Session, actor: Principal, value: dict) -> dict:
-    require_project(session, actor, value["project_id"])
+    from . import planning
+
+    value = dict(value)
+    intake_submission = value.pop("intake_submission", False)
+    project = require_project(session, actor, value["project_id"])
+    # Metadata and hierarchy mutations share the same project-before-task lock order.
+    session.refresh(project, with_for_update=True)
     _validate_parent_assignment(session, actor, value["project_id"], value.get("parent_task_id"))
     agent = actor_agent(session, actor)
-    if actor.role not in ACTIVE_ROLES:
+    if actor.role not in ACTIVE_ROLES and not intake_submission:
         if actor.kind != "agent" or actor.role != "worker" or value.get("assignee_id") not in {None, agent.id if agent else None}:
             raise forbidden()
         if value.get("status", "ready") not in {"backlog", "ready"}:
             raise bad_request("invalid_initial_status", "新任務只能從 backlog 或 ready 開始")
-    if actor.role not in ACTIVE_ROLES and value.get("assignee_principal_id"):
+    if intake_submission and (value.get("assignee_id") or value.get("assignee_principal_id") or value.get("reviewer_id") or value.get("reviewer_principal_id") or value.get("status") != "backlog"):
+        raise bad_request("invalid_intake_task", "表單只能建立未指派的 backlog 任務")
+    if actor.role not in ACTIVE_ROLES and not intake_submission and value.get("assignee_principal_id"):
         raise forbidden("只有管理者可指派其他人員")
     _validate_assignment(session, actor, value["project_id"], value)
     dependencies = value.get("dependency_ids", [])
     _validate_dependencies(session, value["project_id"], None, dependencies)
+    planning_values = {key: value[key] for key in planning.PLANNING_FIELDS if key in value}
+    planning_values.setdefault("custom_fields", {})
+    planning.validate_task_metadata(
+        session, actor, value["project_id"], planning_values, current_status=value.get("status", "ready"),
+        planning_edit=bool(planning.PLANNING_FIELDS.intersection(value)) and not intake_submission,
+    )
+    value.update(planning_values)
     task = Task(**_task_values(value))
     task.key = f"{session.get(Project, task.project_id).key}-{task.id.replace('-', '')[:8].upper()}"
     session.add(task)
@@ -554,9 +602,10 @@ def create_task(session: Session, actor: Principal, value: dict) -> dict:
         session.add(TaskDependency(id=new_id(), task_id=task.id, dependency_id=dependency_id))
     session.flush()
     if dependencies and not _dependencies_done(session, task.id) and task.status == "ready":
-        task.status = "blocked"
+        _set_task_status(task, "blocked")
         task.blocked_reason = "dependencies_pending"
-    add_audit(session, actor, "task.created", "task", task.id, task.project_id, {"key": task.key, "status": task.status})
+    event = add_audit(session, actor, "task.created", "task", task.id, task.project_id, {"key": task.key, "status": task.status})
+    planning.fire_task_rules(session, task, "task.created", event.id)
     session.flush()
     return task_json(session, task)
 
@@ -568,6 +617,11 @@ def list_tasks(
     status: str | None = None,
     query: str | None = None,
     ready_only: bool = False,
+    work_type: str | None = None,
+    sprint_id: str | None = None,
+    milestone_id: str | None = None,
+    assignee_principal_id: str | None = None,
+    overdue: bool = False,
 ) -> list[dict]:
     ids = principal_projects(session, actor.id)
     stmt = select(Task).where(Task.project_id.in_(ids))
@@ -578,6 +632,18 @@ def list_tasks(
         if status not in TASK_STATES:
             raise bad_request("invalid_status", "status 不合法")
         stmt = stmt.where(Task.status == status)
+    if work_type:
+        if work_type not in {"task", "story", "bug", "epic"}:
+            raise bad_request("invalid_work_type", "work_type 不合法")
+        stmt = stmt.where(Task.work_type == work_type)
+    if sprint_id:
+        stmt = stmt.where(Task.sprint_id == sprint_id)
+    if milestone_id:
+        stmt = stmt.where(Task.milestone_id == milestone_id)
+    if assignee_principal_id:
+        stmt = stmt.where(Task.assignee_principal_id == assignee_principal_id)
+    if overdue:
+        stmt = stmt.where(Task.due_at.is_not(None), Task.due_at < now_utc(), Task.status.not_in({"done", "cancelled"}))
     if ready_only:
         now = now_utc()
         expired_task_ids = select(Execution.task_id).where(
@@ -587,7 +653,7 @@ def list_tasks(
     if query:
         like = f"%{query.strip()}%"
         stmt = stmt.where(or_(Task.title.ilike(like), Task.key.ilike(like), Task.description.ilike(like)))
-    stmt = stmt.order_by(Task.priority.asc(), Task.created_at.desc())
+    stmt = stmt.order_by(Task.rank.asc(), Task.created_at.asc())
     result = []
     for item in session.scalars(stmt):
         value = task_json(session, item)
@@ -598,7 +664,12 @@ def list_tasks(
 
 
 def patch_task(session: Session, actor: Principal, task_id: str, patch: dict) -> dict:
-    task = _lock_task(session, task_for_actor(session, actor, task_id))
+    from . import planning
+
+    task = task_for_actor(session, actor, task_id)
+    project = require_project(session, actor, task.project_id)
+    session.refresh(project, with_for_update=True)
+    task = _lock_task(session, task)
     if task.status in {"in_progress", "in_review"} and actor.role not in ACTIVE_ROLES:
         raise forbidden()
     if actor.role not in ACTIVE_ROLES:
@@ -606,7 +677,10 @@ def patch_task(session: Session, actor: Principal, task_id: str, patch: dict) ->
     values = {
         key: value
         for key, value in patch.items()
-        if value is not None or key in {"assignee_id", "reviewer_id", "assignee_principal_id", "reviewer_principal_id"}
+        if value is not None or key in {
+            "assignee_id", "reviewer_id", "assignee_principal_id", "reviewer_principal_id", "epic_id", "due_at",
+            "start_at", "sprint_id", "milestone_id", "estimate_points", "stage_id", "custom_fields",
+        }
     }
     if not values:
         return task_json(session, task)
@@ -645,16 +719,16 @@ def patch_task(session: Session, actor: Principal, task_id: str, patch: dict) ->
                 if agent and agent.status == "busy":
                     agent.status = "available"
                 add_audit(session, actor, "execution.released", "execution", execution.id, task.project_id, {"reason": "task_cancelled"})
-        task.status = values.pop("status")
+        _set_task_status(task, values.pop("status"))
     if "dependency_ids" in values:
         _replace_dependencies(session, task, values.pop("dependency_ids"))
         if task.status not in {"in_progress", "in_review", "done", "cancelled"}:
             if _dependencies_done(session, task.id):
-                task.status = "ready" if task.status == "blocked" and task.blocked_reason == "dependencies_pending" else task.status
+                _set_task_status(task, "ready" if task.status == "blocked" and task.blocked_reason == "dependencies_pending" else task.status)
                 if task.blocked_reason == "dependencies_pending":
                     task.blocked_reason = None
             elif task.status == "ready":
-                task.status = "blocked"
+                _set_task_status(task, "blocked")
                 task.blocked_reason = "dependencies_pending"
     if "assignee_id" in values and values["assignee_id"]:
         agent = agent_for_task(session, actor, values["assignee_id"], task.project_id)
@@ -664,6 +738,14 @@ def patch_task(session: Session, actor: Principal, task_id: str, patch: dict) ->
         agent = agent_for_task(session, actor, values["reviewer_id"], task.project_id)
         if agent.role != "reviewer" or agent.status == "disabled":
             raise bad_request("invalid_reviewer", "reviewer_id 必須是可用的 reviewer agent")
+    planning_values = {key: values.pop(key) for key in list(values) if key in planning.PLANNING_FIELDS}
+    if planning_values:
+        if "custom_fields" in planning_values and planning_values["custom_fields"] is None:
+            planning_values["custom_fields"] = {}
+        planning.validate_task_metadata(
+            session, actor, task.project_id, planning_values, current_status=values.get("status", task.status), task_id=task.id
+        )
+        planning.set_task_metadata(task, planning_values)
     mappings = {
         "acceptance_criteria": "acceptance_criteria_json",
         "labels": "labels_json",
@@ -671,7 +753,8 @@ def patch_task(session: Session, actor: Principal, task_id: str, patch: dict) ->
     for key, value in values.items():
         setattr(task, mappings.get(key, key), _json(value) if key in mappings else value)
     task.updated_at = now_utc()
-    add_audit(session, actor, "task.updated", "task", task.id, task.project_id, {"fields": sorted(patch)})
+    event = add_audit(session, actor, "task.updated", "task", task.id, task.project_id, {"fields": sorted(patch)})
+    planning.fire_task_rules(session, task, "task.updated", event.id)
     session.flush()
     return task_json(session, task)
 
@@ -721,7 +804,7 @@ def _close_expired(session: Session, task: Task) -> None:
             agent = session.get(Agent, execution.agent_id)
             if agent and agent.status == "busy":
                 agent.status = "available"
-            task.status = "ready" if _dependencies_done(session, task.id) else "blocked"
+            _set_task_status(task, "ready" if _dependencies_done(session, task.id) else "blocked")
             task.blocked_reason = None if task.status == "ready" else "dependencies_pending"
             task.updated_at = now
             add_audit(session, execution_actor(session, execution), "execution.expired", "execution", execution.id, task.project_id, {"task_id": task.id})
@@ -776,11 +859,11 @@ def claim_task(session: Session, actor: Principal, task_id: str, value: dict) ->
     if task.status != "ready":
         raise conflict("task_not_ready", "任務目前不可領取")
     if not _dependencies_done(session, task.id):
-        task.status = "blocked"
+        _set_task_status(task, "blocked")
         task.blocked_reason = "dependencies_pending"
         raise conflict("dependencies_pending", "任務依賴尚未完成")
     now = now_utc()
-    claim_values = {"status": "in_progress", "blocked_reason": None, "updated_at": now}
+    claim_values = {"status": "in_progress", "stage_id": None, "blocked_reason": None, "updated_at": now}
     if human_work:
         claim_values["assignee_principal_id"] = actor.id
     result = session.execute(
@@ -812,7 +895,7 @@ def claim_task(session: Session, actor: Principal, task_id: str, value: dict) ->
     session.add(execution)
     if claimed_agent:
         claimed_agent.status = "busy"
-    task.status = "in_progress"
+    _set_task_status(task, "in_progress")
     task.updated_at = now
     add_audit(session, actor, "task.claimed", "task", task.id, task.project_id, {"execution_id": execution.id, "agent_id": execution.agent_id, "executor_kind": "human" if human_work else "agent"})
     session.flush()
@@ -849,7 +932,7 @@ def _leased_execution(
         execution.status = "expired"
         execution.finished_at = now_utc()
         execution.lease_token_hash = None
-        task.status = "ready" if _dependencies_done(session, task.id) else "blocked"
+        _set_task_status(task, "ready" if _dependencies_done(session, task.id) else "blocked")
         task.blocked_reason = None if task.status == "ready" else "dependencies_pending"
         task.updated_at = now_utc()
         agent = session.get(Agent, execution.agent_id)
@@ -909,7 +992,7 @@ def block_task(session: Session, actor: Principal, task_id: str, value: dict) ->
     task = task_for_actor(session, actor, task_id)
     execution = _leased_execution(session, actor, task, value["execution_id"], value.get("lease_token"))
     _finish_execution(session, task, execution, "released")
-    task.status = "blocked"
+    _set_task_status(task, "blocked")
     task.blocked_reason = value["reason"]
     task.handoff = value.get("handoff")
     add_audit(session, actor, "task.blocked", "task", task.id, task.project_id, {"execution_id": execution.id, "reason": value["reason"]})
@@ -921,7 +1004,7 @@ def release_task(session: Session, actor: Principal, task_id: str, value: dict) 
     task = task_for_actor(session, actor, task_id)
     execution = _leased_execution(session, actor, task, value["execution_id"], value.get("lease_token"))
     _finish_execution(session, task, execution, "released")
-    task.status = "ready"
+    _set_task_status(task, "ready")
     task.blocked_reason = None
     task.handoff = value["handoff"]
     task.progress = 0
@@ -939,7 +1022,7 @@ def unblock_task(session: Session, actor: Principal, task_id: str) -> dict:
         raise conflict("task_not_blocked", "只有 blocked 任務可解除")
     if not _dependencies_done(session, task.id):
         raise conflict("dependencies_pending", "仍有未完成的依賴")
-    task.status = "ready"
+    _set_task_status(task, "ready")
     task.blocked_reason = None
     task.updated_at = now_utc()
     add_audit(session, actor, "task.unblocked", "task", task.id, task.project_id, {})
@@ -960,7 +1043,7 @@ def submit_result(session: Session, actor: Principal, task_id: str, value: dict)
     execution.submitted_by_principal_id = actor.id
     execution.lease_token_hash = None
     task.progress = 100
-    task.status = "in_review"
+    _set_task_status(task, "in_review")
     task.blocked_reason = None
     task.updated_at = now
     for entry in value["artifacts"]:
@@ -1007,19 +1090,19 @@ def review_result(session: Session, actor: Principal, task_id: str, value: dict)
     accepted = value["decision"] == "accept"
     submitted.status = "accepted" if accepted else "rejected"
     if accepted:
-        task.status = "done"
+        _set_task_status(task, "done")
         task.blocked_reason = None
         session.flush()
         for successor in session.scalars(
             select(Task).join(TaskDependency, TaskDependency.task_id == Task.id).where(TaskDependency.dependency_id == task.id)
         ):
             if successor.status == "blocked" and successor.blocked_reason == "dependencies_pending" and _dependencies_done(session, successor.id):
-                successor.status = "ready"
+                _set_task_status(successor, "ready")
                 successor.blocked_reason = None
                 successor.updated_at = now_utc()
                 add_audit(session, actor, "task.unblocked", "task", successor.id, successor.project_id, {"dependency_id": task.id})
     else:
-        task.status = "ready" if _dependencies_done(session, task.id) else "blocked"
+        _set_task_status(task, "ready" if _dependencies_done(session, task.id) else "blocked")
         task.blocked_reason = None if task.status == "ready" else "dependencies_pending"
         task.progress = 0
     task.updated_at = now_utc()

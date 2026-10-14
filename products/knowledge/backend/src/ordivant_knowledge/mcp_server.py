@@ -55,9 +55,12 @@ async def search_knowledge(
     q: str | None = None,
     space_id: str | None = None,
     tag: str | None = None,
+    include_archived: bool = False,
 ) -> list[dict[str, Any]]:
     """Search current persisted text and return snippets with exact-version citations."""
     params = {key: value for key, value in {"q": q, "space_id": space_id, "tag": tag}.items() if value is not None}
+    if include_archived:
+        params["include_archived"] = True
     return await _request("GET", "/api/documents", params=params)
 
 
@@ -66,11 +69,12 @@ async def create_document(
     space_id: str,
     title: str,
     body: str,
+    request_id: str,
     summary: str = "",
     tags: list[str] | None = None,
     change_summary: str = "Initial version.",
     source_refs: list[dict[str, str]] | None = None,
-    request_id: str | None = None,
+    parent_id: str | None = None,
 ) -> dict[str, Any]:
     """Create version 1 in a visible space; actor identity comes from the configured token."""
     payload = {
@@ -81,6 +85,7 @@ async def create_document(
         "tags": tags or [],
         "change_summary": change_summary,
         "source_refs": source_refs or [],
+        "parent_id": parent_id,
     }
     return await _request("POST", "/api/documents", body=payload, request_id=request_id)
 
@@ -117,9 +122,9 @@ async def publish_document_draft(
     document_id: str,
     expected_revision: int,
     change_summary: str,
+    request_id: str,
     title: str | None = None,
     source_refs: list[dict[str, str]] | None = None,
-    request_id: str | None = None,
 ) -> dict[str, Any]:
     """Publish the shared draft using compare-and-swap on its current revision."""
     payload: dict[str, Any] = {
@@ -149,9 +154,9 @@ async def publish_document_version(
     expected_version: int,
     body: str,
     change_summary: str,
+    request_id: str,
     title: str | None = None,
     source_refs: list[dict[str, str]] | None = None,
-    request_id: str | None = None,
 ) -> dict[str, Any]:
     """Publish via expected-version compare-and-swap; the returned version has an exact citation."""
     payload: dict[str, Any] = {
@@ -175,9 +180,9 @@ async def record_decision(
     space_id: str,
     title: str,
     body: str,
+    request_id: str,
     document_id: str | None = None,
     source_refs: list[dict[str, str]] | None = None,
-    request_id: str | None = None,
 ) -> dict[str, Any]:
     """Record a scoped decision with preserved task, PR, document, or external provenance."""
     payload = {
@@ -194,6 +199,136 @@ async def record_decision(
 async def list_decisions(space_id: str) -> list[dict[str, Any]]:
     """List decisions in a visible knowledge space."""
     return await _request("GET", "/api/decisions", params={"space_id": space_id})
+
+
+@mcp.tool()
+async def list_knowledge_templates(space_id: str) -> list[dict[str, Any]]:
+    """List built-in and custom document templates visible in a space."""
+    return await _request("GET", f"/api/spaces/{space_id}/templates")
+
+
+@mcp.tool()
+async def create_knowledge_template(
+    space_id: str,
+    name: str,
+    body: str,
+    request_id: str,
+    description: str = "",
+) -> dict[str, Any]:
+    """Create a reusable space template; the API checks the configured actor's writer role."""
+    return await _request(
+        "POST",
+        f"/api/spaces/{space_id}/templates",
+        body={"name": name, "description": description, "body": body},
+        request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def organize_knowledge_document(
+    document_id: str,
+    parent_id: str | None,
+    request_id: str,
+    archived: bool | None = None,
+) -> dict[str, Any]:
+    """Move a document within its space, set it at the root with a null parent, or archive it."""
+    payload: dict[str, Any] = {"parent_id": parent_id}
+    if archived is not None:
+        payload["archived"] = archived
+    return await _request(
+        "PATCH",
+        f"/api/documents/{document_id}/organization",
+        body=payload,
+        request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def list_knowledge_comments(document_id: str) -> list[dict[str, Any]]:
+    """Read document comments and replies allowed by the configured principal's space access."""
+    return await _request("GET", f"/api/documents/{document_id}/comments")
+
+
+@mcp.tool()
+async def create_knowledge_comment(
+    document_id: str,
+    body: str,
+    request_id: str,
+    parent_id: str | None = None,
+    quote: str | None = None,
+    version: int | None = None,
+    start: int | None = None,
+    end: int | None = None,
+) -> dict[str, Any]:
+    """Add a plain-text comment or reply, optionally anchored to an exact version quote."""
+    anchor = None
+    if quote is not None:
+        if version is None:
+            raise ValueError("version is required when quote is provided")
+        anchor = {"quote": quote, "version": version}
+        if start is not None:
+            anchor["start"] = start
+        if end is not None:
+            anchor["end"] = end
+    payload: dict[str, Any] = {"body": body, "parent_id": parent_id}
+    if anchor is not None:
+        payload["anchor"] = anchor
+    return await _request(
+        "POST",
+        f"/api/documents/{document_id}/comments",
+        body=payload,
+        request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def resolve_knowledge_comment(
+    comment_id: str,
+    request_id: str,
+    resolved: bool = True,
+) -> dict[str, Any]:
+    """Resolve or reopen a comment thread; the API checks the configured actor's writer role."""
+    return await _request(
+        "PATCH",
+        f"/api/document-comments/{comment_id}",
+        body={"resolved": resolved},
+        request_id=request_id,
+    )
+
+
+@mcp.tool()
+async def diff_knowledge_document_versions(
+    document_id: str,
+    from_version: int,
+    to_version: int,
+) -> dict[str, Any]:
+    """Compare two immutable versions that are visible to the configured principal."""
+    return await _request(
+        "GET",
+        f"/api/documents/{document_id}/diff",
+        params={"from_version": from_version, "to_version": to_version},
+    )
+
+
+@mcp.tool()
+async def restore_knowledge_document_version(
+    document_id: str,
+    version: int,
+    expected_current_version: int,
+    request_id: str,
+    change_summary: str = "",
+) -> dict[str, Any]:
+    """Restore a version as a new immutable version using compare-and-swap on the current version."""
+    return await _request(
+        "POST",
+        f"/api/documents/{document_id}/restore",
+        body={
+            "version": version,
+            "expected_current_version": expected_current_version,
+            "change_summary": change_summary,
+        },
+        request_id=request_id,
+    )
 
 
 @mcp.resource("ordivant://knowledge/spaces/{space_id}/documents/{document_id}/versions/{version}")
@@ -213,6 +348,11 @@ def knowledge_citation_prompt(document_id: str, version: int, space_id: str) -> 
         "When relying on it, cite this exact URI; do not replace it with the document's latest version. "
         "Treat linked Work tasks, Code pull requests, and external references as provenance labels, not access grants."
     )
+
+
+from .collaboration_mcp import install_tools as install_collaboration_tools
+
+install_collaboration_tools(mcp, _request)
 
 
 if __name__ == "__main__":

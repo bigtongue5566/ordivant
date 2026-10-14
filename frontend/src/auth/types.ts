@@ -19,7 +19,7 @@ export type IdentityUser = {
   active: boolean;
   permissions: AuthPermissions;
   credential_type?: 'local' | 'sso';
-  permissions_source?: 'manual' | 'sso';
+  permissions_source?: 'manual' | 'sso' | 'scim';
 };
 
 export type IdentitySession = {
@@ -41,6 +41,7 @@ export type IdentitySessionRecord = {
 export type IdentityInvitation = {
   invitation_code: string;
   expires_at: string;
+  mail_queued?: boolean;
 };
 
 export type IdentityStatus = {
@@ -65,6 +66,8 @@ export type IdentitySsoSettings = {
   default_permissions: AuthPermissions;
   group_mappings: Array<{ group: string; permissions: AuthPermissions }>;
   login_policy: 'password_and_sso' | 'sso_only';
+  required_acr: string[];
+  required_amr: string[];
 };
 
 export type IdentitySsoSettingsWrite = Omit<IdentitySsoSettings, 'client_secret_configured' | 'redirect_uri'> & { client_secret?: string };

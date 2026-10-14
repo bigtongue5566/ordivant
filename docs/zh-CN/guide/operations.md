@@ -3,7 +3,7 @@
 
 # 运维与备份 {#operations-and-backups}
 
-本指南说明如何使用 Docker Compose 管理服务、备份数据及启用 Agent 自动执行。所有 Compose 命令都从 repository root 运行。默认部署名称为 `ordivant`，由 `compose.yaml` 固定；默认不需要创建 `.env`。如需自定义名称，请在 repository root 创建 `.env`，设置 `COMPOSE_PROJECT_NAME`，并在该部署期间保持不变。服务机密默认位于 `.data/container-secrets/`；如果设置了 `ORDIVANT_SECRETS_DIR`，请备份该实际路径。
+本指南说明如何使用 Docker Compose 管理服务、备份数据及启用 Agent 自动执行。所有 Compose 命令都从 repository root 运行。默认部署名称为 `ordivant`，由 `compose.yaml` 固定；默认不需要创建 `.env`。如需自定义名称，请在 repository root 创建 `.env`，设置 `COMPOSE_PROJECT_NAME`，并在该部署期间保持不变。服务机密默认位于 `.data/container-secrets/`；如果设置了 `ORDIVANT_SECRETS_DIR`，请备份该实际路径。使用 enterprise overlay 时，还要备份 `.data/enterprise-secrets/` 或 `ORDIVANT_ENTERPRISE_SECRETS_DIR` 指定的位置。
 
 <span id="服務狀態與更新"></span>
 <span id="服务状态与更新"></span>
@@ -21,6 +21,8 @@ docker compose down
 
 默认网页端口是 `8088`，Gitea 是 `3002`。若端口冲突，可在 repository root 的 `.env` 中设置 `ORDIVANT_WEB_PORT` 或 `ORDIVANT_GITEA_PORT`。如果安装时启用了 Runtime、Gitea 等 profile，每条命令都要使用相同的 `--profile` 选项。如果启用 Sandbox，所有命令也必须使用相同的 Compose 文件组合 `-f compose.yaml -f compose.sandbox.yaml`。允许团队从远程访问前，请设置 HTTPS、正式网站来源和安全 Cookie，详见[容器部署指南](../containers.md)。
 
+如果使用 `compose.enterprise.yaml`，所有 Compose 命令（包括启动、停止、更新和备份操作）都要带上相同的 `-f compose.yaml -f compose.enterprise.yaml`，以保留 Identity／Code 只读挂载并维持一致的服务设置。
+
 <span id="需要備份的資料"></span>
 <span id="需要备份的数据"></span>
 
@@ -36,7 +38,7 @@ docker compose down
 | Code | `code_postgres`、`code_data` | Code 范围、repository 绑定、PR 与状态收据 |
 | Gitea（若启用） | `gitea_data` | Repository、分支、提交、PR 的实际 Git 数据 |
 | Keycloak broker（若激活） | `identity_broker_postgres` | Broker realm 与连接设置 |
-| Compose 机密与设置 | 默认 `.data/container-secrets/`；自定义时使用 `ORDIVANT_SECRETS_DIR` 指定的路径；自定义部署还包含 `.env` | 数据库密码／URL、Runtime 和内部服务 token、Gitea 设置、Compose 项目名称与端口设置 |
+| Compose 机密与设置 | `.data/container-secrets/` 或 `ORDIVANT_SECRETS_DIR`；使用 enterprise overlay 时还包括 `.data/enterprise-secrets/` 或 `ORDIVANT_ENTERPRISE_SECRETS_DIR`；自定义部署还包含 `.env` | 数据库密码／URL、Runtime 和内部服务 token、Gitea 设置、Identity／Code enterprise 配置与 token 文件、Compose 项目名称与端口设置 |
 
 实际数据卷清单会依启用的产品和配置文件而异。Work 的 `model-settings.key` 用于解密模型及 MCP 工具连接设置；Identity 的 `sso.key` 用于解密企业 IdP 设置。加密密钥必须与对应数据库和数据卷一起备份，不可单独更换，否则无法解密已有密文。Agent 的执行状态位于 Work 数据卷。每次 sandbox 的工作目录都是临时数据，不是成果保存位置。
 
@@ -54,7 +56,7 @@ docker volume ls --filter "label=com.docker.compose.project=ordivant"
 ## 一致性与还原 {#consistency-and-restoration}
 
 1. 确认备份目标是正确的 Compose 项目名称。使用 `docker compose down` 停止该环境，让文件数据与 PostgreSQL 数据卷保持一致；这不会删除数据。
-2. 使用组织批准的 Docker 数据卷快照或备份工具，备份该项目标记下需要的全部数据卷。也要一并保存默认的 `.data/container-secrets/` 目录，或 `ORDIVANT_SECRETS_DIR` 指定的实际目录；如有自定义 `.env`，也应加密保存。
+2. 使用组织批准的 Docker 数据卷快照或备份工具，备份该项目标记下需要的全部数据卷。也要一并保存默认的 `.data/container-secrets/` 目录，或 `ORDIVANT_SECRETS_DIR` 指定的实际目录；如果使用 enterprise overlay，还须保存 `.data/enterprise-secrets/` 或 `ORDIVANT_ENTERPRISE_SECRETS_DIR` 指定的目录，其中包含 Identity／Code 配置与 token 文件。如有自定义 `.env`，也应加密保存。
 3. 将备份和主机上的机密目录加密保存、限制访问，并定期测试还原。不要把 `.data`、初始设置 token 或 Gitea／服务凭证上传到公开 issue、聊天或 Git。
 4. 还原时先恢复同名 Compose 数据卷及原有机密，再使用相同部署名称、profile 和 Compose 文件组合启动。不要混用不同环境的加密密钥和数据库。
 

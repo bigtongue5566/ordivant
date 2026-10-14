@@ -54,6 +54,42 @@ JSON 使用 UTF-8，时间戳记采 UTC ISO-8601，ID 为字符串。清单端�
 - `GET /api/events?project_id=&task_id=` -> 由新到旧排列的稽核数组，上限 200 笔。
 - `GET /api/overview?project_id=` -> `{counts:{total,ready,in_progress,blocked,in_review,done},agents:{total,available,busy},cost_usd,budget_usd,activity:AuditEvent[]}`。
 
+## P0/P1 规划与企业契约 {#p0-p1-planning-enterprise-contracts}
+
+本节补充 Work 规划、Knowledge 编辑、共用协作和企业布建的 API 保证。真人与 Agent 使用相同的产品资源授权；每个服务只读取自己的数据库。普通人工流程及 REST／MCP 使用不需要 LLM。整合验收状态见[项目计划的 P0/P1 验收清单](project-plan.md#p0-p1-acceptance-ledger)。
+
+### Work 规划 {#p0-p1-work-planning-contract}
+
+Task 规划字段包括 `work_type`、同一 Project 且检查循环的 `epic_id`、`start_at`、`due_at`、`sprint_id`、`milestone_id`、非负 `estimate_points`、`rank`、`stage_id`，以及按 Project 定义验证的 `custom_fields`。这些是规划元数据，不是运行状态。任务列表按 rank 和创建时间排序，并可按类型、Sprint、里程碑、负责人和逾期状态筛选。
+
+`GET /api/projects/{id}/planning` 返回 Sprint、里程碑、自定义字段、阶段、规则和表单。使用 `POST /api/projects/{id}/sprints` 与 `PATCH /api/sprints/{sprint_id}` 管理 Sprint；里程碑、字段、阶段、规则和表单分别使用 `POST /api/projects/{id}/milestones`、`POST /api/projects/{id}/fields`、`POST /api/projects/{id}/stages`、`POST /api/projects/{id}/rules` 和 `POST /api/projects/{id}/forms` 创建，并使用资源级 PATCH 修改。`POST /api/projects/{id}/reorder` 只为该 Project 的不重复任务 ID 赋予排序值。规划设置需要既有 manager/admin 权限；每个 Project 同时最多只有一个 active Sprint，关闭它不会完成任务。自定义字段使用后不可更改 key 或类型；阶段 category 必须与任务当前状态相同。
+
+看板规划控件只允许使用已授权的 backlog、ready、cancelled 状态转移。in_progress、blocked、in_review、done 仍由运行与独立审核流程管理。规则只在普通任务创建或更新时同步触发，可添加标签、指派负责人或将 backlog 设为 ready。触发时会重新确认规则创建者仍为有效 manager；每个事件／规则组合去重，不递归调用、不调用 LLM，也不派发 Agent。
+
+已登录的 Project 成员可通过 `GET /api/forms/{id}` 和 `POST /api/forms/{id}/submit` 提交需求；提交会建立 backlog 任务，不提供匿名入口或额外 Project 权限。`POST/GET /api/tasks/{id}/worklogs` 以登录者身份记录正数分钟和开始时间；不能伪造他人或 Agent 的工时。每周容量由管理者明确设置分钟数，不会推估；使用率比较该周已记录工时与设置容量。周期从任务首次运行开始，到 `task.review.accept` 为止，包含重做和独立审核等待；这不是工时。`GET /api/projects/{id}/reports` 汇总已观察到的周期、工时与容量，不提供未经支持的预测。CSV 导入有行数界限并原子验证，错误不得留下部分写入；导出必须防止试算表公式注入。`/api/saved-queries` 仅保存操作者自己的筛选，读取时仍检查当前权限。
+
+### Knowledge 编辑 {#p0-p1-knowledge-authoring-contract}
+
+文档 `parent_id` 只能指向同一 Space 的文档，并拒绝循环。默认列表排除 archived；若父文档仍有子文档，必须先移动子文档才能封存，不能静默丢失层级。`PATCH /api/documents/{id}/organization` 使用既有 Space 权限，不提供文档级 ACL。
+
+`GET/POST /api/documents/{id}/comments` 管理留言、同一文档的一层回复和可选的已发布版本引用；`PATCH /api/document-comments/{id}` 用于解决或重新开启留言。锚点保留引用文字和版本，发布新版本后标记为 stale；限长的纯文本正文会安全显示。Reader 可查看，授权 Writer 可留言和处理留言。`GET/POST /api/spaces/{id}/templates` 列出或建立 Space 范本；新建文档时可选内置 PRD、meeting、ADR、SOP 范本。
+
+`GET /api/documents/{id}/diff?from_version=N&to_version=M ` 比较授权用户可读的不可变版本。`POST /api/documents/{id}/restore` 要求目标版本与 expected current version，并以 compare-and-swap 新增版本；旧版本不会被改写。当前版本过期或共同草稿有未发布的协作者修改时会拒绝还原。Y.Text Markdown 仍是唯一的共同草稿内容；工具栏和实时预览编辑同一份 Markdown，不维护第二套 WYSIWYG／区块内容。
+
+### 共用协作与搜索 {#p0-p1-shared-collaboration-contract}
+
+每个产品都在 `/api/collaboration/{kind}/{id}` 下提供附件列表／上传、订阅、参与者、讨论留言和通知。下载使用 `/api/collaboration/attachments/{attachment_id}/download`；通知使用 `/api/collaboration/notifications` 和单条已读操作。共用 8 个 MCP 工具使用相同服务授权，不能绕过 REST 的资源范围。产品服务在每次列表或下载时重新检查资源权限。附件有大小限制、不可变并保存摘要，文件名经过安全处理；不会根据提交的 URL 抓取外部内容。提及对象仅限当前有权参与资源的 principal。业务状态与通知在同一事务提交。权限撤销后，通知链接会重新检查权限且不泄漏资源正文。
+
+共用中心聚合 Work、Knowledge、Code 各自服务返回的通知和搜索结果，不跨读数据库。搜索只返回当前有权访问的项目，并分别报告不可用的服务。追踪和协作通知只显示在平台中；SMTP 只用于已配置的 Identity 邀请／恢复邮件 outbox。
+
+### Identity、SCIM 与上游 Git 边界 {#p0-p1-identity-and-git-contract}
+
+SCIM 2 Users／Groups 位于 `/api/scim/v2`，使用独立的部署凭证。布建用户时若 email 已属于 Ordivant 账号，必须返回冲突；不能按 email 自动认领或合并现有账号。群组只授予企业治理中明确配置的产品角色和资源 ID，不能授予 admin。停用用户或更改授权会撤销现有 session。一般 SCIM user PATCH 不能直接更改权限；明确 SSO 账号链接使用 `managed_permissions=false`，保留由 SCIM 群组管理权限的来源。目前不支持 SCIM bulk。
+
+OIDC `required_acr` 和 `required_amr` 只验证外部 IdP 已验证权杖中的 claims：acr 必须符合配置值之一，amr 必须包含全部指定方式。要求 assurance 时，成员必须使用 SSO-only 登录；第二因素由 IdP 执行，Ordivant 不自行生成 MFA。邀请／恢复邮件通过持久 SMTP outbox 发送；未配置邮件时不会寄送。管理员可查看队列并重试未过期项目。稽核导出受 admin 权限保护，有记录数／时间范围限制并过滤机密字段；旧记录仅在明确应用保留策略后删除。
+
+P1 Git 验收要求 provider 证据包含上游 URL、commit SHA 和来源。checks、actions、pipelines、deployment 只能由上游结果证明；Agent receipt 不是 CI。Code 透过 `ORDIVANT_CODE_DEPLOYMENT_CONFIG_FILE` 配置的可选 provider 读取当前 PR head SHA 对应的部署记录。`providers[]` 每项包含 `provider`（`github` 或 `gitlab`）、`token_file`，以及以本地 repository UUID 为 key 的 `repositories`；GitHub 对应使用 `owner`／`name`，GitLab 使用 `project`。API 主机固定为 `api.github.com` 与 `gitlab.com/api/v4`，不接受自定义主机。此 provider 只读取与当前 PR head SHA 相符的部署记录，不会启动 pipeline 或部署；provider／凭证缺少时必须明确显示不可用。inline comment 绑定确切 PR head、文件和行号，head SHA 变化后标记 stale。合并治理依赖真实上游 branch protection、review 与 checks；Ordivant 本地审核不能冒充上游批准。
+
 ## 待处理队列／Runtime {#outbox-runtime}
 
 `POST /api/tasks/{id}/dispatch` 本文 `{agent_id}`；manager／admin 或父任务作用中负责人可调用，回传 `{id,project_id,task_id,agent_id,type:"run_task",payload:object,status:"pending",created_at}`。Agent 必须是 pi Runtime、已获准访问项目、任务为 ready 且相依任务已完成。每个任务只能有一笔待处理 dispatch。

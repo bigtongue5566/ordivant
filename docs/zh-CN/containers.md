@@ -114,18 +114,32 @@ OIDC 可直接连接公司的身份服务，无须额外容器。SAML／LDAP 可
 
 外部 MCP 工具需先在 `.env` 的 `ORDIVANT_TOOL_ALLOWED_HOSTS` 加入精确主机名称，再重启 Work 与运行服务。不要把模型密钥或人员密码放入 `.env`；模型密钥请在管理界面输入。[工具连接操作](execution-usage.md#external-mcp-tools)
 
+### 企业机密文件与 deployment provider {#enterprise-secret-mounts}
+
+企业整合可选用只读 Compose overlay。默认在仓库根目录建立 `.data/enterprise-secrets/identity/` 与 `.data/enterprise-secrets/code/`；如使用其他位置，先在 `.env` 设置 `ORDIVANT_ENTERPRISE_SECRETS_DIR`。将 SCIM token 与 SMTP password file 放在 `identity/`，将 Code 的 `deployment-providers.json` 及其 `token_file` 文件放在 `code/`。两个目录分别只读挂载至 Identity 与 Code 容器的 `/run/ordivant-enterprise`，不会互相暴露。
+
+`.env.compose.example` 列有文件路径设置。常用路径为 `ORDIVANT_SCIM_TOKEN_FILE=/run/ordivant-enterprise/scim-token`、`ORDIVANT_SMTP_PASSWORD_FILE=/run/ordivant-enterprise/smtp-credential` 与 `ORDIVANT_CODE_DEPLOYMENT_CONFIG_FILE=/run/ordivant-enterprise/deployment-providers.json`。这里仅设置容器内文件路径；credential 值只存于服务器文件，不要写入 `.env`。
+
+准备好文件并在 `.env` 设置路径后，使用相同的 Compose overlay 建置启动：
+
+```sh
+docker compose -f compose.yaml -f compose.enterprise.yaml up -d --build
+```
+
+之后启动、更新或重建也要带上相同的两个 `-f` 文件，才能保留只读挂载设定。
+
 ## 状态、停止与备份 {#actions-and-data}
 
 从同一仓库目录，使用安装时相同的 `.env` 和 Compose 设置：
 
 ```sh
-docker compose ps
-docker compose logs --tail 100 work-api identity-api
-docker compose down
-docker compose up -d --wait
+docker compose -f compose.yaml -f compose.enterprise.yaml ps
+docker compose -f compose.yaml -f compose.enterprise.yaml logs --tail 100 work-api identity-api
+docker compose -f compose.yaml -f compose.enterprise.yaml down
+docker compose -f compose.yaml -f compose.enterprise.yaml up -d --wait
 ```
 
-`down` 保留数据卷；不要加入 `-v`，那会删除数据。备份需包含各产品数据库、数据卷及 `.data/container-secrets/`（或自定义机密目录），并与模型、SSO 的加密密钥一起保存。[备份与还原步骤](guide/operations.md)
+仅在启用 enterprise overlay 时使用上方命令；一般部署请沿用[基本容器操作方式](guide/operations.md)。使用 overlay 时，每次启动、停止、更新和重建都要带上相同的 `-f compose.yaml -f compose.enterprise.yaml`。`down` 会保留数据卷；不要加入 `-v`，否则会删除数据。备份需包含各产品数据库、数据卷、`.data/container-secrets/`（或自定义机密目录）以及 `.data/enterprise-secrets/`（或 `ORDIVANT_ENTERPRISE_SECRETS_DIR` 指定的位置）。Enterprise secrets 目录中的 Identity／Code 配置与 token 文件都必须保留，并与模型、SSO 的加密密钥一起保存。[备份与还原步骤](guide/operations.md)
 
 只有在尚未创建任何实际账号或业务数据的全新试用环境，才可选择加入 DEMO 示例；请在运行服务初始化与首次登录之前运行：
 

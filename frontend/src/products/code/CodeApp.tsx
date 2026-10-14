@@ -3,12 +3,14 @@ import { MarkdownContent } from '../../shared/MarkdownContent';
 import {
   Alert,
   Button,
+  Checkbox,
   Descriptions,
   Divider,
   Drawer,
   Empty,
   Form,
   Input,
+  InputNumber,
   Modal,
   Select,
   Space,
@@ -36,6 +38,7 @@ import { ProductShell } from '../shared/ProductShell';
 import { AuthProvider, useAuth } from '../../auth/AuthContext';
 import { AuthAccessDenied } from '../../auth/AuthAccessDenied';
 import { ReferenceFields, ReferenceList } from '../shared/References';
+import { CollaborationPanel } from '../shared/CollaborationPanel';
 import type { CodeCheck, CodeHealth, CodeProject, ProductPrincipal, PullRequest, PullRequestContext, Repository } from '../shared/types';
 import { formatDate, formatNumber, useI18n, useLocalizedForm } from '../../i18n';
 import './code-collaboration.css';
@@ -62,6 +65,57 @@ type PullCollaboration = {
   comments: PullCollaborationComment[];
   reviews: PullCollaborationReview[];
 };
+type CodeResource = { resource_kind: 'project' | 'repository' | 'pull'; id: string; project_id: string; repository_id?: string; pull_number?: number };
+type InlineComment = {
+  id: string; parent_id: string | null; author: CollaborationActor; head_sha: string; file_path: string;
+  line: number; side: 'LEFT' | 'RIGHT'; body: string; resolved: boolean; is_current: boolean; created_at: string;
+};
+type PullDiff = { head_sha: string; diff: string; files: { path: string; left_lines: number[]; right_lines: number[] }[] };
+type GovernanceStatus = { context: string; state: string; current_sha: string };
+type PullGovernance = {
+  repository_id: string; pull_request_id: string; pull_number: number; head_sha: string; base_branch: string;
+  upstream: {
+    mergeable: boolean | null;
+    protection: { available: boolean; enabled?: boolean; reason?: string; policy?: Record<string, unknown> };
+    reviews: { available: boolean; reason?: string | null; current_approvals: (string | number)[] };
+    statuses: { available: boolean; reason?: string | null; required: GovernanceStatus[]; checks: (GovernanceStatus & { description: string; target_url: string | null; created_at: string | null })[] };
+  };
+  merge_readiness: { ready: boolean | null; blockers: string[]; verified_at_sha: string };
+  actions: { available: boolean; reason?: string; runs: { id: number; name: string; head_sha: string; status: string; conclusion: string | null; html_url: string | null; jobs: { id: number; name: string; status: string; conclusion: string | null }[]; artifacts: { id: number; name: string; size_in_bytes: number; expired: boolean; html_url: string | null }[] }[] };
+  deployments: { available: boolean; provider?: string; reason?: string; items: { id: number | string; provider: string; sha: string; environment: string; status: string; created_at: string | null; updated_at: string | null; url: string | null }[] };
+};
+const governanceBlockerText: Record<string, string> = {
+  upstream_reports_conflicts: '上游衝突尚未解決',
+  mergeability_unknown: 'Gitea 無法確認是否可合併',
+  required_approvals_missing: '尚缺少必要的上游核准',
+  required_status_checks_incomplete: '必要的上游狀態檢查尚未通過',
+  upstream_governance_unavailable: '上游治理證據不可用',
+  upstream_review_changes_requested: '目前版本仍有上游要求變更的審查',
+  pull_branch_outdated: '來源分支落後於目標分支',
+  pull_branch_sync_unavailable: '無法確認來源分支是否已同步',
+  pull_commits_unsigned: 'PR 內有未驗證簽章的 commit',
+  pull_commit_signatures_unavailable: '無法確認 PR commit 簽章',
+};
+const governanceReasonText: Record<string, string> = {
+  unsupported_by_gitea: '此 Gitea 版本不支援此功能',
+  invalid_upstream_response: '上游回傳資料格式不正確',
+  actions_jobs_or_artifacts_unsupported: 'Actions 工作或產物資料不受支援',
+  provider_not_configured: '尚未設定部署服務',
+  provider_credentials_unavailable: '部署服務憑證不可用',
+  provider_unavailable: '部署服務暫時無法連線',
+  upstream_pagination_limit_reached: '上游資料超過單次查詢上限，無法確認完整狀態',
+};
+const upstreamStateText: Record<string, string> = {
+  pending: '待處理', success: '成功', succeeded: '成功', failure: '失敗', failed: '失敗', error: '錯誤',
+  missing: '尚未回報', queued: '已排入佇列', waiting: '等待中', requested: '已要求',
+  in_progress: '執行中', running: '執行中', active: '運作中', ready: '就緒', created: '已建立',
+  completed: '已完成', cancelled: '已取消', canceled: '已取消', timed_out: '已逾時',
+  action_required: '需要處理', neutral: '中性結果', skipped: '已略過', stale: '已過期', blocked: '已封鎖',
+};
+
+function upstreamStateLabel(state: string | null | undefined): string {
+  return upstreamStateText[state?.trim().toLowerCase() ?? ''] ?? '未知狀態';
+}
 
 function dateText(value?: string | null): string {
   return formatDate(value);
@@ -114,6 +168,7 @@ function CodeWorkspace() {
   const [pullBusy, setPullBusy] = useState(false);
   const [pullError, setPullError] = useState('');
   const [pullDrawerOpen, setPullDrawerOpen] = useState(false);
+  const appliedResource = useRef('');
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [repositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [branchModalOpen, setBranchModalOpen] = useState(false);
@@ -186,6 +241,31 @@ function CodeWorkspace() {
   useEffect(() => {
     if (principal) void loadProjects();
   }, [loadProjects, principal]);
+
+  useEffect(() => {
+    if (!principal) return;
+    const params = new URLSearchParams(window.location.search);
+    const resourceId = params.get('resource');
+    const kind = (params.get('kind') || (resourceId ? 'pull' : '')) as CodeResource['resource_kind'] | '';
+    if (!resourceId || !['project', 'repository', 'pull'].includes(kind)) return;
+    const requestKey = `${principal.id}:${kind}:${resourceId}`;
+    if (appliedResource.current === requestKey) return;
+    appliedResource.current = requestKey;
+    let active = true;
+    codeApi.get<CodeResource>(`/resources/${encodeURIComponent(kind)}/${encodeURIComponent(resourceId)}`)
+      .then((resource) => {
+        if (!active) return;
+        setProjectId(resource.project_id);
+        if (resource.repository_id) setRepositoryId(resource.repository_id);
+        setSection(resource.resource_kind === 'pull' ? 'pulls' : 'repositories');
+        if (resource.resource_kind === 'pull' && resource.pull_number) {
+          setSelectedPullNumber(resource.pull_number);
+          setPullDrawerOpen(true);
+        }
+      })
+      .catch((error) => { if (active) messageApi.error(errorMessage(error)); });
+    return () => { active = false; };
+  }, [principal?.id, messageApi]);
 
   const loadRepositories = useCallback(async () => {
     if (!projectId) {
@@ -588,12 +668,225 @@ function PullDetail({ context, repositoryId, principal, canWrite, canReport, onR
       <div className="code-detail-section-head"><div><span className="eyebrow">{t('來源引用')}</span><h3>{t('來源與 provenance')}</h3></div><span>{formatNumber(context.source_refs.length)}</span></div>
       <ReferenceList references={context.source_refs} />
       <PullCollaborationPanel repositoryId={repositoryId} context={context} principal={principal} canWrite={canWrite} onRefreshContext={onRefreshContext} />
+      <InlinePullPanel repositoryId={repositoryId} context={context} canWrite={canWrite} />
+      <PullGovernancePanel repositoryId={repositoryId} context={context} principal={principal} />
+      <CollaborationPanel product="code" kind="pull" resourceId={context.id} canWrite={canWrite} />
       <div className="code-detail-section-head check-section-head"><div><span className="eyebrow">{t('提交收據')}</span><h3>{t('Checks 與狀態')}</h3></div><Button size="small" icon={<SendOutlined />} disabled={!canReport} onClick={onReport}>{t('回報狀態')}</Button></div>
       <div className="check-receipt-note">{t('source=agent_reported 代表 Agent 提交的狀態回報；source=gitea_webhook 代表已驗證 webhook。這些資訊不會被標示成實際 CI 執行結果。')}</div>
       {!context.checks.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('此 PR 尚無 check receipt')} />}
       {context.checks.map((check) => <CheckRow key={check.id} check={check} />)}
     </div>
   );
+}
+
+function InlinePullPanel({ repositoryId, context, canWrite }: { repositoryId: string; context: PullRequestContext; canWrite: boolean }) {
+  const { t } = useI18n();
+  const [diff, setDiff] = useState<PullDiff | null>(null);
+  const [comments, setComments] = useState<InlineComment[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [filePath, setFilePath] = useState('');
+  const [side, setSide] = useState<'LEFT' | 'RIGHT'>('RIGHT');
+  const [line, setLine] = useState<number | null>(null);
+  const [body, setBody] = useState('');
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const pullPath = `/repositories/${encodeURIComponent(repositoryId)}/pulls/${context.number}`;
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const [nextDiff, nextComments] = await Promise.all([
+        codeApi.get<PullDiff>(`${pullPath}/diff`),
+        codeApi.get<{ head_sha: string; comments: InlineComment[] }>(`${pullPath}/inline-comments`),
+      ]);
+      setDiff(nextDiff);
+      setComments(nextComments.comments);
+      setFilePath((current) => nextDiff.files.some((file) => file.path === current) ? current : nextDiff.files[0]?.path ?? '');
+      return nextDiff;
+    } catch (loadError) {
+      setError(errorMessage(loadError));
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }, [pullPath]);
+
+  useEffect(() => { void load(); }, [load, context.head_sha]);
+  const selectedFile = diff?.files.find((file) => file.path === filePath);
+  const selectableLines = selectedFile ? selectedFile[side === 'LEFT' ? 'left_lines' : 'right_lines'] : [];
+  useEffect(() => {
+    setLine((current) => current && selectableLines.includes(current) ? current : selectableLines[0] ?? null);
+  }, [filePath, side, diff?.head_sha]);
+
+  async function perform(action: () => Promise<unknown>) {
+    setSaving(true);
+    setError('');
+    try { await action(); await load(); }
+    catch (actionError) { setError(errorMessage(actionError)); }
+    finally { setSaving(false); }
+  }
+
+  async function submitInline() {
+    if (!canWrite || !diff || !filePath || !line || !body.trim()) return;
+    await perform(async () => {
+      await codeApi.post(`${pullPath}/inline-comments`, {
+        head_sha: diff.head_sha, file_path: filePath, line, side, body: body.trim(),
+      });
+      setBody('');
+    });
+  }
+
+  async function replyTo(id: string) {
+    const reply = replyDrafts[id]?.trim();
+    if (!reply) return;
+    await perform(async () => {
+      await codeApi.post(`/inline-comments/${encodeURIComponent(id)}/replies`, { body: reply });
+      setReplyDrafts((current) => ({ ...current, [id]: '' }));
+    });
+  }
+
+  return <section className="code-inline-review">
+    <div className="code-detail-section-head">
+      <div><span className="eyebrow">{t('精確版本錨定')}</span><h3>{t('行內討論')}</h3></div>
+      <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()} loading={busy}>{t('重新載入')}</Button>
+    </div>
+    <div className="code-upstream-caption">{t('留言會錨定目前的上游 head SHA、檔案、行號與左右側；Head 改變後會標示為舊版本。')}</div>
+    {diff && diff.head_sha !== context.head_sha && <Alert type="warning" showIcon message={t('目前 PR head 已變更，請重新載入差異後再留言。')} />}
+    {error && <Alert type="error" showIcon message={t('行內討論載入或更新失敗')} description={error} action={<Button size="small" onClick={() => void load()}>{t('重試')}</Button>} />}
+    {busy && !diff && <div className="product-inline-loading"><Spin size="small" /></div>}
+    {diff && <>
+      <div className="code-inline-sha">{t('驗證中的上游 head')} <code>{diff.head_sha}</code></div>
+      {!diff.diff && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('此 PR 沒有可顯示的差異')} />}
+      {diff.diff && <pre className="code-inline-diff">{diff.diff}</pre>}
+      <div className="code-inline-compose">
+        <Select aria-label={t('差異檔案')} value={filePath || undefined} onChange={(value) => setFilePath(value)} options={diff.files.map((file) => ({ value: file.path, label: file.path }))} placeholder={t('選擇檔案')} />
+        <Select aria-label={t('差異側')} value={side} onChange={(value: 'LEFT' | 'RIGHT') => setSide(value)} options={[{ value: 'RIGHT', label: t('新版本（RIGHT）') }, { value: 'LEFT', label: t('舊版本（LEFT）') }]} />
+        <Select aria-label={t('差異行號')} value={line ?? undefined} onChange={(value: number) => setLine(value)} options={selectableLines.map((value) => ({ value, label: String(value) }))} placeholder={t('選擇行號')} />
+        {canWrite ? <>
+          <TextArea aria-label={t('行內留言')} value={body} onChange={(event) => setBody(event.target.value)} rows={3} maxLength={20000} placeholder={t('針對選取行留言')} />
+          <Button type="primary" icon={<SendOutlined />} loading={saving} disabled={!filePath || !line || !body.trim() || diff.head_sha !== context.head_sha} onClick={() => void submitInline()}>{t('新增行內留言')}</Button>
+        </> : <div className="code-collaboration-readonly">{t('目前為唯讀，可查看行內討論。')}</div>}
+      </div>
+      <div className="code-collaboration-subhead"><strong>{t('行內討論串')}</strong><span>{formatNumber(comments.filter((item) => item.parent_id === null).length)}</span></div>
+      {!comments.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('尚無行內留言')} />}
+      {comments.filter((item) => item.parent_id === null).map((root) => <div className="code-inline-thread" key={root.id}>
+        <div className="code-inline-thread-meta"><strong>{root.author.name}</strong><Tag>{root.file_path}:{root.line} {root.side}</Tag><Tag color={root.is_current ? 'green' : 'orange'}>{t(root.is_current ? '目前版本' : '舊版本')}</Tag><Tag color={root.resolved ? 'green' : 'default'}>{t(root.resolved ? '已解決' : '待處理')}</Tag><time>{dateText(root.created_at)}</time></div>
+        <MarkdownContent content={root.body} />
+        {comments.filter((item) => item.parent_id === root.id).map((reply) => <div className="code-inline-reply" key={reply.id}>
+          <div className="code-inline-thread-meta"><strong>{reply.author.name}</strong><Tag color={reply.is_current ? 'green' : 'orange'}>{t(reply.is_current ? '目前版本' : '舊版本')}</Tag><time>{dateText(reply.created_at)}</time></div>
+          <MarkdownContent content={reply.body} />
+        </div>)}
+        {canWrite && <div className="code-inline-reply-compose"><TextArea aria-label={t('回覆行內留言')} rows={2} maxLength={20000} value={replyDrafts[root.id] ?? ''} onChange={(event) => setReplyDrafts((current) => ({ ...current, [root.id]: event.target.value }))} placeholder={t('回覆此討論串')} /><Space>
+          <Button size="small" disabled={!replyDrafts[root.id]?.trim()} loading={saving} onClick={() => void replyTo(root.id)}>{t('回覆')}</Button>
+          <Button size="small" disabled={!root.is_current && !root.resolved} loading={saving} onClick={() => void perform(() => codeApi.post(`/inline-comments/${encodeURIComponent(root.id)}/resolve`, { resolved: !root.resolved }))}>{t(root.resolved ? '重新開啟' : '標記已解決')}</Button>
+        </Space></div>}
+      </div>)}
+    </>}
+  </section>;
+}
+
+function PullGovernancePanel({ repositoryId, context, principal }: { repositoryId: string; context: PullRequestContext; principal: ProductPrincipal | null }) {
+  const { t } = useI18n();
+  const [data, setData] = useState<PullGovernance | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [requiredApprovals, setRequiredApprovals] = useState(0);
+  const [contexts, setContexts] = useState('');
+  const [enableStatusCheck, setEnableStatusCheck] = useState(false);
+  const [blockOnOutdatedBranch, setBlockOnOutdatedBranch] = useState(false);
+  const [blockOnRejectedReviews, setBlockOnRejectedReviews] = useState(false);
+  const [dismissStaleApprovals, setDismissStaleApprovals] = useState(false);
+  const [requireSignedCommits, setRequireSignedCommits] = useState(false);
+  const pullPath = `/repositories/${encodeURIComponent(repositoryId)}/pulls/${context.number}`;
+  const canManage = Boolean(principal && ['admin', 'manager'].includes(principal.role));
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await codeApi.get<PullGovernance>(`${pullPath}/governance`);
+      setData(result);
+      const policy = result.upstream.protection.policy;
+      setRequiredApprovals(Number(policy?.required_approvals ?? 0));
+      setContexts(Array.isArray(policy?.status_check_contexts) ? policy.status_check_contexts.join(', ') : '');
+      setEnableStatusCheck(Boolean(policy?.enable_status_check));
+      setBlockOnOutdatedBranch(Boolean(policy?.block_on_outdated_branch));
+      setBlockOnRejectedReviews(Boolean(policy?.block_on_rejected_reviews));
+      setDismissStaleApprovals(Boolean(policy?.dismiss_stale_approvals));
+      setRequireSignedCommits(Boolean(policy?.require_signed_commits));
+      return result;
+    } catch (loadError) {
+      setError(errorMessage(loadError));
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }, [pullPath]);
+
+  useEffect(() => { void load(); }, [load, context.head_sha]);
+
+  async function savePolicy() {
+    setSaving(true);
+    setError('');
+    try {
+      await codeApi.patch(`/repositories/${encodeURIComponent(repositoryId)}/branch-protection?branch=${encodeURIComponent(context.base)}`, {
+        required_approvals: requiredApprovals,
+        enable_status_check: enableStatusCheck,
+        status_check_contexts: contexts.split(',').map((item) => item.trim()).filter(Boolean),
+        block_on_outdated_branch: blockOnOutdatedBranch,
+        block_on_rejected_reviews: blockOnRejectedReviews,
+        dismiss_stale_approvals: dismissStaleApprovals,
+        require_signed_commits: requireSignedCommits,
+      });
+      await load();
+    } catch (saveError) { setError(errorMessage(saveError)); }
+    finally { setSaving(false); }
+  }
+
+  const readyText = data?.merge_readiness.ready === true ? t('可合併') : data?.merge_readiness.ready === false ? t('尚未符合規則') : t('無法確認');
+  return <section className="code-upstream-governance">
+    <div className="code-detail-section-head"><div><span className="eyebrow">{t('Gitea 上游狀態')}</span><h3>{t('分支規則與執行證據')}</h3></div><Button size="small" icon={<ReloadOutlined />} loading={busy} onClick={() => void load()}>{t('重新載入')}</Button></div>
+    <Alert className="code-upstream-note" type="info" showIcon message={t('此區只採用 Gitea 與已設定部署服務回傳的資料；Ordivant 本地審查、Agent 回報與 webhook 收據不會被當成上游核准或 CI。')} />
+    {error && <Alert type="error" showIcon message={t('上游治理資料載入失敗')} description={error} />}
+    {busy && !data && <div className="product-inline-loading"><Spin size="small" /></div>}
+    {data && <>
+      <div className="code-upstream-readiness"><Tag color={data.merge_readiness.ready ? 'green' : data.merge_readiness.ready === false ? 'orange' : 'default'}>{readyText}</Tag><span>{t('上游 head')} <code>{data.head_sha}</code></span></div>
+      {data.merge_readiness.blockers.length > 0 && <div className="code-upstream-blockers">{data.merge_readiness.blockers.map((item) => <Tag key={item}>{t(governanceBlockerText[item] ?? '上游治理證據不可用')}</Tag>)}</div>}
+      {!data.upstream.protection.available && <Alert type="warning" showIcon message={t('此 Gitea 版本無法提供分支保護資料。')} />}
+      {data.upstream.protection.available && <div className="code-upstream-policy">
+        <strong>{t('目標分支規則')} · {context.base}</strong>
+        <span>{data.upstream.protection.enabled ? t('已啟用') : t('未設定分支保護')}</span>
+        {data.upstream.protection.policy && <span>{t('所需上游核准')}：{String(data.upstream.protection.policy.required_approvals ?? 0)} · {t('目前版本核准')}：{formatNumber(data.upstream.reviews.current_approvals.length)}</span>}
+        {data.upstream.statuses.required.map((item) => <span key={item.context} className="code-upstream-check"><Tag color={item.state === 'success' ? 'green' : item.state === 'missing' ? 'default' : 'orange'}>{t(upstreamStateLabel(item.state))}</Tag>{item.context}<code>{item.current_sha.slice(0, 12)}</code></span>)}
+      </div>}
+      {data.upstream.statuses.available && data.upstream.statuses.checks.map((item, index) => <div className="code-upstream-check-row" key={`${item.context}:${index}`}><Tag color={item.state === 'success' ? 'green' : item.state === 'pending' ? 'gold' : 'orange'}>{t(upstreamStateLabel(item.state))}</Tag><strong>{item.context}</strong><span>{item.description}</span><code>{item.current_sha.slice(0, 12)}</code>{item.target_url && webUrl(item.target_url) && <a href={item.target_url} target="_blank" rel="noreferrer">{t('查看上游狀態')}</a>}</div>)}
+      {canManage && data.upstream.protection.available && <div className="code-policy-editor">
+        <strong>{t('更新 Gitea 分支保護')}</strong>
+        <label>{t('所需核准')} <InputNumber min={0} max={100} value={requiredApprovals} onChange={(value) => setRequiredApprovals(value ?? 0)} /></label>
+        <label>{t('必需狀態檢查（逗號分隔）')} <Input value={contexts} onChange={(event) => setContexts(event.target.value)} maxLength={4000} /></label>
+        <Checkbox checked={enableStatusCheck} onChange={(event) => setEnableStatusCheck(event.target.checked)}>{t('啟用必要狀態檢查')}</Checkbox>
+        <Checkbox checked={blockOnOutdatedBranch} onChange={(event) => setBlockOnOutdatedBranch(event.target.checked)}>{t('阻擋未同步目標分支的 PR')}</Checkbox>
+        <Checkbox checked={blockOnRejectedReviews} onChange={(event) => setBlockOnRejectedReviews(event.target.checked)}>{t('阻擋尚有要求變更審查的 PR')}</Checkbox>
+        <Checkbox checked={dismissStaleApprovals} onChange={(event) => setDismissStaleApprovals(event.target.checked)}>{t('新 commit 使舊核准失效')}</Checkbox>
+        <Checkbox checked={requireSignedCommits} onChange={(event) => setRequireSignedCommits(event.target.checked)}>{t('要求已驗證簽章的 commit')}</Checkbox>
+        <Button size="small" loading={saving} onClick={() => void savePolicy()}>{t('儲存上游規則')}</Button>
+      </div>}
+      <div className="code-upstream-subhead"><strong>{t('Gitea Actions')}</strong><span>{data.actions.available ? formatNumber(data.actions.runs.length) : t(governanceReasonText[data.actions.reason ?? ''] ?? '無法取得資料')}</span></div>
+      {!data.actions.available && <div className="code-upstream-unavailable">{t('Gitea Actions 資料不可用')} · {t(governanceReasonText[data.actions.reason ?? ''] ?? '無法取得資料')}</div>}
+      {data.actions.runs.map((run) => <div className="code-upstream-run" key={run.id}>
+        <div><strong>{run.name}</strong><Tag color={run.conclusion === 'success' ? 'green' : 'default'}>{t(upstreamStateLabel(run.conclusion ?? run.status))}</Tag>{run.html_url && <a href={webUrl(run.html_url) ?? undefined} target="_blank" rel="noreferrer">{t('查看執行')}</a>}</div>
+        <code>{run.head_sha}</code>
+        {run.jobs.map((job) => <span key={job.id} className="code-upstream-job">{job.name} · {t(upstreamStateLabel(job.conclusion ?? job.status))}</span>)}
+        {run.artifacts.map((artifact) => <span key={artifact.id} className="code-upstream-artifact">{artifact.html_url && webUrl(artifact.html_url) ? <a href={artifact.html_url} target="_blank" rel="noreferrer">{artifact.name}</a> : artifact.name} · {formatNumber(artifact.size_in_bytes)} bytes{artifact.expired ? ` · ${t('已過期')}` : ''}</span>)}
+      </div>)}
+      <div className="code-upstream-subhead"><strong>{t('部署結果')}</strong><span>{data.deployments.provider ?? ''}</span></div>
+      {!data.deployments.available && <div className="code-upstream-unavailable">{t('沒有可驗證的部署結果')} · {t(governanceReasonText[data.deployments.reason ?? ''] ?? '無法取得資料')}</div>}
+      {data.deployments.items.map((deployment) => <div className="code-upstream-deployment" key={`${deployment.provider}:${deployment.id}`}><Tag>{deployment.provider}</Tag><strong>{deployment.environment || t('未命名環境')}</strong><Tag color={deployment.status === 'success' ? 'green' : 'default'}>{t(upstreamStateLabel(deployment.status))}</Tag><code>{deployment.sha}</code>{deployment.url && webUrl(deployment.url) && <a href={deployment.url} target="_blank" rel="noreferrer">{t('查看部署')}</a>}</div>)}
+    </>}
+  </section>;
 }
 
 function PullCollaborationPanel({ repositoryId, context, principal, canWrite, onRefreshContext }: { repositoryId: string; context: PullRequestContext; principal: ProductPrincipal | null; canWrite: boolean; onRefreshContext: () => Promise<PullRequestContext | undefined> }) {

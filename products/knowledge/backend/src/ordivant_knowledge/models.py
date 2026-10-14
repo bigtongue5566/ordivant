@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, JSON, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, JSON, LargeBinary, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -59,10 +59,15 @@ class SpaceMembership(Base):
 
 class Document(Base):
     __tablename__ = "documents"
-    __table_args__ = (Index("ix_documents_space_updated", "space_id", "updated_at"),)
+    __table_args__ = (
+        Index("ix_documents_space_updated", "space_id", "updated_at"),
+        Index("ix_documents_parent", "parent_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     space_id: Mapped[str] = mapped_column(ForeignKey("knowledge_spaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
@@ -84,6 +89,39 @@ class DocumentVersion(Base):
     author_id: Mapped[str] = mapped_column(ForeignKey("principals.id"), nullable=False, index=True)
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     source_refs: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class DocumentComment(Base):
+    __tablename__ = "document_comments"
+    __table_args__ = (
+        Index("ix_knowledge_comments_document_created", "document_id", "created_at"),
+        Index("ix_knowledge_comments_parent", "parent_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_id: Mapped[str] = mapped_column(ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False, index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    anchor: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("document_comments.id", ondelete="CASCADE"), nullable=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class SpaceTemplate(Base):
+    __tablename__ = "space_templates"
+    __table_args__ = (
+        UniqueConstraint("space_id", "name", name="uq_knowledge_template_space_name"),
+        Index("ix_knowledge_templates_space", "space_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    space_id: Mapped[str] = mapped_column(ForeignKey("knowledge_spaces.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("principals.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[str] = mapped_column(String(40), nullable=False)
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
@@ -39,6 +40,16 @@ class TaskCreate(InputModel):
     progress: int = Field(default=0, ge=0, le=100)
     handoff: str | None = None
     budget_usd: float = Field(default=0, ge=0)
+    work_type: Literal["task", "story", "bug", "epic"] = "task"
+    epic_id: str | None = None
+    due_at: datetime | None = None
+    start_at: datetime | None = None
+    sprint_id: str | None = None
+    milestone_id: str | None = None
+    estimate_points: float | None = Field(default=None, ge=0, le=1000000)
+    rank: float = Field(default=0, ge=-1000000000000, le=1000000000000)
+    stage_id: str | None = None
+    custom_fields: dict[str, Any] = Field(default_factory=dict, max_length=100)
 
 
 class TaskPatch(InputModel):
@@ -58,6 +69,138 @@ class TaskPatch(InputModel):
     dependency_ids: list[str] | None = None
     labels: list[str] | None = None
     budget_usd: float | None = Field(default=None, ge=0)
+    work_type: Literal["task", "story", "bug", "epic"] | None = None
+    epic_id: str | None = None
+    due_at: datetime | None = None
+    start_at: datetime | None = None
+    sprint_id: str | None = None
+    milestone_id: str | None = None
+    estimate_points: float | None = Field(default=None, ge=0, le=1000000)
+    rank: float | None = Field(default=None, ge=-1000000000000, le=1000000000000)
+    stage_id: str | None = None
+    custom_fields: dict[str, Any] | None = Field(default=None, max_length=100)
+
+
+class SprintCreate(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    goal: str = Field(default="", max_length=4000)
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    status: Literal["planned", "active", "closed"] = "planned"
+
+
+class SprintPatch(InputModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    goal: str | None = Field(default=None, max_length=4000)
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    status: Literal["planned", "active", "closed"] | None = None
+
+
+class MilestoneCreate(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    due_at: datetime | None = None
+    description: str = Field(default="", max_length=4000)
+    status: Literal["open", "closed"] = "open"
+
+
+class MilestonePatch(InputModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    due_at: datetime | None = None
+    description: str | None = Field(default=None, max_length=4000)
+    status: Literal["open", "closed"] | None = None
+
+
+class ProjectFieldCreate(InputModel):
+    key: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z][A-Za-z0-9_-]*$")
+    name: str = Field(min_length=1, max_length=200)
+    kind: Literal["text", "number", "boolean", "select"]
+    required: bool = False
+    options: list[str] = Field(default_factory=list, max_length=100)
+    active: bool = True
+
+
+class ProjectFieldPatch(InputModel):
+    key: str | None = Field(default=None, min_length=1, max_length=80, pattern=r"^[A-Za-z][A-Za-z0-9_-]*$")
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    kind: Literal["text", "number", "boolean", "select"] | None = None
+    required: bool | None = None
+    options: list[str] | None = Field(default=None, max_length=100)
+    active: bool | None = None
+
+
+class ProjectStageCreate(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    category: Literal["backlog", "ready", "in_progress", "blocked", "in_review", "done", "cancelled"]
+    rank: float = Field(default=0, ge=-1000000000000, le=1000000000000)
+    active: bool = True
+
+
+class ProjectStagePatch(InputModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    category: Literal["backlog", "ready", "in_progress", "blocked", "in_review", "done", "cancelled"] | None = None
+    rank: float | None = Field(default=None, ge=-1000000000000, le=1000000000000)
+    active: bool | None = None
+
+
+class ProjectRuleCreate(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    event: Literal["task.created", "task.updated"]
+    conditions: dict[str, Any] = Field(default_factory=dict, max_length=4)
+    action: Literal["label", "assign", "ready"]
+    parameters: dict[str, Any] = Field(default_factory=dict, max_length=2)
+    enabled: bool = True
+
+
+class ProjectRulePatch(InputModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    event: Literal["task.created", "task.updated"] | None = None
+    conditions: dict[str, Any] | None = Field(default=None, max_length=4)
+    action: Literal["label", "assign", "ready"] | None = None
+    parameters: dict[str, Any] | None = Field(default=None, max_length=2)
+    enabled: bool | None = None
+
+
+class IntakeFormCreate(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=4000)
+    work_type: Literal["task", "story", "bug", "epic"] = "task"
+    fields: list[str] = Field(default_factory=list, max_length=100)
+    active: bool = True
+
+
+class IntakeFormPatch(InputModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    work_type: Literal["task", "story", "bug", "epic"] | None = None
+    fields: list[str] | None = Field(default=None, max_length=100)
+    active: bool | None = None
+
+
+class IntakeSubmit(InputModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str = Field(default="", max_length=20000)
+    custom_fields: dict[str, Any] = Field(default_factory=dict, max_length=100)
+
+
+class ReorderTasks(InputModel):
+    task_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+class WorklogCreate(InputModel):
+    minutes: int = Field(ge=1, le=1000000)
+    started_at: datetime
+    description: str = Field(default="", max_length=4000)
+
+
+class TaskImport(InputModel):
+    csv: str = Field(min_length=1, max_length=2_000_000)
+
+
+class SavedQueryCreate(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    project_id: str
+    filters: dict[str, Any] = Field(default_factory=dict, max_length=50)
 
 
 class ClaimRequest(InputModel):
@@ -382,6 +525,11 @@ class SandboxProfilePatch(InputModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     enabled: bool | None = None
     limits: SandboxLimits | None = None
+
+
+class CapacityWrite(InputModel):
+    principal_id: str = Field(min_length=1, max_length=36)
+    weekly_minutes: int = Field(ge=0, le=10080)
 
 
 AgentCreate.model_rebuild()

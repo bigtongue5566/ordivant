@@ -54,6 +54,42 @@ JSON 使用 UTF-8，時間戳記採 UTC ISO-8601，ID 為字串。清單端點�
 - `GET /api/events?project_id=&task_id=` -> 由新到舊排列的稽核陣列，上限 200 筆。
 - `GET /api/overview?project_id=` -> `{counts:{total,ready,in_progress,blocked,in_review,done},agents:{total,available,busy},cost_usd,budget_usd,activity:AuditEvent[]}`。
 
+## P0/P1 規劃與企業契約 {#p0-p1-planning-enterprise-contracts}
+
+本節補充目前規劃中的 Work、Knowledge、共用協作與企業 API 保證。人類與 Agent 共用產品資源授權；各服務只讀取自己的資料庫。使用者操作及 REST／MCP 正常流程不需要 LLM。每項功能的整合驗收狀態見[專案計畫的 P0/P1 驗收清單](project-plan.md#p0-p1-acceptance-ledger)。
+
+### Work 規劃 {#p0-p1-work-planning-contract}
+
+Task 規劃欄位包括 `work_type`、同專案且不可循環的 `epic_id`、`start_at`、`due_at`、`sprint_id`、`milestone_id`、非負 `estimate_points`、`rank`、`stage_id` 及依專案定義驗證的 `custom_fields`。這些欄位是規劃中繼資料，不是執行狀態。任務清單依 rank 和建立時間排序，篩選依類型、Sprint、里程碑、負責者及逾期狀態。
+
+`GET /api/projects/{id}/planning` 回傳 Sprint、里程碑、自訂欄位、階段、規則與表單。`POST /api/projects/{id}/sprints` 與 `PATCH /api/sprints/{sprint_id}` 管理 Sprint；里程碑、自訂欄位、階段、規則、表單分別使用 `/api/projects/{id}/milestones`、`/fields`、`/stages`、`/rules`、`/forms` 建立，並透過各資源 ID 的 PATCH 修改。`POST /api/projects/{id}/reorder` 只調整專案內唯一任務 ID 的 rank。規劃設定需要既有 manager/admin 權限；每個專案同時最多一個 active Sprint，關閉 Sprint 不會完成任務。已使用的自訂欄位不可更換 key 或型別；階段的 category 必須等於任務目前狀態。
+
+只有 backlog、ready、cancelled 的既有核准轉移可由看板規劃操作；in_progress、blocked、in_review、done 仍由執行與獨立審查控制。規則只在一般任務建立／更新時同步觸發，可加標籤、指派負責人或將 backlog 轉成 ready；須確認建立規則的 manager 目前仍有權限，且每個事件／規則去重、不遞迴、不呼叫 LLM、不派發 Agent。
+
+登入中的專案成員可透過 `GET /api/forms/{id}` 和 `POST /api/forms/{id}/submit` 提交提報；提交建立待整理 backlog 任務，不授予匿名或額外專案權限。`POST/GET /api/tasks/{id}/worklogs` 由登入主體記錄正數分鐘和開始時間；不能替他人或 Agent 偽造工時。每週容量是管理員明確設定的分鐘數，不會推估；使用率以該週已記錄工時對照設定容量。週期由任務首次 execution start 計至 `task.review.accept`，包含重做和等待獨立審查，並非工時。`GET /api/projects/{id}/reports` 回報已觀察到的週期／工時與容量，不提供未支援的預測。CSV 匯入需有界限並原子驗證，錯誤不得留下部分寫入；匯出須防止試算表公式注入。`/api/saved-queries` 儲存操作者自己的篩選，讀取時仍重新檢查目前權限。
+
+### Knowledge 編輯 {#p0-p1-knowledge-authoring-contract}
+
+文件 `parent_id` 只能指向同 Space 文件並拒絕循環。預設清單排除 archived；封存父文件若仍有子文件必須先移動子文件，不能靜默遺失階層。`PATCH /api/documents/{id}/organization` 使用既有 Space 權限，沒有文件級 ACL。
+
+`GET/POST /api/documents/{id}/comments` 建立文件留言、同文件一層回覆和選用的已發佈版本引用；`PATCH /api/document-comments/{id}` 解決或重新開啟留言。引用保留原文字句與版本，版本更新後須標示 stale；留言是有上限的純文字並安全顯示。讀者可檢視，具 writer 權限者可留言與處理留言。`GET/POST /api/spaces/{id}/templates` 列出／建立 Space 範本；內建 PRD、meeting、ADR、SOP 可供文件建立時選用。
+
+`GET /api/documents/{id}/diff?from_version=N&to_version=M` 只讀比較使用者可讀取的不可變版本。`POST /api/documents/{id}/restore` 必須帶目標版本與 expected current version，以 compare-and-swap 新增版本；舊版本不改寫，若目前版本已變或共用草稿尚有未發佈協作者修改即拒絕。共同草稿以 Y.Text Markdown 作唯一 canonical 內容；工具列及即時預覽仍編輯同一份 Markdown，不是第二套 WYSIWYG/block 內容。
+
+### 共用協作與搜尋 {#p0-p1-shared-collaboration-contract}
+
+各產品的 `/api/collaboration/{kind}/{id}` 提供附件清單／新增、訂閱、參與者、討論留言及通知；下載使用 `/api/collaboration/attachments/{attachment_id}/download`，通知使用 `/api/collaboration/notifications` 和單筆 read 操作。8 個共用 MCP 工具使用相同服務授權，不可繞過 REST 的資源範圍。產品服務每次列出或下載時重新驗證資源權限；附件大小有界、保存雜湊且不可變，檔名安全處理，不會因提交 URL 而抓取外部內容。提及只能選目前有權參與資源的 principal。狀態與通知同一交易提交；權限撤銷後通知導向會重新驗證且不洩漏資源正文。
+
+共用中心聚合的是 Work、Knowledge、Code 各自服務提供的通知與搜尋結果，不跨讀資料庫。搜尋只回傳目前可存取的項目，並個別回報不可用的服務。追蹤與協作通知顯示於平台，不代表有 SMTP 寄件；寄件只適用已設定 SMTP 的 Identity 邀請／復原 outbox。
+
+### Identity、SCIM 與上游 Git 邊界 {#p0-p1-identity-and-git-contract}
+
+SCIM 2 Users／Groups 位於 `/api/scim/v2`，使用獨立部署憑證。佈建建立已存在 email 的使用者時必須回報衝突；不能依 email 自動認領或合併既有 Ordivant 帳號。群組只授予企業治理中明確配置的產品角色與 resource IDs，不能授予 admin；停用使用者及授權變更會撤銷現有 sessions。一般 SCIM user PATCH 不可直接改權限；明確 SSO 帳號連結要以 `managed_permissions=false` 保留 SCIM 群組權限的管理來源。SCIM bulk 不支援。
+
+OIDC `required_acr` 與 `required_amr` 只驗證外部 IdP 簽發且已驗證的 claims：`acr` 必須匹配設定值其中之一，`amr` 必須包含全部指定方式。設定 assurance 要求時成員必須走 SSO-only；第二因素由 IdP 實際執行，平台不自行產生 MFA。SMTP 邀請／復原信件透過持久 outbox 送出；未設定寄件服務時不寄信。管理員可查看佇列及重試未過期項目。稽核匯出受 admin 保護、有筆數／時間界限並篩選機密欄位；保留設定只有明確套用時才刪除到期舊紀錄。
+
+P1 Git 接受條件要求 provider 證據包含上游 URL、commit SHA 和來源；真實 checks／actions／pipelines／deployment 只能由上游結果證實，Agent receipt 不可當 CI。Code 的 `ORDIVANT_CODE_DEPLOYMENT_CONFIG_FILE` 由部署端提供 JSON；`providers[]` 可設定 `provider` (`github`／`gitlab`)、`token_file` 和以本機 repository UUID 為 key 的 `repositories` 對應。GitHub 對應使用 `owner`／`name`，GitLab 使用 `project`；API 主機固定為 `api.github.com` 與 `gitlab.com/api/v4`，不接受自訂主機。此 provider 只讀取符合當前 PR head SHA 的部署記錄，不會啟動 pipeline 或部署；沒有 provider／credential 時必須明確顯示不可用。inline comment 綁定精確 PR head、檔案與行號，head SHA 變更時標示 stale。Merge 治理以實際上游 branch protection、review 和 checks 為準，Ordivant 本地審查不能冒充上游核准。
+
 ## 待處理佇列／Runtime {#outbox-runtime}
 
 `POST /api/tasks/{id}/dispatch` 本文 `{agent_id}`；manager／admin 或父任務作用中負責人可呼叫，回傳 `{id,project_id,task_id,agent_id,type:"run_task",payload:object,status:"pending",created_at}`。Agent 必須是 pi Runtime、已獲准存取專案、任務為 ready 且相依任務已完成。每個任務只能有一筆待處理 dispatch。

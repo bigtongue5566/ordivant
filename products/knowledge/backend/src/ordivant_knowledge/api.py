@@ -17,22 +17,29 @@ from .models import (
     AuditEvent,
     Decision,
     Document,
+    DocumentComment,
     DocumentVersion,
     KnowledgeSpace,
     Principal,
     SpaceMembership,
 )
 from .schemas import (
+    DocumentCommentCreate,
+    DocumentCommentPatch,
     DecisionCreate,
     DocumentCreate,
+    DocumentOrganizationPatch,
+    DocumentRestore,
     DraftPublish,
     DraftUpdate,
     LocalSessionCreate,
     Reference,
     SpaceCreate,
+    SpaceTemplateCreate,
     VersionPublish,
 )
 from .security import (
+    require_current_scope,
     PrincipalContext,
     authenticate,
     expires_after,
@@ -57,6 +64,16 @@ from .service import (
     version_view,
 )
 from .drafts import apply_document_draft_update, get_document_draft, publish_document_draft, synchronize_legacy_publish
+from .authoring import (
+    create_comment,
+    create_template,
+    diff_versions,
+    list_comments,
+    list_templates,
+    organize_document,
+    resolve_comment,
+    restore_version,
+)
 
 
 router = APIRouter(prefix="/api")
@@ -241,6 +258,7 @@ def search_documents(
     space_id: Annotated[str | None, Query(max_length=80)] = None,
     q: Annotated[str | None, Query(max_length=300)] = None,
     tag: Annotated[str | None, Query(max_length=80)] = None,
+    include_archived: bool = False,
 ) -> list[dict[str, object]]:
     if space_id is not None:
         require_scope(session, principal, space_id)
@@ -259,6 +277,8 @@ def search_documents(
         )
         .where(Document.space_id.in_(visible_spaces))
     )
+    if not include_archived:
+        statement = statement.where(Document.archived.is_(False))
     if q:
         statement = statement.where(
             or_(
@@ -304,10 +324,16 @@ def create_document(
     source_refs = _reference_models(body.source_refs)
 
     def action() -> dict[str, object]:
+        from .authoring import lock_tree
+        lock_tree(session, body.space_id)
+        current = require_current_scope(session, principal, body.space_id, lock=True)
+        require_writer(current)
         now = now_iso()
         document = Document(
             id=new_id(),
             space_id=body.space_id,
+            parent_id=body.parent_id,
+            archived=False,
             title=body.title,
             summary=body.summary,
             tags=body.tags,
@@ -315,6 +341,15 @@ def create_document(
             created_at=now,
             updated_at=now,
         )
+        if body.parent_id:
+            parent = session.get(Document, body.parent_id)
+            if parent is None:
+                raise not_found()
+            require_scope(session, principal, parent.space_id)
+            if parent.space_id != body.space_id:
+                raise not_found()
+            if parent.archived:
+                raise conflict("parent_archived", "請先取消封存父文件，再建立子文件")
         session.add(document)
         session.flush()
         version = DocumentVersion(
@@ -357,6 +392,179 @@ def create_document(
 @router.get("/documents/{document_id}")
 def get_document(document_id: str, session: SessionDep, principal: PrincipalDep) -> dict[str, object]:
     return document_context(session, _document(session, principal, document_id))
+
+
+@router.patch("/documents/{document_id}/organization")
+def patch_document_organization(
+    document_id: str,
+    body: DocumentOrganizationPatch,
+    request: Request,
+    session: SessionDep,
+    principal: PrincipalDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> JSONResponse:
+    document = _document(session, principal, document_id)
+    require_writer(principal)
+    fields = body.model_dump(mode="json", exclude_unset=True)
+    return mutate(
+        session,
+        principal,
+        route=request.url.path,
+        idempotency_key=idempotency_key,
+        body=fields,
+        status_code=200,
+        action=lambda: organize_document(
+            session,
+            principal,
+            document.id,
+            parent_supplied="parent_id" in fields,
+            parent_id=body.parent_id,
+            archived=body.archived,
+        ),
+        authorize_replay=lambda _response: _document(session, principal, document_id),
+    )
+
+
+@router.get("/documents/{document_id}/comments")
+def get_document_comments(document_id: str, session: SessionDep, principal: PrincipalDep) -> list[dict[str, object]]:
+    return list_comments(session, principal, document_id)
+
+
+@router.post("/documents/{document_id}/comments", status_code=201)
+def post_document_comment(
+    document_id: str,
+    body: DocumentCommentCreate,
+    request: Request,
+    session: SessionDep,
+    principal: PrincipalDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> JSONResponse:
+    _document(session, principal, document_id)
+    require_writer(principal)
+    anchor = body.anchor.model_dump(mode="json") if body.anchor else None
+    return mutate(
+        session,
+        principal,
+        route=request.url.path,
+        idempotency_key=idempotency_key,
+        body=body.model_dump(mode="json"),
+        status_code=201,
+        action=lambda: create_comment(
+            session,
+            principal,
+            document_id,
+            body=body.body,
+            anchor=anchor,
+            parent_id=body.parent_id,
+        ),
+        authorize_replay=lambda _response: _document(session, principal, document_id),
+    )
+
+
+@router.patch("/document-comments/{comment_id}")
+def patch_document_comment(
+    comment_id: str,
+    body: DocumentCommentPatch,
+    request: Request,
+    session: SessionDep,
+    principal: PrincipalDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> JSONResponse:
+    comment = session.get(DocumentComment, comment_id)
+    if comment is None:
+        raise not_found()
+    _document(session, principal, comment.document_id)
+    require_writer(principal)
+    return mutate(
+        session,
+        principal,
+        route=request.url.path,
+        idempotency_key=idempotency_key,
+        body=body.model_dump(mode="json"),
+        status_code=200,
+        action=lambda: resolve_comment(session, principal, comment_id, resolved=body.resolved),
+        authorize_replay=lambda _response: _document(
+            session,
+            principal,
+            (session.get(DocumentComment, comment_id) or comment).document_id,
+        ),
+    )
+
+
+@router.get("/spaces/{space_id}/templates")
+def get_space_templates(space_id: str, session: SessionDep, principal: PrincipalDep) -> list[dict[str, object]]:
+    return list_templates(session, principal, space_id)
+
+
+@router.post("/spaces/{space_id}/templates", status_code=201)
+def post_space_template(
+    space_id: str,
+    body: SpaceTemplateCreate,
+    request: Request,
+    session: SessionDep,
+    principal: PrincipalDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> JSONResponse:
+    require_scope(session, principal, space_id)
+    require_writer(principal)
+    return mutate(
+        session,
+        principal,
+        route=request.url.path,
+        idempotency_key=idempotency_key,
+        body=body.model_dump(mode="json"),
+        status_code=201,
+        action=lambda: create_template(
+            session,
+            principal,
+            space_id,
+            name=body.name,
+            description=body.description,
+            body=body.body,
+        ),
+        authorize_replay=lambda _response: require_scope(session, principal, space_id),
+    )
+
+
+@router.get("/documents/{document_id}/diff")
+def get_document_diff(
+    document_id: str,
+    session: SessionDep,
+    principal: PrincipalDep,
+    from_version: Annotated[int, Query(ge=1)],
+    to_version: Annotated[int, Query(ge=1)],
+) -> dict[str, object]:
+    return diff_versions(session, principal, document_id, from_version, to_version)
+
+
+@router.post("/documents/{document_id}/restore", status_code=201)
+def post_document_restore(
+    document_id: str,
+    body: DocumentRestore,
+    request: Request,
+    session: SessionDep,
+    principal: PrincipalDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> JSONResponse:
+    _document(session, principal, document_id, lock=True)
+    require_writer(principal)
+    return mutate(
+        session,
+        principal,
+        route=request.url.path,
+        idempotency_key=idempotency_key,
+        body=body.model_dump(mode="json"),
+        status_code=201,
+        action=lambda: restore_version(
+            session,
+            principal,
+            document_id,
+            version_number=body.version,
+            expected_current_version=body.expected_current_version,
+            change_summary=body.change_summary,
+        ),
+        authorize_replay=lambda _response: _document(session, principal, document_id),
+    )
 
 
 @router.get("/documents/{document_id}/draft")

@@ -99,12 +99,32 @@
 
 候选功能、目前实作界线与建议优先级记录在[功能缺口研究](feature-gap-research.md)。该研究不会将候选功能标示为已实作，也不会将其加入已完成的任务清单。
 
-- 各客户自己的 IdP 租户与 LDAP／AD 目录验收；SCIM 2.0 及自动离职停权流程。原生 SAML 端点与已验证的 Keycloak SAML broker 是不同实作。
+- SCIM 2.0 Users／Groups、SMTP outbox、OIDC acr／amr 验证及 Identity 审计导出／保留已加入当前代码，但客户 IdP／目录布建及企业租户生命周期整合验收仍待完成。原生 SAML 端点与 Keycloak SAML broker 是不同实作。
 - 更多正式环境 Provider／模型组合、已确认的费率／发票集成，以及硬性成本上限。用户授权的测试 Provider／gpt-6.1-sol 合成即时运行及 token 收据记录在 `model-validation.md`；这不代表一般帐单控制已完成。
 - 既有 GitHub／GitLab／Jira 的正式同步凭证、MCP gateway、外部 A2A、对象保存及备份还原演练。
 - 可扩展的派送所有权／分片、负载测试及营运监控。
 
 不能只因为存在接口或占位组件，就将这些门槛标记为已完成。
+
+## P0/P1 验收清单 {#p0-p1-acceptance-ledger}
+
+此清单补充 2026-10-15 P0/P1 契约的交付边界。本地整合与验收已完成；客户 IdP／SCIM 租户及 GitHub／GitLab 部署 provider／CI 结果未测试。此清单不代表功能已发布到 v0.2.0 或可用于其他部署。
+
+2026-10-15 本地验收快照（尚未推送或发布）：backend／Runtime 共 220 项测试通过（Work 82、Identity 38、Knowledge 32、Code 40、Sandbox 3、Runtime 25）；tool guards 20 项通过、1 项略过。Work 真实 PostgreSQL API 53 项及浏览器 51 项、Code 真实 Gitea API 65 项及浏览器 34 项、Knowledge 真实 PostgreSQL authoring 4 组及浏览器 336 项、Enterprise STARTTLS SMTP／SCIM 30 项及浏览器 10 项（含审计 API 游标分页）通过。整合与产品 smoke、四个产品 build、i18n 1,750 项／3 语系／7 项行为检查通过。四个 API 服务重新启动后健康；4 个数据库共 103 张表、4,836 条数据的逐表 row count 与完整数据 hash 均一致，没有异动或非预期表格；既有协作 context API 读回 7/7 通过。
+
+| ID | 范围 | 状态 |
+|---|---|---|
+| P0-1 | Work 规划字段、同一 Project 的 Epic 防循环、Sprint／里程碑／字段／阶段设置与 rank 排序 | 本地验收通过：真实 PostgreSQL API 53 项及浏览器 51 项；数据库重启持久性通过 |
+| P0-2 | 资源附件、提及、订阅、通知、协作中心、授权范围内跨产品搜索及 SMTP 邀请／恢复 outbox | 本地验收通过：tool guards 20 项通过、1 项略过；整合／产品 smoke、Work／Knowledge UI 与协作 context 读回 7/7 通过 |
+| P0-3 | Knowledge 页面树与封存、引用锚定留言／回复／解决、Space 范本、Markdown 工具、版本差异与还原 | 本地验收通过：真实 PostgreSQL authoring 4 组、浏览器 336 项及数据库重启持久性通过 |
+| P1-1 | 项目提报表单、自定义字段、阶段与同步事件规则 | 本地验收通过：Work 真实 PostgreSQL API 53 项、浏览器 51 项及数据库重启持久性通过 |
+| P1-2 | 授权范围内搜索、个人保存的查找、带作者身份的工时、观察报表与安全原子 CSV | 本地验收通过：Work 真实 PostgreSQL API 53 项、浏览器 51 项及数据库重启持久性通过 |
+| P1-3 | 上游 Git checks／actions／pipelines／部署证据、绑定 head SHA 的 inline review 与真实 branch protection | 本地真实 Gitea API 65 项与浏览器 34 项通过；未测试 GitHub／GitLab 部署 provider 成功结果或外部 CI |
+| P1-4 | SCIM Users／Groups、外部 IdP ACR／AMR MFA 政策、邮件及受控审计保留／导出 | 本地验收通过：STARTTLS SMTP／SCIM 30 项与浏览器 10 项，含审计 API 游标分页；未测试客户 IdP／SCIM 租户 |
+
+验收前置条件已通过：REST 与 MCP 使用同一服务授权；管理写入与资源读取重新检查当前权限；覆盖循环、跨 Space／Project 权限、并发唯一性、幂等、过期或 stale 版本、未发布共同草稿以及升级时原有数据保留。QA 已明确验证没有已配置的 LLM provider 时 provider 列表为空；真人认领、提交证据、独立审核及共同 Markdown 编辑可正常运作。四个 API 服务重启后健康；4 个数据库共 103 张表、4,836 条数据的逐表 row count 与完整数据 hash 完全一致，没有异动或非预期表格；协作 context API 读回 7/7 通过。这批没有运行付费 LLM，也未验证客户 IdP／SCIM 租户或 GitHub／GitLab 部署 provider／CI 成功结果。不得以 Agent 自报值冒充已验证支出或 CI。
+
+企业验收还需证明：未配置 SMTP 时不寄信，测试邮件只投递至合成 sink；SCIM 不依 email 认领既有账号，一般 user PATCH 不可更改权限，明确 SSO 链接使用 `managed_permissions=false` 以保留 SCIM 群组权限来源，停用会撤销 session，群组不能授予 admin；MFA 只接受符合政策的已验证 IdP acr／amr；审计导出有界且不含机密。Git checks、review 和部署结果必须对应真实上游 URL／SHA／来源，head 改变后 inline comment 明确标记过期。以上状态仅代表本地整合验收，不代表已发布到 v0.2.0 或通过客户专属 IdP／SCIM 租户及 GitHub／GitLab 部署 provider／CI 验收。
 
 ## 国际化交付（2026-10-08） {#internationalization-delivery-2026-10-08}
 

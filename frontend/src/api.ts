@@ -12,6 +12,15 @@ import type {
   ModelSettings,
   ModelSettingsUpdate,
   Overview,
+  IntakeFormDefinition,
+  PlanningField,
+  PlanningCapacityRow,
+  PlanningMetadata,
+  PlanningMilestone,
+  PlanningReports,
+  PlanningRule,
+  PlanningSprint,
+  PlanningStage,
   Principal,
   Project,
   ProjectContext,
@@ -22,6 +31,8 @@ import type {
   SandboxProfileMutationInput,
   Task,
   TaskContext,
+  TaskWorklog,
+  SavedTaskQuery,
   ToolConnection,
   ToolConnectionMutationInput,
   ToolConnectionTestResult,
@@ -31,6 +42,7 @@ import type {
   WorkflowVersionInput,
 } from './types';
 import { announceAuthExpired, authRequestOptions } from './auth/client';
+import { setProductCredential } from './products/shared/productCredentials';
 
 let accessToken: string | null = null;
 const workApiPrefix = import.meta.env.VITE_WORK_API_PREFIX || '/api';
@@ -94,6 +106,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (response.status === 401) {
       const usedBearerToken = Boolean(accessToken);
       accessToken = null;
+      setProductCredential(workApiPrefix, null);
       if (!usedBearerToken) announceAuthExpired();
     }
     throw new ApiError(response.status, message, code, sourceMessage);
@@ -104,6 +117,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const api = {
   setToken(token: string | null) {
     accessToken = token;
+    setProductCredential(workApiPrefix, token);
   },
   get<T>(path: string) {
     return request<T>(path, { method: 'GET' });
@@ -119,12 +133,38 @@ export const api = {
   projectContext: (id: string) => request<ProjectContext>(`/api/projects/${encodeURIComponent(id)}/context`, { method: 'GET' }),
   participants: (projectId: string) => request<ProjectParticipant[]>(`/api/projects/${encodeURIComponent(projectId)}/participants`, { method: 'GET' }),
   overview: (projectId: string) => request<Overview>(`/api/overview?project_id=${encodeURIComponent(projectId)}`, { method: 'GET' }),
-  tasks: (projectId: string, status: string, query: string) => {
+  tasks: (projectId: string, status: string, query: string, filters: { work_type?: string; sprint_id?: string; milestone_id?: string; assignee_principal_id?: string; overdue?: boolean } = {}) => {
     const params = new URLSearchParams({ project_id: projectId });
     if (status) params.set('status', status);
     if (query.trim()) params.set('q', query.trim());
+    Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)); });
     return request<Task[]>(`/api/tasks?${params.toString()}`, { method: 'GET' });
   },
+  planning: (projectId: string) => request<PlanningMetadata>(`/api/projects/${encodeURIComponent(projectId)}/planning`, { method: 'GET' }),
+  createSprint: (projectId: string, body: Omit<PlanningSprint, 'id' | 'project_id'>) => request<PlanningSprint>(`/api/projects/${encodeURIComponent(projectId)}/sprints`, { method: 'POST', body: JSON.stringify(body) }),
+  updateSprint: (id: string, body: Omit<PlanningSprint, 'id' | 'project_id'>) => request<PlanningSprint>(`/api/sprints/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  createMilestone: (projectId: string, body: Omit<PlanningMilestone, 'id' | 'project_id'>) => request<PlanningMilestone>(`/api/projects/${encodeURIComponent(projectId)}/milestones`, { method: 'POST', body: JSON.stringify(body) }),
+  updateMilestone: (id: string, body: Omit<PlanningMilestone, 'id' | 'project_id'>) => request<PlanningMilestone>(`/api/milestones/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  createPlanningField: (projectId: string, body: Omit<PlanningField, 'id' | 'project_id'>) => request<PlanningField>(`/api/projects/${encodeURIComponent(projectId)}/fields`, { method: 'POST', body: JSON.stringify(body) }),
+  updatePlanningField: (id: string, body: Omit<PlanningField, 'id' | 'project_id'>) => request<PlanningField>(`/api/fields/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  createPlanningStage: (projectId: string, body: Omit<PlanningStage, 'id' | 'project_id'>) => request<PlanningStage>(`/api/projects/${encodeURIComponent(projectId)}/stages`, { method: 'POST', body: JSON.stringify(body) }),
+  updatePlanningStage: (id: string, body: Omit<PlanningStage, 'id' | 'project_id'>) => request<PlanningStage>(`/api/stages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  createPlanningRule: (projectId: string, body: Omit<PlanningRule, 'id' | 'project_id'>) => request<PlanningRule>(`/api/projects/${encodeURIComponent(projectId)}/rules`, { method: 'POST', body: JSON.stringify(body) }),
+  updatePlanningRule: (id: string, body: Omit<PlanningRule, 'id' | 'project_id'>) => request<PlanningRule>(`/api/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  createIntakeForm: (projectId: string, body: Omit<IntakeFormDefinition, 'id' | 'project_id'>) => request<IntakeFormDefinition>(`/api/projects/${encodeURIComponent(projectId)}/forms`, { method: 'POST', body: JSON.stringify(body) }),
+  updateIntakeForm: (id: string, body: Omit<IntakeFormDefinition, 'id' | 'project_id'>) => request<IntakeFormDefinition>(`/api/forms/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  intakeForm: (id: string) => request<IntakeFormDefinition>(`/api/forms/${encodeURIComponent(id)}`, { method: 'GET' }),
+  submitIntakeForm: (id: string, body: { title: string; description: string; custom_fields: Record<string, string | number | boolean | null> }) => request<Task>(`/api/forms/${encodeURIComponent(id)}/submit`, { method: 'POST', body: JSON.stringify(body) }),
+  reorderTasks: (projectId: string, task_ids: string[]) => request<Task[]>(`/api/projects/${encodeURIComponent(projectId)}/reorder`, { method: 'POST', body: JSON.stringify({ task_ids }) }),
+  taskWorklogs: (taskId: string) => request<TaskWorklog[]>(`/api/tasks/${encodeURIComponent(taskId)}/worklogs`, { method: 'GET' }),
+  addTaskWorklog: (taskId: string, body: { minutes: number; started_at: string; description: string }) => request<TaskWorklog>(`/api/tasks/${encodeURIComponent(taskId)}/worklogs`, { method: 'POST', body: JSON.stringify(body) }),
+  planningReports: (projectId: string) => request<PlanningReports>(`/api/projects/${encodeURIComponent(projectId)}/reports`, { method: 'GET' }),
+  setPlanningCapacity: (projectId: string, body: { principal_id: string; weekly_minutes: number }) => request<Pick<PlanningCapacityRow, 'principal_id' | 'weekly_minutes'>>(`/api/projects/${encodeURIComponent(projectId)}/capacity`, { method: 'POST', body: JSON.stringify(body) }),
+  exportTasksCsv: (projectId: string) => request<string>(`/api/projects/${encodeURIComponent(projectId)}/tasks/export`, { method: 'GET' }),
+  importTasksCsv: (projectId: string, csv: string) => request<{ created: Task[]; errors: string[] }>(`/api/projects/${encodeURIComponent(projectId)}/tasks/import`, { method: 'POST', body: JSON.stringify({ csv }) }),
+  savedTaskQueries: () => request<SavedTaskQuery[]>('/api/saved-queries', { method: 'GET' }),
+  saveTaskQuery: (body: Omit<SavedTaskQuery, 'id'>) => request<SavedTaskQuery>('/api/saved-queries', { method: 'POST', body: JSON.stringify(body) }),
+  deleteTaskQuery: (id: string) => request<void>(`/api/saved-queries/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   taskContext: (id: string) => request<TaskContext>(`/api/tasks/${encodeURIComponent(id)}/context`, { method: 'GET' }),
   taskExecutions: (id: string) => request<import('./types').Execution[]>(`/api/tasks/${encodeURIComponent(id)}/executions`, { method: 'GET' }),
   dispatchTask: (id: string, body: { agent_id: string }, idempotencyKey?: string) => request<Record<string, unknown>>(`/api/tasks/${encodeURIComponent(id)}/dispatch`, {

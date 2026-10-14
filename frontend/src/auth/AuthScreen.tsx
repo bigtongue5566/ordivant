@@ -27,13 +27,33 @@ export function AuthScreen({ product, productName }: { product: AuthProduct; pro
   const auth = useAuth();
   const [form] = Form.useForm();
   useLocalizedForm(form);
-  const [mode, setMode] = useState<AuthMode>(auth.phase === 'setup' ? 'setup' : 'login');
+  const [mailLink] = useState(() => new URLSearchParams(window.location.hash.slice(1)));
+  const [mode, setMode] = useState<AuthMode>(auth.phase === 'setup' ? 'setup' : mailLink.get('auth') === 'invite' ? 'invite' : mailLink.get('auth') === 'recover' ? 'recover' : 'login');
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
-  const [invitationFromUrl] = useState(() => new URLSearchParams(window.location.search).get('invite') ?? '');
+  const [formNotice, setFormNotice] = useState('');
+  const [invitationFromUrl] = useState(() => mailLink.get('auth') === 'invite' ? mailLink.get('code') ?? '' : new URLSearchParams(window.location.search).get('invite') ?? '');
   const [enterpriseLoginFromUrl] = useState(() => new URLSearchParams(window.location.search).get('enterprise_login') === '1');
   const autoSsoStarted = useRef(false);
   const ssoStartInProgress = useRef(false);
+
+  useEffect(() => {
+    if (!mailLink.get('auth')) return;
+    form.setFieldsValue({ email: mailLink.get('email') ?? '', recovery_code: mailLink.get('auth') === 'recover' ? mailLink.get('code') ?? '' : '', invitation_code: invitationFromUrl });
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }, [form, invitationFromUrl, mailLink]);
+
+  async function requestRecoveryMail() {
+    const email = form.getFieldValue('email');
+    if (!email) { setFormError('請先輸入電子郵件，再索取復原郵件。'); return; }
+    setBusy(true);
+    setFormError(''); setFormNotice('');
+    try {
+      await authApi.requestRecovery(email);
+      setFormNotice('若帳號符合復原條件且已設定郵件服務，系統會寄送一次性復原連結。');
+    } catch (error) { setFormError(error instanceof Error ? error.message : '帳號請求失敗，請稍後重試。'); }
+    finally { setBusy(false); }
+  }
 
   useEffect(() => {
     if (auth.phase === 'setup') setMode('setup');
@@ -59,6 +79,7 @@ export function AuthScreen({ product, productName }: { product: AuthProduct; pro
   function changeMode(next: AuthMode) {
     form.resetFields();
     setFormError('');
+    setFormNotice('');
     setMode(next);
   }
 
@@ -172,6 +193,7 @@ export function AuthScreen({ product, productName }: { product: AuthProduct; pro
         {auth.notice && <Alert className="auth-alert" type="warning" showIcon message={t(auth.notice)} />}
         {auth.phase === 'error' && <Alert className="auth-alert" type="error" showIcon message={t('帳號服務目前無法連線')} description={t(auth.error)} action={<Button size="small" onClick={() => void auth.refresh()}>{t('重試')}</Button>} />}
         {showError && auth.phase !== 'error' && <Alert className="auth-alert" type="error" showIcon message={t(showError)} />}
+        {formNotice && <Alert className="auth-alert" type="success" showIcon message={t(formNotice)} />}
         <div className="auth-service-state"><span className={`health-dot ${auth.phase === 'error' ? 'health-bad' : 'health-good'}`} />{t(auth.phase === 'error' ? '帳號服務暫時無法連線' : setupMode ? '首次設定' : '帳號服務')}</div>
         <Form form={form} layout="vertical" onFinish={(values) => void submit(values as Record<string, string>)} requiredMark={false}>
           {setupMode && <Form.Item name="name" label={t('姓名')} rules={[{ required: true, whitespace: true, message: t('請輸入姓名') }]}><Input prefix={<UserOutlined />} autoComplete="name" maxLength={120} /></Form.Item>}
@@ -189,6 +211,7 @@ export function AuthScreen({ product, productName }: { product: AuthProduct; pro
         </Form>
         {auth.sso?.enabled && auth.sso.configured && <div className="auth-enterprise-login"><Button type={ssoOnlyDefaultMode ? 'primary' : 'default'} size="large" block icon={<LoginOutlined />} loading={busy} onClick={() => void beginSsoLogin()}>{t('使用 {{name}} 登入', { name: auth.sso.display_name || t('企業帳號') })}</Button>{ssoOnly && adminRecoveryMode && <Text className="auth-admin-recovery-note">{t('此密碼入口僅供本機 Ordivant 管理員復原使用。')}</Text>}</div>}
         <div className="auth-mode-links">
+          {(!ssoOnly || adminRecoveryMode) && !setupMode && <Button type="link" loading={busy} onClick={() => void requestRecoveryMail()}>{t('寄送密碼復原郵件')}</Button>}
           {auth.phase === 'setup' && mode !== 'setup' && <Button type="link" onClick={() => changeMode('setup')}>{t('首次管理員設定')}</Button>}
           {mode !== 'login' && auth.phase !== 'setup' && <Button type="link" onClick={() => changeMode('login')}>{t('返回登入')}</Button>}
           {ssoOnly && !adminRecoveryMode && loginMode && <Button type="link" onClick={() => changeMode('admin-login')}>{t('管理員密碼登入')}</Button>}

@@ -2,6 +2,7 @@ import { t } from '../../i18n';
 import { describeApiError } from '../../i18n/errors';
 import type { ProductHealth, ProductPrincipal } from './types';
 import { announceAuthExpired, authRequestOptions } from '../../auth/client';
+import { getProductCredential, setProductCredential } from './productCredentials';
 
 export class ProductApiError extends Error {
   constructor(public status: number, message: string, public code?: string, public sourceMessage = message) {
@@ -22,7 +23,8 @@ export function createProductApi(prefix: string) {
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers);
     if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const credential = token || getProductCredential(prefix);
+    if (credential) headers.set('Authorization', `Bearer ${credential}`);
     if (init.method && init.method !== 'GET') headers.set('Idempotency-Key', createRequestId());
 
     let response: Response;
@@ -38,8 +40,9 @@ export function createProductApi(prefix: string) {
     if (!response.ok) {
       const { message, code, sourceMessage } = describeApiError(payload, response.status);
       if (response.status === 401) {
-        const usedBearerToken = Boolean(token);
+        const usedBearerToken = Boolean(credential);
         token = null;
+        setProductCredential(prefix, null);
         if (!usedBearerToken) announceAuthExpired();
       }
       throw new ProductApiError(response.status, message, code, sourceMessage);
@@ -48,7 +51,7 @@ export function createProductApi(prefix: string) {
   }
 
   return {
-    setToken(value: string | null) { token = value; },
+    setToken(value: string | null) { token = value; setProductCredential(prefix, value); },
     get<T>(path: string) { return request<T>(path, { method: 'GET' }); },
     post<T>(path: string, body: unknown) { return request<T>(path, { method: 'POST', body: JSON.stringify(body) }); },
     patch<T>(path: string, body: unknown) { return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }); },

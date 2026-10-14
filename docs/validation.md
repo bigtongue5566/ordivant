@@ -1,6 +1,6 @@
 # 驗收紀錄 {#validation-record}
 
-日期：2026-10-08（Asia/Taipei）。狀態：本機 Suite 已包含原生帳號、組織／Agent 模型設定，以及可選用 Keycloak SAML／LDAP／AD broker 的企業 OIDC。最新 Work 版本交付 Run 控制與收據、版本化 Agent 與工作流程範本、持久化間隔排程、外部 MCP 連線，以及每次執行各自隔離的 Docker sandbox。實際模型／工具執行、獨立審查、容器重新啟動、並行處理、工作區清理，以及桌面／行動版瀏覽器檢查均已通過。兩個既有本機環境均已更新，並保留其帳號／SSO／模型／專案資料。下方較早的試點、模型與 SSO 驗收門檻仍屬歷史證據；目前的執行契約與結果見 `docs/execution-contracts.md` 和 `docs/execution-validation.md`。客戶專屬 IdP／目錄、SCIM 與營運驗收仍分開處理。
+日期：2026-10-08（Asia/Taipei）。狀態：本機 Suite 已包含原生帳號、組織／Agent 模型設定，以及可選用 Keycloak SAML／LDAP／AD broker 的企業 OIDC。最新 Work 版本交付 Run 控制與收據、版本化 Agent 與工作流程範本、持久化間隔排程、外部 MCP 連線，以及每次執行各自隔離的 Docker sandbox。實際模型／工具執行、獨立審查、容器重新啟動、並行處理、工作區清理，以及桌面／行動版瀏覽器檢查均已通過。兩個既有本機環境均已更新，並保留其帳號／SSO／模型／專案資料。下方較早的試點、模型與 SSO 驗收門檻仍屬歷史證據；目前的執行契約與結果見 `docs/execution-contracts.md` 和 `docs/execution-validation.md`。本紀錄日期之後，Identity 的 SMTP／SCIM 實作完成 11 項隔離檢查；客戶專屬 IdP／目錄與正式營運驗收仍待完成，詳見[現行 P0/P1 清單](project-plan.md#p0-p1-acceptance-ledger)。
 
 ## 必要驗收門檻 {#required-gates}
 
@@ -71,3 +71,18 @@ Windows bind mount 需要以 polling 方式運作 TypeScript runtime watcher；`
 模型版本驗證了使用者明確授權的 HTTPS endpoint、要求／回傳的 `gpt-6.1-sol`、實際由 Pi 模型呼叫的 Work 工具、證據與獨立測試審查。最後一次執行回報輸入 17,157 tokens（其中 10,496 為快取）、輸出 97、合計 17,254；金額仍未知。Provider 發票／底層路由、硬性預算限制、客戶專屬企業 IdP tenant、已設定的企業 GitHub／GitLab 即時憑證、外部 CI、備份還原、負載測試及 production 可觀測性均未驗證。較早的 Pi 測試仍明確標示為 demo。測試模型連線只在開發環境設定。詳見[模型驗收](model-validation.md)與[模型使用方式](model-usage.md)。未執行遠端部署、發布或 push。
 
 執行功能版本的另一場已授權即時執行回報輸入 40,000 tokens（其中 16,128 為快取）、輸出 744、合計 40,744；美元成本仍未知。MCP 測試 endpoint 與 sandbox 內容均為合成資料，但其實際呼叫、輸出與結束狀態已驗證；DEMO 檢查仍分開標示。暫停功能會在工具邊界協作執行，工作流程以分鐘為間隔排程，外部工具使用 Bearer 驗證的 Streamable HTTP，工作容器則無網路。核准政策、硬性金額配額、互動式 MCP OAuth、任意 repository／network checkout，以及 VM 隔離仍屬後續工作。驗收後已移除自有的 `ordivant-execution-qa` 容器／network，並保留具名 volume 與報告；主開發／本機 production 資料庫、Gitea 與服務仍健康。詳見[執行功能使用方式](execution-usage.md)與[執行功能驗收](execution-validation.md)。
+
+## P0/P1 本機驗收快照（2026-10-15） {#p0-p1-local-acceptance-2026-10-15}
+
+以下結果來自尚未推送或發布的本機工作樹；前面的記錄維持各自日期的歷史驗收結果。
+
+| 範圍 | 結果 |
+|---|---|
+| Backend／Runtime 測試 | 220 項通過：Work 82、Identity 38、Knowledge 32、Code 40、Sandbox 3、Runtime 25 |
+| 工具權限防護檢查 | 20 項通過、1 項略過 |
+| Work／Knowledge | Work 真實 PostgreSQL API 53 項及瀏覽器 51 項通過；Knowledge 真實 PostgreSQL authoring 4 組及瀏覽器 336 項通過。四個 API 服務重啟後健康；4 個資料庫共 103 張表、4,836 筆資料的逐表 row count 與完整資料 hash 前後一致，協作 context API 讀回 7/7 通過 |
+| Code | 真實 Gitea API 65 項及瀏覽器 34 項通過；沒有驗證 GitHub／GitLab deployment provider 或 CI 成功結果 |
+| 企業身分 | 真實 STARTTLS SMTP／SCIM 30 項及瀏覽器 10 項通過，包含稽核 API 游標分頁；客戶 IdP／SCIM 租戶仍待驗收 |
+| 整合與 i18n | 整合／產品 smoke、四個產品 build 通過；1,750 項訊息、3 種語言與 7 項語系行為檢查通過 |
+
+QA 確認未設定 LLM provider 時 provider 清單為空；真人認領、提交證據、獨立審查與共同 Markdown 編輯可在沒有 LLM 時運作。本批沒有執行付費 LLM，也沒有驗證客戶 IdP／SCIM 租戶或 GitHub／GitLab deployment provider／CI 成功結果。

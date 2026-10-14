@@ -5,6 +5,8 @@
 
 Date: 2026-10-07 (Asia/Taipei). Scope: the local shared Ordivant Identity service, standard OIDC, and the optional Keycloak SAML identity broker. One Identity environment uses one organization identity service; Work, Knowledge, and Code retain separate databases and authorization boundaries.
 
+This report records OIDC/SAML acceptance as of 2026-10-07 and does not cover SCIM or the SMTP outbox added later. Later Identity checks and remaining customer-tenant work are tracked in the [current P0/P1 ledger](project-plan.md#p0-p1-acceptance-ledger).
+
 <span id="已通過的協定與安全驗收"></span>
 <span id="已通过的协定与安全验收"></span>
 
@@ -57,6 +59,6 @@ The SAML fixture keeps `validateSignature` and `wantAssertionsSigned`, using `sa
 
 The UI includes configuration templates and provider-specific claim guidance for Entra ID, Google Workspace, Okta, Auth0, Keycloak, and generic OIDC. Protocol compatibility was tested with a real Keycloak instance. Each enterprise tenant still needs acceptance with its own issuer, client ID, secret, claims, and MFA policy. A signed fixture covers Google's issuer alias; it is not a connection to a user's Google Workspace.
 
-The signed SAML round trip through the Keycloak broker passed. LDAP/AD uses Keycloak User Federation; operator configuration is documented, but no real directory was connected. Native SAML endpoints, SCIM 2.0, automated enterprise offboarding, backup/restore, load testing, and production monitoring remain separate work. Identity/Keycloak persistence across restart is not a full backup/restore test.
+The signed SAML round trip through the Keycloak broker passed. LDAP/AD uses Keycloak User Federation; operator configuration is documented, but no real directory was connected. As of this report, native SAML endpoints, SCIM 2.0, automated enterprise offboarding, backup/restore, load testing, and production monitoring remained separate work. Later SCIM/SMTP implementation checks are tracked in the [current acceptance ledger](project-plan.md#p0-p1-acceptance-ledger). Identity/Keycloak persistence across restart is not a full backup/restore test.
 
 After acceptance, the synthetic account was signed out, the temporary viewport was reset, and the QA tab was closed; the user's existing `5173/work` tab was left open. The QA login policy was restored to `password_and_sso`, then `down` stopped the `ordivant-sso-qa` containers and network. Named volumes, service secrets, and local reports were retained for reproduction. No synthetic account, enterprise provider configuration, or QA realm was added to the main environment. Development and local production data remain separate. No external deployment, release, or push occurred. See [enterprise sign-in](enterprise-sso.md) and [container development and deployment](containers.md) for setup.

@@ -533,9 +533,12 @@ def recover(body: RecoverRequest, request: Request, response: Response, db: Sess
     user = db.scalar(select(User).where(User.normalized_email == str(body.email)))
     code_hash = keyed_hash(settings.service_secret, "recovery", body.recovery_code)
     recovery = None
+    from .enterprise_models import RecoveryMailCredential
+    mail_credential = db.get(RecoveryMailCredential, code_hash)
+    mail_expired = bool(mail_credential and _aware(mail_credential.expires_at) <= _now())
     if user is not None and user.active and user.role != "admin" and (_sso_only(db) or user.credential_type == "sso"):
         user = None
-    if user is not None and user.active:
+    if user is not None and user.active and not mail_expired:
         recovery = db.scalar(
             select(RecoveryCode).where(
                 RecoveryCode.user_id == user.id,
@@ -671,9 +674,11 @@ def create_invitation(
         consumed_at=None,
     )
     db.add(invitation)
+    from .enterprise import queue_mail
+    queued = queue_mail(db, settings, kind="invitation", recipient=email, code=code, expires_at=invitation.expires_at)
     _audit(db, "invitation.created", actor_id=ctx.user.id, details={"role": body.role})
     db.commit()
-    return {"invitation_code": code, "expires_at": _iso(invitation.expires_at)}
+    return {"invitation_code": code, "expires_at": _iso(invitation.expires_at), "mail_queued": queued}
 
 
 @router.post("/accept-invitation", status_code=201)
@@ -766,9 +771,11 @@ def patch_user(
         target.active = body.active
     if "permissions" in fields and body.permissions is not None:
         new_permissions = permissions_data(body.permissions)
+        if target.permissions_source == "scim" and new_permissions != (target.permissions or {}):
+            raise DomainError(409, "scim_managed_user", "Manage this account's permissions through provisioning groups")
         permissions_changed = new_permissions != (target.permissions or {})
         target.permissions = new_permissions
-        if target.credential_type == "sso":
+        if target.credential_type == "sso" and target.permissions_source != "scim":
             target.permissions_source = "manual"
             db.execute(
                 update(IdentityLink)

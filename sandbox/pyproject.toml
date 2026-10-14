@@ -1,6 +1,6 @@
 [project]
 name = "ordivant-sandbox-api"
-version = "0.2.0"
+version = "0.3.0"
 description = "Isolated per-run Docker executor for Ordivant"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -12,7 +12,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "httpx>=0.27,<1",
-  "pytest>=8.3,<9",
+  "pytest>=9.0.3,<10",
 ]
 
 [tool.pytest.ini_options]

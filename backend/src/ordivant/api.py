@@ -10,12 +10,13 @@ from typing import Any, Callable
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from . import automation, execution_settings, runs, sandbox_profiles, service, tool_connections, vcs
+from . import automation, execution_settings, planning, runs, sandbox_profiles, service, tool_connections, vcs
+from .collaboration_adapter import install as install_collaboration
 from .config import app_mode, authorized_dev_proxy
 from .db import Base, SessionLocal, engine, get_db
 from .migrations import migrate_collaboration
@@ -31,7 +32,13 @@ from .model_settings import (
 )
 from .schemas import (
     AgentTemplateCreate,
+    CapacityWrite,
     AgentTemplateVersionCreate,
+    IntakeFormCreate,
+    IntakeFormPatch,
+    IntakeSubmit,
+    MilestoneCreate,
+    MilestonePatch,
     AgentCreate,
     AgentPatch,
     BlockRequest,
@@ -47,6 +54,13 @@ from .schemas import (
     OutboxClaimRequest,
     ProgressRequest,
     ProjectCreate,
+    ProjectFieldCreate,
+    ProjectFieldPatch,
+    ProjectRuleCreate,
+    ProjectRulePatch,
+    ProjectStageCreate,
+    ProjectStagePatch,
+    ReorderTasks,
     ReleaseRequest,
     ReviewRequest,
     RuntimeDeliveryRequest,
@@ -55,10 +69,15 @@ from .schemas import (
     SandboxProfileCreate,
     SandboxProfilePatch,
     SubmitRequest,
+    SprintCreate,
+    SprintPatch,
+    SavedQueryCreate,
+    TaskImport,
     ToolConnectionCreate,
     ToolConnectionPatch,
     TaskCreate,
     TaskPatch,
+    WorklogCreate,
     WorkflowCreate,
     WorkflowScheduleUpdate,
     WorkflowStart,
@@ -75,7 +94,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Ordivant API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Ordivant API", version="0.3.0", lifespan=lifespan)
 
 
 @app.exception_handler(DomainError)
@@ -122,6 +141,9 @@ async def get_actor(request: Request, session: Session = Depends(get_db)) -> Pri
     return actor
 
 
+install_collaboration(app, get_db, get_actor)
+
+
 def _request_hash(body: Any) -> str:
     encoded = json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -131,6 +153,10 @@ def _authorize_idempotent_replay(session: Session, actor: Principal, path: str, 
     parts = path.strip("/").split("/")
     if parts[:2] == ["api", "tasks"] and len(parts) >= 3 and parts[2] != "tasks":
         service.task_for_actor(session, actor, parts[2])
+        if len(parts) == 3:
+            service.require_role(actor, service.ACTIVE_ROLES)
+        if len(parts) == 4 and parts[3] == "worklogs":
+            planning.authorize_worklog_actor(session, actor, parts[2])
     elif path == "/api/tasks":
         service.require_project(session, actor, body["project_id"])
         if actor.role not in service.ACTIVE_ROLES and not (actor.kind == "agent" and actor.role == "worker"):
@@ -191,6 +217,45 @@ def _authorize_idempotent_replay(session: Session, actor: Principal, path: str, 
     elif path == "/api/sandbox-profiles":
         service.require_role(actor, service.ACTIVE_ROLES)
         service.require_project(session, actor, body["project_id"])
+    elif len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] in {
+        "sprints", "milestones", "fields", "stages", "rules", "forms", "reorder", "tasks/import", "capacity"
+    }:
+        service.require_role(actor, service.ACTIVE_ROLES)
+        service.require_project(session, actor, parts[2])
+    elif len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:5] == ["tasks", "import"]:
+        service.require_role(actor, service.ACTIVE_ROLES)
+        service.require_project(session, actor, parts[2])
+    elif len(parts) == 4 and parts[0:2] == ["api", "forms"] and parts[3] == "submit":
+        item = session.get(planning.ProjectIntakeForm, parts[2])
+        if item is None or not item.active:
+            raise DomainError(404, "not_found", "找不到表單或沒有存取權限")
+        service.require_project(session, actor, item.project_id)
+    elif len(parts) == 3 and parts[0:2] in (["api", "sprints"], ["api", "milestones"], ["api", "fields"], ["api", "stages"], ["api", "rules"], ["api", "forms"]):
+        model = {
+            "sprints": planning.ProjectSprint,
+            "milestones": planning.ProjectMilestone,
+            "fields": planning.ProjectField,
+            "stages": planning.ProjectStage,
+            "rules": planning.ProjectRule,
+            "forms": planning.ProjectIntakeForm,
+        }[parts[1]]
+        item = session.get(model, parts[2])
+        if item is None:
+            raise DomainError(404, "not_found", "找不到規劃資源")
+        service.require_role(actor, service.ACTIVE_ROLES)
+        service.require_project(session, actor, item.project_id)
+    elif path == "/api/saved-queries":
+        service.require_project(session, actor, body["project_id"])
+    elif len(parts) == 3 and parts[:2] == ["api", "saved-queries"]:
+        item = session.get(planning.SavedQuery, parts[2])
+        if item is None:
+            if not isinstance(response, dict) or response.get("id") != parts[2] or response.get("principal_id") != actor.id:
+                raise DomainError(404, "not_found", "找不到 saved query")
+            service.require_project(session, actor, response["project_id"])
+            return
+        service.require_project(session, actor, item.project_id)
+        if item.principal_id != actor.id:
+            raise DomainError(403, "forbidden", "只能刪除自己建立的 saved query")
 
 
 def _strip_fencing_tokens(path: str, response: Any) -> Any:
@@ -237,6 +302,14 @@ def _refresh_fencing_tokens(session: Session, actor: Principal, path: str, body:
 
 def _actual_request_path(request: Request) -> str:
     return request.url.path
+
+
+def _perform_planning_mutation(
+    request: Request, session: Session, actor: Principal, body: Any, callback: Callable[[], Any], status_code: int = 200
+) -> JSONResponse:
+    if not request.headers.get("Idempotency-Key"):
+        raise DomainError(422, "idempotency_key_required", "此操作需要 Idempotency-Key")
+    return _perform_mutation(request, session, actor, body, callback, status_code)
 
 
 def _perform_mutation(
@@ -443,6 +516,150 @@ def get_project_context(project_id: str, session: Session = Depends(get_db), act
     return service.get_project_context(session, actor, project_id)
 
 
+@app.get("/api/projects/{project_id}/planning")
+def get_project_planning(project_id: str, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return planning.planning_json(session, actor, project_id)
+
+
+@app.post("/api/projects/{project_id}/capacity")
+def post_capacity(project_id: str, request: Request, value: CapacityWrite, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.set_capacity(session, actor, project_id, data))
+
+
+@app.post("/api/projects/{project_id}/sprints", status_code=201)
+def post_sprint(project_id: str, request: Request, value: SprintCreate, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.create_sprint(session, actor, project_id, data), 201)
+
+
+@app.patch("/api/sprints/{sprint_id}")
+def patch_sprint(sprint_id: str, request: Request, value: SprintPatch, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump(exclude_unset=True)
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.patch_sprint(session, actor, sprint_id, data))
+
+
+@app.post("/api/projects/{project_id}/milestones", status_code=201)
+def post_milestone(project_id: str, request: Request, value: MilestoneCreate, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.create_milestone(session, actor, project_id, data), 201)
+
+
+@app.patch("/api/milestones/{milestone_id}")
+def patch_milestone(milestone_id: str, request: Request, value: MilestonePatch, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump(exclude_unset=True)
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.patch_milestone(session, actor, milestone_id, data))
+
+
+@app.post("/api/projects/{project_id}/fields", status_code=201)
+def post_project_field(project_id: str, request: Request, value: ProjectFieldCreate, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.create_field(session, actor, project_id, data), 201)
+
+
+@app.patch("/api/fields/{field_id}")
+def patch_project_field(field_id: str, request: Request, value: ProjectFieldPatch, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump(exclude_unset=True)
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.patch_field(session, actor, field_id, data))
+
+
+@app.post("/api/projects/{project_id}/stages", status_code=201)
+def post_project_stage(project_id: str, request: Request, value: ProjectStageCreate, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.create_stage(session, actor, project_id, data), 201)
+
+
+@app.patch("/api/stages/{stage_id}")
+def patch_project_stage(stage_id: str, request: Request, value: ProjectStagePatch, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump(exclude_unset=True)
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.patch_stage(session, actor, stage_id, data))
+
+
+@app.post("/api/projects/{project_id}/rules", status_code=201)
+def post_project_rule(project_id: str, request: Request, value: ProjectRuleCreate, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.create_rule(session, actor, project_id, data), 201)
+
+
+@app.patch("/api/rules/{rule_id}")
+def patch_project_rule(rule_id: str, request: Request, value: ProjectRulePatch, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump(exclude_unset=True)
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.patch_rule(session, actor, rule_id, data))
+
+
+@app.post("/api/projects/{project_id}/forms", status_code=201)
+def post_intake_form(project_id: str, request: Request, value: IntakeFormCreate, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.create_form(session, actor, project_id, data), 201)
+
+
+@app.patch("/api/forms/{form_id}")
+def patch_intake_form(form_id: str, request: Request, value: IntakeFormPatch, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump(exclude_unset=True)
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.patch_form(session, actor, form_id, data))
+
+
+@app.get("/api/forms/{form_id}")
+def get_intake_form(form_id: str, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return planning.get_form(session, actor, form_id)
+
+
+@app.post("/api/forms/{form_id}/submit", status_code=201)
+def post_intake_submission(form_id: str, request: Request, value: IntakeSubmit, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.submit_form(session, actor, form_id, data), 201)
+
+
+@app.post("/api/projects/{project_id}/reorder")
+def post_task_reorder(project_id: str, request: Request, value: ReorderTasks, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.reorder_tasks(session, actor, project_id, data["task_ids"]))
+
+
+@app.get("/api/projects/{project_id}/reports")
+def get_project_reports(project_id: str, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return planning.project_reports(session, actor, project_id)
+
+
+@app.get("/api/projects/{project_id}/tasks/export")
+def export_project_tasks(project_id: str, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    content = planning.export_tasks_csv(session, actor, project_id)
+    return Response(content=content, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": "attachment; filename=tasks.csv"})
+
+
+@app.post("/api/projects/{project_id}/tasks/import")
+def import_project_tasks(project_id: str, request: Request, value: TaskImport, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.import_tasks_csv(session, actor, project_id, data["csv"]))
+
+
+@app.get("/api/tasks/{task_id}/worklogs")
+def get_task_worklogs(task_id: str, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return planning.list_worklogs(session, actor, task_id)
+
+
+@app.post("/api/tasks/{task_id}/worklogs", status_code=201)
+def post_task_worklog(task_id: str, request: Request, value: WorklogCreate, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.add_worklog(session, actor, task_id, data), 201)
+
+
+@app.get("/api/saved-queries")
+def get_saved_queries(session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return planning.list_saved_queries(session, actor)
+
+
+@app.post("/api/saved-queries", status_code=201)
+def post_saved_query(request: Request, value: SavedQueryCreate, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_planning_mutation(request, session, actor, data, lambda: planning.create_saved_query(session, actor, data), 201)
+
+
+@app.delete("/api/saved-queries/{query_id}")
+def delete_saved_query(query_id: str, request: Request, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return _perform_planning_mutation(request, session, actor, {}, lambda: planning.delete_saved_query(session, actor, query_id))
+
+
 @app.get("/api/projects/{project_id}/participants")
 async def get_project_participants(project_id: str, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
     await sync_project_directory(session, actor, project_id)
@@ -473,10 +690,15 @@ def get_tasks(
     status: str | None = None,
     q: str | None = None,
     ready_only: bool = False,
+    work_type: str | None = None,
+    sprint_id: str | None = None,
+    milestone_id: str | None = None,
+    assignee_principal_id: str | None = None,
+    overdue: bool = False,
     session: Session = Depends(get_db),
     actor: Principal = Depends(get_actor),
 ):
-    return service.list_tasks(session, actor, project_id, status, q, ready_only)
+    return service.list_tasks(session, actor, project_id, status, q, ready_only, work_type, sprint_id, milestone_id, assignee_principal_id, overdue)
 
 
 @app.post("/api/tasks", status_code=201)
@@ -486,9 +708,11 @@ async def post_task(
     session: Session = Depends(get_db),
     actor: Principal = Depends(get_actor),
 ):
-    data = value.model_dump()
+    data = value.model_dump(exclude_unset=True)
     if data.get("assignee_principal_id") or data.get("reviewer_principal_id"):
         await sync_project_directory(session, actor, data["project_id"])
+    if planning.PLANNING_FIELDS.intersection(data):
+        return _perform_planning_mutation(request, session, actor, data, lambda: service.create_task(session, actor, data), 201)
     return _perform_mutation(request, session, actor, data, lambda: service.create_task(session, actor, data), 201)
 
 
@@ -623,6 +847,8 @@ async def patch_task(
     if data.get("assignee_principal_id") or data.get("reviewer_principal_id"):
         task = service.task_for_actor(session, actor, task_id)
         await sync_project_directory(session, actor, task.project_id)
+    if planning.PLANNING_FIELDS.intersection(data):
+        return _perform_planning_mutation(request, session, actor, data, lambda: service.patch_task(session, actor, task_id, data))
     return _perform_mutation(request, session, actor, data, lambda: service.patch_task(session, actor, task_id, data))
 
 

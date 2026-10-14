@@ -19,6 +19,7 @@ from ordivant_code.models import (
     PullRequestReview,
     Repository,
 )
+from ordivant_code.collaboration_models import CollaborationNotification, CollaborationSubscription
 from ordivant_code.security import new_id, now_utc
 
 
@@ -59,6 +60,11 @@ def test_human_and_agent_share_comments_reviews_idempotency_and_audit(api, crede
     base = _url(repository["id"], 311)
     human_headers = {**auth(credentials["manager_token"]), "Idempotency-Key": "human-comment-311"}
     agent_headers = {**auth(credentials["writer_token"]), "Idempotency-Key": "agent-comment-311"}
+    with SessionLocal() as session:
+        session.add(CollaborationSubscription(
+            id=new_id(), resource_kind="pull", resource_id="pending", principal_id=credentials["reader_id"],
+        ))
+        session.commit()
 
     human_comment = api.post(f"{base}/comments", headers=human_headers, json={"body": "Human finding"})
     human_replay = api.post(f"{base}/comments", headers=human_headers, json={"body": "Human finding"})
@@ -101,21 +107,48 @@ def test_human_and_agent_share_comments_reviews_idempotency_and_audit(api, crede
     assert remote.calls >= 5
 
     with SessionLocal() as session:
+        pull = session.scalar(select(PullRequest).where(
+            PullRequest.repository_id == repository["id"], PullRequest.number == 311,
+        ))
+        subscription = session.scalar(select(CollaborationSubscription).where(
+            CollaborationSubscription.resource_kind == "pull",
+            CollaborationSubscription.principal_id == credentials["reader_id"],
+        ))
+        subscription.resource_id = pull.id
+        session.commit()
+
+    # The next authenticated review emits through the local PR UUID subscription.
+    bridge_review = api.post(
+        f"{base}/reviews",
+        headers={**auth(credentials["manager_token"]), "Idempotency-Key": "manager-review-311"},
+        json={"decision": "comment", "comment": "Notify subscribers", "expected_head_sha": "a" * 40},
+    )
+    assert bridge_review.status_code == 200
+
+    with SessionLocal() as session:
         assert len(session.scalars(select(PullRequestComment).where(
             PullRequestComment.pull_request_id == body["pull_request_id"],
         )).all()) == 2
         assert len(session.scalars(select(PullRequestReview).where(
             PullRequestReview.pull_request_id == body["pull_request_id"],
-        )).all()) == 2
+        )).all()) == 3
         actions = session.scalars(select(AuditEvent.action).where(
             AuditEvent.project_id == repository["project_id"],
             AuditEvent.entity_id.in_([
                 human_comment.json()["id"], agent_comment.json()["id"],
                 human_review.json()["id"], agent_review.json()["id"],
+                bridge_review.json()["id"],
             ]),
         )).all()
         assert actions.count("code.pull_request_comment_added") == 2
-        assert actions.count("code.pull_request_review_recorded") == 2
+        assert actions.count("code.pull_request_review_recorded") == 3
+        notification = session.scalar(select(CollaborationNotification).where(
+            CollaborationNotification.resource_kind == "pull",
+            CollaborationNotification.resource_id == body["pull_request_id"],
+            CollaborationNotification.principal_id == credentials["reader_id"],
+        ))
+        assert notification is not None
+        assert notification.actor_id == credentials["manager_id"]
 
 
 def test_verified_creator_can_comment_but_cannot_approve_own_pull(api, credentials, repository, monkeypatch):

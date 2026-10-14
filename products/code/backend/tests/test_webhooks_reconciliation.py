@@ -15,6 +15,7 @@ from ordivant_code.models import AuditEvent, CheckReceipt, PullRequest
 from ordivant_code.schemas import CheckCreate, FileCommit, PullRequestCreate
 from ordivant_code.security import new_id
 from ordivant_code import service
+from ordivant_code.collaboration_models import CollaborationNotification, CollaborationSubscription
 
 
 def test_webhook_signature_delivery_dedupe_and_binding(repository):
@@ -51,6 +52,68 @@ def test_webhook_signature_delivery_dedupe_and_binding(repository):
         matching = next(event for event in events if event.action == "code.gitea_status" and event.data.get("delivery_id") == "delivery-security-test")
         assert "Agent-reported result" not in json.dumps(matching.data)
         assert "upstream-secret" not in json.dumps(matching.data)
+
+
+def test_pull_webhook_emits_to_local_pull_uuid_without_changing_audit_identity(repository, credentials):
+    config = GiteaConfig("http://127.0.0.1:3001", "upstream-secret", "hook-secret")
+    number = 37
+    body_object = {
+        "repository": {
+            "full_name": f"{repository['owner']}/{repository['name']}",
+            "owner": {"login": repository["owner"]},
+            "name": repository["name"],
+        },
+        "pull_request": {
+            "number": number,
+            "title": "Webhook collaboration event",
+            "body": "",
+            "state": "open",
+            "head": {"ref": "topic", "sha": "a" * 40},
+            "base": {"ref": "main", "sha": "b" * 40},
+            "html_url": "http://127.0.0.1:3001/demo/pulls/37",
+            "created_at": "2026-10-14T00:00:00Z",
+            "updated_at": "2026-10-14T00:00:00Z",
+        },
+    }
+    body = json.dumps(body_object, separators=(",", ":")).encode()
+    signature = hmac.new(config.webhook_secret.encode(), body, hashlib.sha256).hexdigest()
+
+    with SessionLocal() as session:
+        service.process_webhook(session, body, signature, "delivery-pull-bridge", "pull_request", config)
+        pull = session.scalar(select(PullRequest).where(
+            PullRequest.repository_id == repository["id"], PullRequest.number == number,
+        ))
+        assert pull is not None
+        session.add(CollaborationSubscription(
+            id=new_id(), resource_kind="pull", resource_id=pull.id, principal_id=credentials["manager_id"],
+        ))
+        session.commit()
+
+    # A later delivery reaches the local PR subscribers while retaining the upstream number in audit history.
+    body_object["pull_request"]["title"] = "Webhook collaboration event updated"
+    body = json.dumps(body_object, separators=(",", ":")).encode()
+    signature = hmac.new(config.webhook_secret.encode(), body, hashlib.sha256).hexdigest()
+    with SessionLocal() as session:
+        service.process_webhook(session, body, signature, "delivery-pull-bridge-2", "pull_request", config)
+        pull = session.scalar(select(PullRequest).where(
+            PullRequest.repository_id == repository["id"], PullRequest.number == number,
+        ))
+        webhook_audit = session.scalar(select(AuditEvent).where(
+            AuditEvent.action == "code.gitea_pull_request",
+            AuditEvent.data["delivery_id"].as_string() == "delivery-pull-bridge-2",
+        ))
+        notification = session.scalar(select(CollaborationNotification).where(
+            CollaborationNotification.resource_kind == "pull",
+            CollaborationNotification.resource_id == pull.id,
+            CollaborationNotification.event_id == webhook_audit.id,
+        ))
+        assert webhook_audit.entity_id == str(number)
+        assert webhook_audit.data["repository_id"] == repository["id"]
+        assert webhook_audit.data["pull_number"] == number
+        assert notification is not None
+        assert notification.principal_id == credentials["manager_id"]
+        assert notification.actor_id is None
+        session.commit()
 
 
 class CommitResponseLost:

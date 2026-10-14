@@ -24,6 +24,7 @@ class SpaceCreate(InputModel):
 
 class DocumentCreate(InputModel):
     space_id: str = Field(min_length=1, max_length=80)
+    parent_id: str | None = Field(default=None, max_length=80)
     title: str = Field(min_length=1, max_length=300)
     summary: str = Field(default="", max_length=4000)
     body: str = Field(min_length=1, max_length=2_000_000)
@@ -78,6 +79,54 @@ class DecisionCreate(InputModel):
         if not value.strip():
             raise ValueError("body must not be blank")
         return value
+
+
+class DocumentOrganizationPatch(InputModel):
+    parent_id: str | None = Field(default=None, max_length=80)
+    archived: bool | None = None
+
+
+class CommentAnchor(InputModel):
+    quote: str = Field(min_length=1, max_length=2000)
+    start: int | None = Field(default=None, ge=0)
+    end: int | None = Field(default=None, ge=1)
+    version: int = Field(ge=1)
+
+
+class DocumentCommentCreate(InputModel):
+    body: str = Field(min_length=1, max_length=5000)
+    anchor: CommentAnchor | None = None
+    parent_id: str | None = Field(default=None, max_length=80)
+
+    @field_validator("body")
+    @classmethod
+    def body_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("comment body must not be blank")
+        return value
+
+
+class DocumentCommentPatch(InputModel):
+    resolved: bool
+
+
+class SpaceTemplateCreate(InputModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+    body: str = Field(min_length=1, max_length=100_000)
+
+    @field_validator("name", "body")
+    @classmethod
+    def required_text_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value must not be blank")
+        return value
+
+
+class DocumentRestore(InputModel):
+    version: int = Field(ge=1)
+    expected_current_version: int = Field(ge=1)
+    change_summary: str = Field(default="", max_length=4000)
 
 
 class LocalSessionCreate(InputModel):

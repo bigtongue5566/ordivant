@@ -44,6 +44,8 @@ def document_view(document: Document) -> dict[str, object]:
     return {
         "id": document.id,
         "space_id": document.space_id,
+        "parent_id": document.parent_id,
+        "archived": document.archived,
         "title": document.title,
         "summary": document.summary,
         "tags": list(document.tags),
@@ -118,18 +120,23 @@ def add_audit(
     entity_id: str,
     data: dict[str, object],
 ) -> None:
-    session.add(
-        AuditEvent(
-            id=new_id(),
-            space_id=space_id,
-            actor_id=principal.id,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            data=data,
-            created_at=now_iso(),
-        )
+    item = AuditEvent(
+        id=new_id(),
+        space_id=space_id,
+        actor_id=principal.id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        data=data,
+        created_at=now_iso(),
     )
+    session.add(item)
+    document_id = entity_id if entity_type == "document" else data.get("document_id")
+    document = session.get(Document, document_id) if isinstance(document_id, str) else None
+    if document is not None and document.space_id == space_id:
+        from .collaboration_features import emit
+
+        emit(session, "document", document.id, item.id, principal.id, action)
 
 
 def mutate(

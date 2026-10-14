@@ -187,7 +187,7 @@ class UserOut(BaseModel):
     active: bool
     permissions: Permissions
     credential_type: Literal["local", "sso"] = "local"
-    permissions_source: Literal["manual", "sso"] = "manual"
+    permissions_source: Literal["manual", "sso", "scim"] = "manual"
 
     @field_serializer("permissions")
     def serialize_permissions(self, value: Permissions) -> dict:
@@ -255,6 +255,15 @@ class SSOSettingsRequest(BaseModel):
     default_permissions: Permissions = Field(default_factory=Permissions)
     group_mappings: list[SSOGroupMapping] = Field(default_factory=list, max_length=500)
     login_policy: Literal["password_and_sso", "sso_only"] = "password_and_sso"
+    required_acr: list[str] = Field(default_factory=list, max_length=20)
+    required_amr: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("required_acr", "required_amr")
+    @classmethod
+    def validate_authentication_claims(cls, values: list[str]) -> list[str]:
+        if any(not value.strip() or len(value) > 256 for value in values):
+            raise ValueError("Authentication requirements must use exact claim values")
+        return list(dict.fromkeys(value.strip() for value in values))
 
     @field_validator("display_name", "issuer_url", "client_id", "email_claim", "groups_claim")
     @classmethod
@@ -288,6 +297,8 @@ class SSOSettingsRequest(BaseModel):
 
     @model_validator(mode="after")
     def reject_wildcard_scopes(self):
+        if (self.required_acr or self.required_amr) and self.login_policy != "sso_only":
+            raise ValueError("Authentication assurance requirements need SSO-only member login")
         permission_sets = [self.default_permissions, *(mapping.permissions for mapping in self.group_mappings)]
         for permissions in permission_sets:
             for product in (permissions.work, permissions.knowledge, permissions.code):

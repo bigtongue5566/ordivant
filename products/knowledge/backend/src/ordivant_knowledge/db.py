@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -48,6 +48,28 @@ def session_factory(engine: Engine) -> sessionmaker[Session]:
 
 def get_session_factory(engine: Engine) -> sessionmaker[Session]:
     return session_factory(engine)
+
+
+def migrate_schema(engine: Engine) -> None:
+    """Create new tables and add Knowledge columns without replacing existing rows."""
+    from . import models as _models  # noqa: F401
+
+    with engine.begin() as connection:
+        table_names = set(inspect(connection).get_table_names())
+        if "documents" in table_names:
+            columns = {column["name"] for column in inspect(connection).get_columns("documents")}
+            if "parent_id" not in columns:
+                connection.execute(text(
+                    "ALTER TABLE documents ADD COLUMN parent_id VARCHAR(36) "
+                    "REFERENCES documents(id) ON DELETE SET NULL"
+                ))
+            if "archived" not in columns:
+                connection.execute(text(
+                    "ALTER TABLE documents ADD COLUMN archived BOOLEAN NOT NULL DEFAULT FALSE"
+                ))
+    Base.metadata.create_all(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_parent ON documents(parent_id)"))
 
 
 def session_dependency(factory: sessionmaker[Session]) -> Generator[Session, None, None]:

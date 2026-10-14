@@ -56,6 +56,7 @@ import { api, createIdempotencyKey, isDefinitiveClientError } from './api';
 import { RunConsole } from './RunConsole';
 import { Automation } from './Automation';
 import { ToolSettings } from './ToolSettings';
+import { PlanningWorkspace } from './components/planning/PlanningWorkspace';
 import { MarkdownContent } from './shared/MarkdownContent';
 import './AgentExecution.css';
 import { ProductSwitcher } from './products/shared/ProductSwitcher';
@@ -64,6 +65,7 @@ import { AuthScreen } from './auth/AuthScreen';
 import { AuthAccessDenied } from './auth/AuthAccessDenied';
 import { AccountControl } from './auth/AccountSettings';
 import { AgentModelConfigFields, ModelSettings } from './models/ModelSettings';
+import { CollaborationPanel } from './products/shared/CollaborationPanel';
 import { formatDate, formatNumber, t as translate, useI18n, useLocalizedForm, localized } from './i18n';
 import type {
   Agent,
@@ -90,7 +92,7 @@ import type {
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 
-type Section = 'tasks' | 'runs' | 'automation' | 'tools' | 'overview' | 'agents' | 'inbox' | 'audit' | 'model-settings';
+type Section = 'tasks' | 'planning' | 'runs' | 'automation' | 'tools' | 'overview' | 'agents' | 'inbox' | 'audit' | 'model-settings';
 type Lease = Pick<ClaimedExecution, 'execution' | 'lease_token'>;
 type TaskOperation = 'progress' | 'submit' | 'block' | 'release';
 type ExistingPullRequest = {
@@ -110,6 +112,7 @@ type ExistingPullRequest = {
 
 const sectionNames: Record<Section, string> = {
   tasks: '任務工作區',
+  planning: '規劃工作區',
   runs: 'Run 執行',
   automation: '自動化',
   tools: '工具與沙箱',
@@ -353,6 +356,9 @@ function WorkWorkspace() {
   const taskRequestSequence = useRef(0);
   const agentExecutionOptionsSequence = useRef(0);
   const pendingDispatchKey = useRef<{ taskId: string; agentId: string; key: string } | null>(null);
+  const requestedResourceId = useRef(new URLSearchParams(window.location.search).get('resource')?.trim() ?? '');
+  const resourceAttemptKey = useRef('');
+  const prefetchedTaskContext = useRef<{ id: string; context: TaskContext } | null>(null);
 
   useEffect(() => {
     agentExecutionOptionsSequence.current += 1;
@@ -423,6 +429,8 @@ function WorkWorkspace() {
       setPrincipalSessionKey('');
       setPrincipalError('');
       setPrincipalErrorStatus(0);
+      resourceAttemptKey.current = '';
+      prefetchedTaskContext.current = null;
       setProjects([]);
       setProjectId('');
       setProjectContext(null);
@@ -469,6 +477,35 @@ function WorkWorkspace() {
       .catch((error) => {
         if (current) setProjectError(errorText(error));
       });
+    return () => { current = false; };
+  }, [principal]);
+
+  useEffect(() => {
+    const resourceId = requestedResourceId.current;
+    if (!principal || !resourceId) return;
+    const attemptKey = `${principal.id}:${resourceId}`;
+    if (resourceAttemptKey.current === attemptKey) return;
+    resourceAttemptKey.current = attemptKey;
+    let current = true;
+    setTaskContextBusy(true);
+    setTaskContextError('');
+    api.taskContext(resourceId)
+      .then((context) => {
+        if (!current) return;
+        prefetchedTaskContext.current = { id: context.task.id, context };
+        setSection('tasks');
+        setProjectId(context.task.project_id);
+        setSelectedTaskId(context.task.id);
+        setDrawerOpen(true);
+      })
+      .catch((error) => {
+        if (!current) return;
+        setSection('tasks');
+        setSelectedTaskId(resourceId);
+        setDrawerOpen(true);
+        setTaskContextError(errorText(error));
+      })
+      .finally(() => { if (current) setTaskContextBusy(false); });
     return () => { current = false; };
   }, [principal]);
 
@@ -538,6 +575,14 @@ function WorkWorkspace() {
   useEffect(() => {
     if (!selectedTaskId || !drawerOpen) {
       setTaskContext(null);
+      return;
+    }
+    const prefetched = prefetchedTaskContext.current;
+    if (prefetched?.id === selectedTaskId) {
+      prefetchedTaskContext.current = null;
+      setTaskContext(prefetched.context);
+      setTaskContextBusy(false);
+      setTaskContextError('');
       return;
     }
     let current = true;
@@ -622,7 +667,15 @@ function WorkWorkspace() {
     setTaskModalOpen(true);
   }
 
+  function updateResourceQuery(taskId?: string) {
+    const url = new URL(window.location.href);
+    if (taskId) url.searchParams.set('resource', taskId);
+    else url.searchParams.delete('resource');
+    window.history.replaceState(window.history.state, '', url);
+  }
+
   function openTask(task: Task) {
+    updateResourceQuery(task.id);
     setSelectedTaskId(task.id);
     setDrawerOpen(true);
   }
@@ -691,8 +744,7 @@ function WorkWorkspace() {
         : await api.post<Task>('/api/tasks', { project_id: projectId, ...body });
       setTaskModalOpen(false);
       await Promise.all([loadTasks(), refreshProjectList()]);
-      setSelectedTaskId(saved.id);
-      setDrawerOpen(true);
+      openTask(saved);
       await reloadTaskContext(saved.id);
       messageApi.success(editingTask ? t('任務規格已更新。') : t('任務已建立。'));
     } catch (error) {
@@ -1223,6 +1275,7 @@ function WorkWorkspace() {
 
   const navSections: Array<{ id: Section; icon: React.ReactNode; label: string; count?: number }> = [
     { id: 'tasks', icon: <UnorderedListOutlined />, label: '任務' },
+    { id: 'planning', icon: <AppstoreOutlined />, label: '規劃工作區' },
     { id: 'runs', icon: <PlayCircleOutlined />, label: 'Run 執行' },
     { id: 'automation', icon: <BranchesOutlined />, label: '自動化' },
     { id: 'tools', icon: <ToolOutlined />, label: '工具與沙箱' },
@@ -1260,6 +1313,7 @@ function WorkWorkspace() {
               options={projects.map((project) => ({ value: project.id, label: <span><b>{project.key}</b><span className="project-option-name">{project.name}</span></span> }))}
               onChange={(value) => {
                 if (value !== projectId) agentExecutionOptionsSequence.current += 1;
+                updateResourceQuery();
                 setProjectId(value);
                 setSelectedTaskId('');
                 setDrawerOpen(false);
@@ -1323,6 +1377,8 @@ function WorkWorkspace() {
                 </>
               )}
 
+              {section === 'planning' && <PlanningWorkspace key={projectId} projectId={projectId} canManage={canManageAgents} canLogWork={principal.kind === 'human' && ['admin', 'manager', 'worker'].includes(principal.role)} canSubmitIntake={principal.kind === 'human'} participants={collaborators} onOpenTask={openTask} onCreateTask={openNewTask} />}
+
               {section === 'overview' && <OverviewView overview={overview} loading={projectBusy} project={currentProject} events={overview?.activity ?? []} agents={projectContext?.agents ?? []} onSelectTask={() => setSection('tasks')} />}
 
               {section === 'runs' && <RunConsole key={projectId} projectId={projectId} canControl={canManageAgents} />}
@@ -1364,7 +1420,10 @@ function WorkWorkspace() {
       <Drawer
         title={<div className="drawer-title"><div><span className="task-key">{selectedTask?.key ?? 'TASK'}</span><Title level={4}>{selectedTask?.title ?? t('任務詳情')}</Title></div>{selectedTask && taskStatusTag(selectedTask.status, t)}</div>}
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => {
+          setDrawerOpen(false);
+          updateResourceQuery();
+        }}
         width={620}
         className="task-drawer"
         destroyOnClose={false}
@@ -1421,6 +1480,12 @@ function WorkWorkspace() {
                   key: 'history', label: t('事件'), children: <div className="compact-event-list">{taskContext?.events.map((event) => <AuditRow key={event.id} event={event} actor={nameFor(event.actor_id, collaborators, principal)} />) ?? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('尚無事件')} />}</div>,
                 },
               ]}
+            />
+            <CollaborationPanel
+              product="work"
+              kind="task"
+              resourceId={selectedTask.id}
+              canWrite={Boolean(principal && ['admin', 'manager', 'worker', 'reviewer'].includes(principal.role))}
             />
           </>
         )}

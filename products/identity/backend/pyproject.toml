@@ -1,6 +1,6 @@
 [project]
 name = "ordivant-identity"
-version = "0.2.0"
+version = "0.3.0"
 description = "Independent Ordivant human identity and session service"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -17,7 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3,<9",
+  "pytest>=9.0.3,<10",
 ]
 
 [build-system]

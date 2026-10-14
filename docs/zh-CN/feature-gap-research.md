@@ -4,6 +4,8 @@
 
 更新：2026-10-08（Asia/Taipei）。原研究于 2026-10-07 由 PM 与三位 luna-worker 盘点程序、契约及验收纪录，参考官方协定与产品文档。用户已选定 **F03 Run 控制台、F04 自动流程／Agent 模板、F05 工具连接／沙箱**，已完成实作与本机集成验收；本页同步区分第一版能力与仍待开发的范围。
 
+本页的功能缺口和 F11 SCIM 候选是 2026-10-08 的历史快照。2026-10-15 已加入 SCIM 实作；当前客户租户验收状态见[项目计划](project-plan.md#p0-p1-acceptance-ledger)。
+
 本轮功能说明与证据见 [运行功能](execution-usage.md)／[验收](execution-validation.md)。接续优先候选是 **运行前审批、总 token／金额治理、通知与真实 CI 集成**；企业文档导入、既有版控、SCIM 等需求仍保留。
 
 排序先假设「一家企业私有部署，团队共同使用」。如果改为同一套服务承载多家客户，租户隔离与每个租户的 Identity／IdP 设置必须提前。
@@ -84,7 +86,7 @@ P0 是下一轮内核操作能力；P1 是企业日常使用与导入功能；P2
 | 候选 | 现况 | 建议启动条件与最小交付 |
 |---|---|---|
 | 本机管理员 MFA／Passkey | 企业 MFA 可交给 IdP；本机账号没有 TOTP／WebAuthn | 若管理员复原账号也必须第二因素，提供 enrollment／验证／复原政策及安全审计。 |
-| 审核导出、SIEM 与保留政策 | 有数据库 audit 与受限读取，缺导出／保留／防窜改机制 | 先做可分页 JSON／CSV、可配置保留、可靠的事件导出；有防窜改要求时再加签章／hash chain／WORM 保存与验证。 |
+| 审计整合、SIEM 与防篡改 | Identity 已有受限 JSONL 导出、复合游标分页及明确应用的保留期；尚无 SIEM 推送、签名／hash chain 或 WORM 防篡改存储 | 当组织需要集中关联 Identity 与产品事件时，先提供有界、可重试的 SIEM／事件导出整合；如需防篡改，再加入签名／hash chain／WORM 存储与验证。 |
 | Vault／KMS／Secret Manager | 客户端密钥／模型密钥已在本地加密；Compose 机密通过挂载文件提供 | 当密钥管理要集中或跨节点时，增加外部机密后端、凭证轮替与复原流程。 |
 | 自动备份、还原演练、监控与 HA | 有 health、具名 volumes、重启持久化及手动备份说明；完整 restore／HA 未验收 | 正式运行前制定 RPO／RTO，验证数据库、key、Pi 与 Git／附件一致还原；加入告警／metrics，需求升高后再处理 worker partition／HA。Pi storage 维持单一拥有者。 |
 

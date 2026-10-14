@@ -99,9 +99,9 @@ docker compose -f compose.yaml -f compose.identity-broker.yaml --profile identit
 
 禁用账号、变更权限、解除企业身分或禁用／更换身分服务会撤销相关工作阶段。激活 SSO-only 时撤销一般成员的密码工作阶段。若 IdP 支持 OIDC Back-Channel Logout，可将 URL 设为 `https://APP_HOST/auth-api/oidc/backchannel-logout`；只有通过签章与重放检查的注销通知才能撤销对应企业登录。
 
-Ordivant 注销会撤销三个模块共用的工作阶段；企业其他应用的工作阶段由 IdP 管理。企业 MFA、Conditional Access、密码规则与人员离职流程需在 IdP 设置；若 IdP 不发送 backchannel logout，管理员应在平台同步禁用成员，而不能把 IdP 禁用误认为现有平台 session 立即失效。
+Ordivant 注销会撤销三个模块共用的工作阶段；企业其他应用的工作阶段由 IdP 管理。企业 MFA、Conditional Access、密码规则与人员离职流程需在 IdP 设置。如果平台 SSO 政策配置了 required_acr 或 required_amr，Identity 会验证已签署 IdP 权杖中的 claims：acr 必须符合其中一个要求值，amr 必须包含全部指定方式。这些 claim 是验证条件，实际 MFA 因素由 IdP 执行。若 IdP 不发送 backchannel logout，管理员应在平台同步禁用成员，而不能把 IdP 禁用误认为现有平台 session 立即失效。
 
-「身分审核」记录登录、布建、设置与权限变更、链接／解除链接及注销事件。只有管理员可以查看，不含密码、cookie、client secret 或 provider token。
+「身分审核」记录登录、布建、设置与权限变更、链接／解除链接及注销事件。管理员可查看或在「账号与安全性」→「企业治理」导出 Identity 记录。此导出不包含 Work、Knowledge 或 Code 产品事件，也不含密码、cookie、client secret 或 provider token。
 
 <span id="維運與備份"></span>
 <span id="运维与备份"></span>
@@ -114,4 +114,4 @@ Ordivant 注销会撤销三个模块共用的工作阶段；企业其他应用�
 
 私有企业 CA 可将 PEM trust bundle 挂载到 Identity 容器，再设置 `ORDIVANT_SSO_CA_BUNDLE` 为该文件路径；TLS 凭证验证持续激活。Compose 信任指定的 `web` proxy，由 Nginx 覆写 `X-Real-IP`，依实际来源进行登录限流。自订反向代理需在 `ORDIVANT_AUTH_TRUSTED_PROXY_HOSTS` 列出精确 proxy host／IP，并由它覆写此 header；直接连到 Identity API 的伪造 header 不会被采用。
 
-Ordivant 使用 OIDC 作为身分整合协定；SAML 与 LDAP／AD 透过选配的 Keycloak broker 联邦。原生 SAML 协定端点与 SCIM 2.0 自动离职同步尚未实作；各客户的 IdP tenant 与 LDAP／AD 目录也尚未逐一验证。上线前请在各组织环境核对 claims、MFA、网域限制与资源授权政策。
+Ordivant 使用 OIDC 作为身分整合协定；SAML 与 LDAP／AD 透过选配的 Keycloak broker 联邦，平台没有原生 SAML 端点。Identity 提供 SCIM 2.0 Users／Groups 布建，但不支持 bulk 操作，也不会按 email 自动链接既有账号。各客户的 IdP tenant 与 LDAP／AD 目录尚未逐一验证。上线前请依[管理指南](./guide/administration.md)设置 SCIM 专用凭证、明确的群组资源授权、邮件、审计与由 IdP 执行的 MFA，并逐一核对各组织的 claims、网域限制及资源授权政策。

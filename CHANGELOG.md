@@ -8,6 +8,7 @@
 - **Code**：新增綁定目前 head SHA 的行內討論、上游分支保護管理與讀回，以及 Gitea Actions／GitHub／GitLab 部署證據的讀取。這些功能不會代替上游執行 CI 或部署。
 - **企業身分**：新增 SCIM 2.0 Users／Groups、已驗證 OIDC ACR／AMR 政策、SMTP 邀請／復原寄送 outbox，以及 Identity 稽核匯出／保留。可透過選用的 `compose.enterprise.yaml` 分別掛載 Identity 與 Code 機密。
 - 新功能提供繁體中文、簡體中文與英文。升級與設定方式見三語使用者文件；真實客戶 IdP／SCIM 目錄，以及 GitHub／GitLab 成功部署資料仍需在各自環境驗證。
+- 更新 pytest 至 9.1.1，修補 GHSA-6w46-j5rx-g56g，並更新相容的 pytest-asyncio。
 
 ## 0.2.0 — 2026-10-14
 

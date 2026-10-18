@@ -1,7 +1,7 @@
 {
   "name": "ordivant-frontend",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader runner",
@@ -15,10 +15,14 @@
     "test:project-companions": "node ../scripts/project-companions-test.mjs",
     "test:access-tokens": "node ../scripts/access-tokens-test.mjs",
     "test:agent-presets": "node ../scripts/agent-presets-test.mjs",
+    "test:agent-lifecycle": "node ../scripts/agent-lifecycle-test.mjs",
     "check:markdown": "node scripts/check-markdown.mjs",
     "preview": "vite preview --configLoader runner --host 127.0.0.1 --outDir dist/suite",
-    "i18n:generate": "node ../scripts/i18n-check.mjs --write",
-    "i18n:check": "node ../scripts/i18n-check.mjs"
+    "i18n:check": "node --test ../scripts/i18n-catalog-validation.test.mjs && node ../scripts/i18n-check.mjs",
+    "test:navigation": "node ../scripts/navigation-test.mjs",
+    "test:account-settings": "node ../scripts/account-settings-test.mjs",
+    "test:sidebar": "node ../scripts/sidebar-test.mjs",
+    "test:project-settings": "node ../scripts/project-settings-test.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
@@ -38,7 +42,6 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.7.0",
-    "opencc-js": "1.4.2",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   }

@@ -14,11 +14,12 @@ Afterward, sign in with “Email” and “Password.” Your session persists wh
 
 ## Accounts and security
 
-Use “Accounts and security” next to your name in the sidebar to:
+The account menu at the bottom of the sidebar opens **Account settings** for your own profile, security, and API/MCP access. Administrators have a separate **Organization administration** entry in the sidebar for users and invitations, enterprise SSO, governance, and identity audit. These are separate screens, with left navigation on desktop and a selector on small screens. Refreshing preserves the selected settings page. You can:
 
 - View account information and change your password. Other signed-in devices are invalidated as soon as the change succeeds.
 - View your sessions, revoke other sign-ins, or sign out all sessions.
-- Administrators can invite members, disable accounts, and change product roles and access scopes for Projects and Knowledge Spaces.
+
+Under **Organization administration**, administrators can invite members, disable accounts, and change product roles and access scopes for Projects and Knowledge Spaces.
 
 An administrator creates an invitation code that expires after 24 hours and can be used once. The administrator gives the code to the member; the platform does not pretend to send an email. The member selects “Accept invitation” on the sign-in page, enters the code, and sets a password to activate the granted access.
 
@@ -44,7 +45,7 @@ Preserve and back up Identity volumes, business volumes, and the service-secret 
 
 ## Enterprise SSO
 
-An administrator configures enterprise OIDC under “Accounts and security → Enterprise SSO.” Supported providers include Entra ID, Google Workspace, Okta, Auth0, Keycloak, and generic OIDC. SAML and LDAP/AD can connect through the optional Keycloak broker. See [Enterprise sign-in and identity management](enterprise-sso.md) for setup, group authorization, and container operations.
+An administrator configures enterprise OIDC under “Organization administration → Enterprise SSO.” Supported providers include Entra ID, Google Workspace, Okta, Auth0, Keycloak, and generic OIDC. SAML and LDAP/AD can connect through the optional Keycloak broker. See [Enterprise sign-in and identity management](enterprise-sso.md) for setup, group authorization, and container operations.
 
 After it is enabled, the sign-in page shows an enterprise sign-in button. Password and MFA checks happen at the enterprise identity service. On first sign-in, members must meet the allowed-domain and invitation/JIT policies and receive explicit product scopes. The three modules share one platform session; successful sign-in does not grant access to every Project. SSO accounts do not use local password recovery.
 

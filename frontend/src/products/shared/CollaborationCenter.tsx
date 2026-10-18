@@ -11,7 +11,7 @@ import { getProductCredential } from './productCredentials';
 type Notice = { id: string; resource_kind: string; resource_id: string; title: string; actor_id: string | null; body: string; event: string; created_at: string; read: boolean; product: ProductKey };
 type SearchResult = { id: string; title: string; excerpt: string; product: ProductKey; source: string; resource_kind?: string };
 
-export function CollaborationCenter({ product }: { product: ProductKey }) {
+export function CollaborationCenter({ product, showLabels = false, onOpen }: { product: ProductKey; showLabels?: boolean; onOpen?: () => void }) {
   const { t } = useI18n();
   const auth = useAuth();
   const [open, setOpen] = useState(false);
@@ -58,8 +58,8 @@ export function CollaborationCenter({ product }: { product: ProductKey }) {
   }
   function link(product: ProductKey, id: string, kind?: string) { return `/${product}?resource=${encodeURIComponent(id)}${kind ? `&kind=${encodeURIComponent(kind)}` : ''}`; }
   return <>
-    <Badge count={notices.filter(item => !item.read).length} size="small"><Button type="text" size="small" aria-label={t('通知中心')} icon={<BellOutlined />} onClick={() => { setOpen(true); setTab('notifications'); void load(); }} /></Badge>
-    <Button type="text" size="small" aria-label={t('全域搜尋')} icon={<SearchOutlined />} onClick={() => { setOpen(true); setTab('search'); setErrors([]); }} />
+    <Badge count={notices.filter(item => !item.read).length} size="small"><Button type="text" size="small" aria-label={t('通知中心')} icon={<BellOutlined />} onClick={() => { setOpen(true); setTab('notifications'); void load(); onOpen?.(); }}>{showLabels && t('通知')}</Button></Badge>
+    <Button type="text" size="small" aria-label={t('全域搜尋')} icon={<SearchOutlined />} onClick={() => { setOpen(true); setTab('search'); setErrors([]); onOpen?.(); }}>{showLabels && t('搜尋')}</Button>
     <Drawer width={620} title={t('協作中心')} open={open} onClose={() => setOpen(false)}>
       {errors.map(error => <Alert key={error} type="warning" showIcon message={error} style={{ marginBottom: 12 }} />)}
       <Tabs activeKey={tab} onChange={setTab} items={[

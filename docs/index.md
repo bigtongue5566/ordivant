@@ -155,11 +155,11 @@ Code 可為 PR 保存綁定目前 head SHA 的 Ordivant 本地討論與審查紀
 
 Ordivant 採 **MIT 授權**，可自行使用、修改及部署。Work、Knowledge 與 Code 可各自部署；資料由你管理。共用登入支援本地帳號與企業 OIDC，選用 Keycloak 可橋接 SAML／LDAP。
 
-目前公開版本為 **v0.4.0（2026-10-19）**。此版本的 Work、Knowledge、Code 真人協作不需要 LLM；只有自主 Agent Run 需要模型設定。Knowledge 提供文字搜尋，Code 的 Git 寫入需要 Gitea；此版本尚未提供向量搜尋、內建 CI、硬性金額預算或分散式執行。Docker 沙箱沒有網路或主機目錄存取，使用已備妥的工具執行工作；需要更強隔離時應配置 VM 執行環境。查看[版本與升級說明](./release.md)。
+目前公開版本為 **v0.5.0（2026-10-19）**。此版本的 Work、Knowledge、Code 真人協作不需要 LLM；只有自主 Agent Run 需要模型設定。Knowledge 提供文字搜尋，Code 的 Git 寫入需要 Gitea；此版本尚未提供向量搜尋、內建 CI、硬性金額預算或分散式執行。Docker 沙箱沒有網路或主機目錄存取，使用已備妥的工具執行工作；需要更強隔離時應配置 VM 執行環境。查看[版本與升級說明](./release.md)。
 
-## v0.4.0：快速建立團隊與外部連線 {#unreleased-p0-p1}
+## v0.5.0：以專案為中心的團隊協作 {#unreleased-p0-p1}
 
-用六種職務範本建立 Agent，從 Provider 取得可用模型，並在建立 Work 專案時選擇一起建立 Knowledge 空間和 Code 專案。真人也可建立個人權杖，透過 API 或 MCP 使用自己獲授權的功能。查看[版本說明](./release.md)及[連線教學](./guide/administration.md#personal-api-and-mcp-access)。
+從側欄選擇目前專案，在「專案設定」管理基本資料與成員存取權。個人帳號與組織管理分開，重新整理也能保留操作位置；Agent 可停用後重新啟用、封存保留歷史，或在未使用時永久刪除。查看[版本說明](./release.md)與[專案設定教學](./guide/work.md#project-settings)。
 
 外部模型與工具需自行提供連線及授權，可能產生供應商費用。未設定模型的 DEMO 只演示執行流程；真實交付請核對成果、來源與供應商用量。
 

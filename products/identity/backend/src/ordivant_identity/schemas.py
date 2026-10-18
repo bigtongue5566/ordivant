@@ -167,6 +167,13 @@ class UserPatch(BaseModel):
     active: bool | None = None
     name: str | None = Field(default=None, min_length=1, max_length=160)
     permissions: Permissions | None = None
+    expected_permissions: Permissions | None = None
+
+    @model_validator(mode="after")
+    def validate_permission_snapshot(self):
+        if "expected_permissions" in self.model_fields_set and (self.expected_permissions is None or self.permissions is None):
+            raise ValueError("expected_permissions requires a non-null permissions update")
+        return self
 
     @field_validator("name")
     @classmethod

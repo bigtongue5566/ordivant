@@ -1,5 +1,6 @@
 import type { LocalizedMessage } from './i18n';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigationState } from './shared/useNavigationState';
 import { Alert, Button, Descriptions, Drawer, Empty, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch, Table, Tag, Typography, message } from 'antd';
 import type { FormInstance } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -107,7 +108,7 @@ export function Automation({ projectId, canManage, agents, onApplyTemplate }: {
   onApplyTemplate: (template: AgentTemplate) => void;
 }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<AutomationTab>('templates');
+  const [tab, setTab] = useNavigationState<AutomationTab>('automation-tab', 'templates', ['templates', 'workflows', 'history']);
   return <section className="automation-page">
     <Segmented
       className="automation-tabs"

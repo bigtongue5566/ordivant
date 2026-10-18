@@ -5,9 +5,9 @@
 
 This page explains what is available today and what is not supported yet. It does not promise delivery dates. Use [GitHub Issues](https://github.com/ordivant-ai/ordivant/issues) to suggest needs, discuss them, or follow progress; a request does not guarantee development.
 
-## New in v0.4.0 {#unreleased-development}
+## New in v0.5.0 {#unreleased-development}
 
-v0.4.0 adds personal API/MCP tokens, PM/PG/SA/SD/QA/Reviewer templates, Provider model discovery, and optional companion products after Work project creation. Existing boards, Sprints, attachments, notifications, search, and enterprise integrations remain available. See the [feature tour](./features.md), [Work guide](./guide/work.md), and [upgrade guide](./release.md). Products retain separate authorization; validate enterprise integrations in your own environment.
+v0.5.0 adds project settings, member access management, clear project and organization navigation, Agent archiving and deletion, and persistent navigation after refresh. Personal accounts and organization administration are separate, and translations are maintained by hand. Work roles remain product-wide, and products retain separate authorization. See the [release notes](./release.md) and [project settings guide](./guide/work.md#project-settings).
 
 <span id="v0-1-已交付"></span>
 

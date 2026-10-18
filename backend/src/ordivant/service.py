@@ -325,6 +325,9 @@ def agent_for_task(session: Session, actor: Principal, agent_id: str, project_id
     agent = session.get(Agent, agent_id)
     if agent is None:
         raise not_found("找不到 agent")
+    agent = _lock_agent(session, agent)
+    if agent.status == "archived":
+        raise conflict("agent_archived", "Agent 已封存，無法再編輯、指派或執行工作。")
     principal = session.get(Principal, agent.principal_id)
     if principal is None or not principal.active or principal.organization_id != actor.organization_id or project_id not in principal_projects(session, principal.id):
         raise forbidden("agent 沒有此專案的存取權")
@@ -502,6 +505,23 @@ def list_projects(session: Session, actor: Principal) -> list[dict]:
     return [project_json(item) for item in projects]
 
 
+def update_project(session: Session, actor: Principal, project_id: str, value: dict) -> dict:
+    require_project(session, actor, project_id)
+    require_role(actor, ACTIVE_ROLES)
+    project = session.scalar(
+        select(Project).where(Project.id == project_id).with_for_update().execution_options(populate_existing=True)
+    )
+    current = {key: getattr(project, key) for key in ("name", "description", "budget_usd")}
+    if value["expected"] != current:
+        raise conflict("project_settings_changed", "專案設定已由其他人更新，請重新載入後再儲存。")
+    changes = {key: value[key] for key in current if value[key] != current[key]}
+    for key, item in changes.items():
+        setattr(project, key, item)
+    if changes:
+        add_audit(session, actor, "project.updated", "project", project.id, project.id, {"fields": sorted(changes)})
+    return project_json(project)
+
+
 def get_project_context(session: Session, actor: Principal, project_id: str) -> dict:
     project = require_project(session, actor, project_id)
     tasks = session.scalars(select(Task).where(Task.project_id == project_id).order_by(Task.created_at.desc()))
@@ -509,7 +529,7 @@ def get_project_context(session: Session, actor: Principal, project_id: str) -> 
         select(Agent)
         .join(Principal, Principal.id == Agent.principal_id)
         .join(ProjectMembership, ProjectMembership.principal_id == Principal.id)
-        .where(ProjectMembership.project_id == project_id)
+        .where(ProjectMembership.project_id == project_id, Agent.status != "archived")
         .order_by(Agent.name)
     )
     decisions = session.scalars(
@@ -1180,7 +1200,7 @@ def create_agent(session: Session, actor: Principal, value: dict) -> dict:
     return result
 
 
-def list_agents(session: Session, actor: Principal, project_id: str | None = None) -> list[dict]:
+def list_agents(session: Session, actor: Principal, project_id: str | None = None, *, include_archived: bool = False) -> list[dict]:
     ids = principal_projects(session, actor.id)
     if project_id:
         require_project(session, actor, project_id)
@@ -1191,7 +1211,8 @@ def list_agents(session: Session, actor: Principal, project_id: str | None = Non
         select(Agent)
         .join(Principal, Principal.id == Agent.principal_id)
         .join(ProjectMembership, ProjectMembership.principal_id == Principal.id)
-        .where(ProjectMembership.project_id.in_(ids))
+        .where(ProjectMembership.project_id.in_(ids), Principal.organization_id == actor.organization_id,
+               True if include_archived else Agent.status != "archived")
         .distinct()
         .order_by(Agent.name)
     )
@@ -1199,20 +1220,11 @@ def list_agents(session: Session, actor: Principal, project_id: str | None = Non
 
 
 def patch_agent(session: Session, actor: Principal, agent_id: str, patch: dict) -> dict:
-    require_role(actor, ACTIVE_ROLES)
-    agent = session.get(Agent, agent_id)
-    if agent is None:
-        raise not_found("找不到 agent")
-    if agent.team_id:
-        team = session.get(Team, agent.team_id)
-        if team is None or team.organization_id != actor.organization_id:
-            raise not_found("找不到 agent")
-    principal = session.get(Principal, agent.principal_id)
-    if principal is None or principal.organization_id != actor.organization_id:
-        raise not_found("找不到 agent")
-    project_ids = principal_projects(session, principal.id)
-    for project_id in project_ids:
-        require_project(session, actor, project_id)
+    from .agent_lifecycle import managed_agent
+
+    agent, principal, project_ids = managed_agent(session, actor, agent_id)
+    if agent.status == "archived":
+        raise conflict("agent_archived", "Agent 已封存，無法再編輯、指派或執行工作。")
     model_config_present = "model_config" in patch
     execution_config_present = "execution_config" in patch
     template_id_present = "template_id" in patch
@@ -1459,7 +1471,7 @@ def _create_dispatch(session: Session, actor: Principal, task: Task, agent: Agen
         raise forbidden("agent 與任務必須屬於相同組織")
     if agent.runtime != "pi":
         raise bad_request("runtime_required", "只有 Pi runtime agent 可 dispatch")
-    if agent.status in {"disabled", "offline"}:
+    if agent.status in {"disabled", "offline", "archived"}:
         raise conflict("agent_unavailable", "Agent 目前不可執行任務")
     if task.status != "ready" or not _dependencies_done(session, task.id):
         raise conflict("task_not_ready", "任務尚未 ready 或依賴未完成")
@@ -1708,7 +1720,7 @@ def overview(session: Session, actor: Principal, project_id: str | None) -> dict
             select(Agent)
             .join(Principal, Principal.id == Agent.principal_id)
             .join(ProjectMembership, ProjectMembership.principal_id == Principal.id)
-            .where(ProjectMembership.project_id.in_(project_ids))
+            .where(ProjectMembership.project_id.in_(project_ids), Agent.status != "archived")
             .distinct()
         )
     ) if project_ids else []

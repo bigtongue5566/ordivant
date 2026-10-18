@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MarkdownContent } from '../../shared/MarkdownContent';
+import { useNavigationState } from '../../shared/useNavigationState';
 import {
   Alert,
   Button,
@@ -152,23 +153,38 @@ function CodeWorkspace() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState('');
   const [projects, setProjects] = useState<CodeProject[]>([]);
-  const [projectId, setProjectId] = useState('');
+  const [projectId, setProjectId] = useNavigationState<string>('project', '');
   const [projectsBusy, setProjectsBusy] = useState(false);
   const [projectError, setProjectError] = useState('');
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [repositoriesBusy, setRepositoriesBusy] = useState(false);
   const [repositoriesError, setRepositoriesError] = useState('');
-  const [repositoryId, setRepositoryId] = useState('');
-  const [section, setSection] = useState<CodeSection>('repositories');
+  const [repositoryId, setRepositoryId] = useNavigationState<string>('repository', '');
+  const [section, setSection] = useNavigationState<CodeSection>('section', 'repositories', ['repositories', 'pulls']);
   const [pulls, setPulls] = useState<PullRequest[]>([]);
   const [pullsBusy, setPullsBusy] = useState(false);
   const [pullsError, setPullsError] = useState('');
-  const [selectedPullNumber, setSelectedPullNumber] = useState<number | null>(null);
+  const [pullNumber, setPullNumber] = useNavigationState<string>('pull', '');
+  const selectedPullNumber = /^[1-9]\d*$/.test(pullNumber) && Number.isSafeInteger(Number(pullNumber)) ? Number(pullNumber) : null;
+  const setSelectedPullNumber = useCallback((number: number | null) => setPullNumber(number ? String(number) : ''), [setPullNumber]);
   const [pullContext, setPullContext] = useState<PullRequestContext | null>(null);
   const [pullBusy, setPullBusy] = useState(false);
   const [pullError, setPullError] = useState('');
-  const [pullDrawerOpen, setPullDrawerOpen] = useState(false);
+  const pullDrawerOpen = selectedPullNumber !== null;
+  function closePullDrawer() {
+    setSelectedPullNumber(null);
+    clearResourceTarget();
+  }
   const appliedResource = useRef('');
+  const repositoryRequestId = useRef(0);
+
+  function clearResourceTarget() {
+    appliedResource.current = '';
+    const url = new URL(window.location.href);
+    url.searchParams.delete('resource');
+    url.searchParams.delete('kind');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [repositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [branchModalOpen, setBranchModalOpen] = useState(false);
@@ -229,6 +245,11 @@ function CodeWorkspace() {
     try {
       const result = await codeApi.get<CodeProject[]>('/projects');
       setProjects(result);
+      const requestedProject = new URLSearchParams(window.location.search).get('project');
+      if (!selectId && requestedProject && !result.some(project => project.id === requestedProject)) {
+        setRepositoryId('');
+        setSelectedPullNumber(null);
+      }
       if (selectId) setProjectId(selectId);
       else setProjectId((existing) => result.some((project) => project.id === existing) ? existing : result[0]?.id ?? '');
     } catch (error) {
@@ -254,13 +275,14 @@ function CodeWorkspace() {
     let active = true;
     codeApi.get<CodeResource>(`/resources/${encodeURIComponent(kind)}/${encodeURIComponent(resourceId)}`)
       .then((resource) => {
-        if (!active) return;
+        if (!active || new URLSearchParams(window.location.search).get('resource') !== resourceId) return;
         setProjectId(resource.project_id);
         if (resource.repository_id) setRepositoryId(resource.repository_id);
-        setSection(resource.resource_kind === 'pull' ? 'pulls' : 'repositories');
+        // Existing resource links still choose their destination; an explicit
+        // section records a later user navigation and must survive a reload.
+        if (!['repositories', 'pulls'].includes(new URLSearchParams(window.location.search).get('section') ?? '')) setSection(resource.resource_kind === 'pull' ? 'pulls' : 'repositories');
         if (resource.resource_kind === 'pull' && resource.pull_number) {
           setSelectedPullNumber(resource.pull_number);
-          setPullDrawerOpen(true);
         }
       })
       .catch((error) => { if (active) messageApi.error(errorMessage(error)); });
@@ -268,6 +290,7 @@ function CodeWorkspace() {
   }, [principal?.id, messageApi]);
 
   const loadRepositories = useCallback(async () => {
+    const requestId = ++repositoryRequestId.current;
     if (!projectId) {
       setRepositories([]);
       setRepositoryId('');
@@ -278,18 +301,22 @@ function CodeWorkspace() {
     try {
       const params = new URLSearchParams({ project_id: projectId });
       const result = await codeApi.get<Repository[]>(`/repositories?${params.toString()}`);
+      if (requestId !== repositoryRequestId.current) return;
       setRepositories(result);
+      const requestedRepository = new URLSearchParams(window.location.search).get('repository');
+      if (requestedRepository && !result.some(repository => repository.id === requestedRepository)) setSelectedPullNumber(null);
       setRepositoryId((existing) => result.some((repository) => repository.id === existing) ? existing : result[0]?.id ?? '');
     } catch (error) {
-      setRepositoriesError(errorMessage(error));
+      if (requestId === repositoryRequestId.current) setRepositoriesError(errorMessage(error));
     } finally {
-      setRepositoriesBusy(false);
+      if (requestId === repositoryRequestId.current) setRepositoriesBusy(false);
     }
   }, [projectId]);
 
   useEffect(() => {
-    if (principal) void loadRepositories();
-  }, [loadRepositories, principal]);
+    if (principal && projects.some(project => project.id === projectId)) void loadRepositories();
+    return () => { repositoryRequestId.current += 1; };
+  }, [loadRepositories, principal, projects, projectId]);
 
   const loadPulls = useCallback(async () => {
     if (!repositoryId) {
@@ -310,9 +337,9 @@ function CodeWorkspace() {
   }, [repositoryId, selectedPullNumber]);
 
   useEffect(() => {
-    if (principal && repositoryId) void loadPulls();
+    if (principal && repositories.some(repository => repository.id === repositoryId)) void loadPulls();
     else setPulls([]);
-  }, [loadPulls, principal, repositoryId]);
+  }, [loadPulls, principal, repositoryId, repositories]);
 
   const loadPullContext = useCallback(async (number = selectedPullNumber) => {
     if (!repositoryId || !number) return;
@@ -331,12 +358,12 @@ function CodeWorkspace() {
   }, [repositoryId, selectedPullNumber]);
 
   useEffect(() => {
-    if (!pullDrawerOpen || !selectedPullNumber) {
+    if (!principal || !repositories.some(repository => repository.id === repositoryId) || !pullDrawerOpen || !selectedPullNumber) {
       setPullContext(null);
       return;
     }
     void loadPullContext().catch(() => undefined);
-  }, [loadPullContext, pullDrawerOpen, selectedPullNumber]);
+  }, [loadPullContext, principal, repositories, repositoryId, pullDrawerOpen, selectedPullNumber]);
 
   useEffect(() => {
     if (!auth.session) {
@@ -345,9 +372,8 @@ function CodeWorkspace() {
       setAuthError('');
       setPrincipalErrorStatus(0);
       setProjects([]);
-      setProjectId('');
       setRepositories([]);
-      setRepositoryId('');
+      // Preserve URL scope until the authorized project/repository lists arrive.
       setPulls([]);
       setPullContext(null);
       return;
@@ -462,7 +488,7 @@ function CodeWorkspace() {
       await loadPulls();
       setSelectedPullNumber(pull.number);
       setPullModalOpen(false);
-      setPullDrawerOpen(true);
+
       pullForm.resetFields();
       messageApi.success(t('已建立 Gitea PR #{{number}}。', { number: formatNumber(pull.number) }));
     } catch (error) {
@@ -531,11 +557,11 @@ function CodeWorkspace() {
 
   const projectOptions = projects.map((project) => ({ value: project.id, label: `${project.key} · ${project.name}` }));
   const repositoryColumns: ColumnsType<Repository> = useMemo(() => [
-    { title: t('儲存庫'), dataIndex: 'name', key: 'name', render: (_: unknown, repository) => <button type="button" className={`repository-list-row${repository.id === repositoryId ? ' repository-selected' : ''}`} onClick={() => { setRepositoryId(repository.id); setSection('repositories'); }}><CodeOutlined /><span><strong>{repository.owner}/{repository.name}</strong><small>{repository.default_branch} · {dateText(repository.created_at)}</small></span><Tag color="purple">{t('私人')}</Tag></button> },
+    { title: t('儲存庫'), dataIndex: 'name', key: 'name', render: (_: unknown, repository) => <button type="button" className={`repository-list-row${repository.id === repositoryId ? ' repository-selected' : ''}`} onClick={() => { clearResourceTarget(); setSelectedPullNumber(null); setRepositoryId(repository.id); setSection('repositories'); }}><CodeOutlined /><span><strong>{repository.owner}/{repository.name}</strong><small>{repository.default_branch} · {dateText(repository.created_at)}</small></span><Tag color="purple">{t('私人')}</Tag></button> },
   ], [repositoryId, locale]);
 
   const pullColumns: ColumnsType<PullRequest> = [
-    { title: t('合併請求'), dataIndex: 'title', key: 'title', render: (title: string, pull) => <button type="button" className="pull-table-link" onClick={() => { setSelectedPullNumber(pull.number); setPullDrawerOpen(true); }}><span className={`pull-state-mark pull-state-${pull.state}`} /><span><strong>#{formatNumber(pull.number)} · {title}</strong><small>{pull.head} → {pull.base}</small></span></button> },
+    { title: t('合併請求'), dataIndex: 'title', key: 'title', render: (title: string, pull) => <button type="button" className="pull-table-link" onClick={() => { setSelectedPullNumber(pull.number); }}><span className={`pull-state-mark pull-state-${pull.state}`} /><span><strong>#{formatNumber(pull.number)} · {title}</strong><small>{pull.head} → {pull.base}</small></span></button> },
     { title: t('狀態'), dataIndex: 'state', key: 'state', width: 90, render: (value: PullRequest['state']) => <Tag color={value === 'open' ? 'green' : 'default'}>{t(value === 'open' ? '開啟' : '關閉')}</Tag> },
     { title: t('更新'), dataIndex: 'updated_at', key: 'updated_at', width: 130, render: dateText },
     { title: '', key: 'external', width: 80, render: (_: unknown, pull) => { const href = webUrl(pull.web_url); return href ? <Tooltip title={t('在 Gitea 檢視')}><Button type="link" href={href} target="_blank" rel="noreferrer">{t('開啟')}</Button></Tooltip> : null; } },
@@ -567,7 +593,7 @@ function CodeWorkspace() {
         onSectionChange={(key) => setSection(key as CodeSection)}
         mode={health?.mode ?? 'unavailable'}
         serviceStatus={healthStatus}
-        headerExtra={<Space size={7}><Select aria-label={t('選擇 Code project')} className="product-scope-select" placeholder={t('選擇 Project')} value={projectId || undefined} loading={projectsBusy} onChange={(value) => { setProjectId(value); setRepositoryId(''); setSelectedPullNumber(null); }} options={projectOptions} notFoundContent={t('沒有可存取的 Project')} />{canCreateProject && <Button aria-label={t('建立 Code project')} icon={<PlusOutlined />} onClick={() => { projectForm.resetFields(); setFormError(''); setProjectModalOpen(true); }}>{t('新增 Project')}</Button>}<Button aria-label={t('重新檢查 Code 與 Gitea 狀態')} icon={<ReloadOutlined />} loading={healthStatus === 'checking'} onClick={() => void checkHealth()}>{t('重新檢查')}</Button></Space>}
+        headerExtra={<Space size={7}><Select aria-label={t('選擇 Code project')} className="product-scope-select" placeholder={t('選擇 Project')} value={projectId || undefined} loading={projectsBusy} onChange={(value) => { clearResourceTarget(); setProjectId(value); setRepositoryId(''); setSelectedPullNumber(null); }} options={projectOptions} notFoundContent={t('沒有可存取的 Project')} />{canCreateProject && <Button aria-label={t('建立 Code project')} icon={<PlusOutlined />} onClick={() => { projectForm.resetFields(); setFormError(''); setProjectModalOpen(true); }}></Button>}<Button aria-label={t('重新檢查 Code 與 Gitea 狀態')} icon={<ReloadOutlined />} loading={healthStatus === 'checking'} onClick={() => void checkHealth()}></Button></Space>}
         title={t(section === 'repositories' ? '儲存庫' : '合併請求')}
         eyebrow={selectedProject ? `${selectedProject.key} · ${selectedProject.name}` : 'CODE'}
         actions={section === 'repositories' && canWrite ? <Button type="primary" icon={<PlusOutlined />} disabled={!projectId || !giteaConfigured} onClick={openCreateRepository}>{t('新增私人儲存庫')}</Button> : undefined}
@@ -601,13 +627,13 @@ function CodeWorkspace() {
                 {pullsError && <Alert type="error" showIcon message={t('PR 清單載入失敗')} description={t(pullsError)} action={<Button size="small" onClick={() => void loadPulls()}>{t('重試')}</Button>} />}
                 {pullsBusy && !pulls.length && <Spin size="small" />}
                 {!pullsBusy && pulls.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('此儲存庫尚無 PR')} />}
-                {pulls.slice(0, 6).map((pull) => <button key={pull.id} type="button" className="repository-pr-row" onClick={() => { setSelectedPullNumber(pull.number); setPullDrawerOpen(true); }}><span className={`pull-state-mark pull-state-${pull.state}`} /><span><strong>#{formatNumber(pull.number)} · {pull.title}</strong><small>{pull.head} → {pull.base}</small></span><Tag color={pull.state === 'open' ? 'green' : 'default'}>{t(pull.state === 'open' ? '開啟' : '關閉')}</Tag></button>)}
+                {pulls.slice(0, 6).map((pull) => <button key={pull.id} type="button" className="repository-pr-row" onClick={() => { setSelectedPullNumber(pull.number); }}><span className={`pull-state-mark pull-state-${pull.state}`} /><span><strong>#{formatNumber(pull.number)} · {pull.title}</strong><small>{pull.head} → {pull.base}</small></span><Tag color={pull.state === 'open' ? 'green' : 'default'}>{t(pull.state === 'open' ? '開啟' : '關閉')}</Tag></button>)}
               </>}
             </main>
           </div>
         ) : (
           <section className="code-pull-list">
-            <div className="product-list-head"><span>{t('合併請求')} {selectedRepository ? `· ${selectedRepository.owner}/${selectedRepository.name}` : ''}</span><Space><Select aria-label={t('篩選儲存庫')} allowClear placeholder={t('所有儲存庫')} value={repositoryId || undefined} onChange={(value) => { setRepositoryId(value ?? ''); setSelectedPullNumber(null); setPullContext(null); }} options={repositories.map((repository) => ({ value: repository.id, label: `${repository.owner}/${repository.name}` }))} /><Button icon={<ReloadOutlined />} onClick={() => void loadPulls()}>{t('重新整理')}</Button></Space></div>
+            <div className="product-list-head"><span>{t('合併請求')} {selectedRepository ? `· ${selectedRepository.owner}/${selectedRepository.name}` : ''}</span><Space><Select aria-label={t('篩選儲存庫')} allowClear placeholder={t('所有儲存庫')} value={repositoryId || undefined} onChange={(value) => { clearResourceTarget(); setRepositoryId(value ?? ''); setSelectedPullNumber(null); setPullContext(null); }} options={repositories.map((repository) => ({ value: repository.id, label: `${repository.owner}/${repository.name}` }))} /><Button icon={<ReloadOutlined />} onClick={() => void loadPulls()}>{t('重新整理')}</Button></Space></div>
             {pullsError && <Alert className="product-page-alert" type="error" showIcon message={t('PR 清單載入失敗')} description={t(pullsError)} action={<Button size="small" onClick={() => void loadPulls()}>{t('重試')}</Button>} />}
             {pullsBusy && !pulls.length && <div className="product-inline-loading"><Spin /></div>}
             {!repositoryId && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('請先選擇儲存庫')} />}
@@ -648,7 +674,7 @@ function CodeWorkspace() {
         <Form form={checkForm} layout="vertical" onFinish={(values) => void reportCheck(values)}><Form.Item name="commit_sha" label={t('提交 SHA')} rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="context" label={t('Context')} rules={[{ required: true }]}><Input maxLength={100} /></Form.Item><Form.Item name="state" label={t('狀態')} rules={[{ required: true }]}><Select options={[{ value: 'pending', label: t('待處理') }, { value: 'success', label: t('成功') }, { value: 'failure', label: t('失敗') }, { value: 'error', label: t('錯誤') }]} /></Form.Item><Form.Item name="description" label={t('說明')}><TextArea rows={2} /></Form.Item><Form.Item name="target_url" label={t('Target URL')}><Input /></Form.Item></Form>
       </Modal>
 
-      <Drawer title={pullContext ? `PR #${formatNumber(pullContext.number)} · ${pullContext.title}` : t('合併請求')} open={pullDrawerOpen} onClose={() => setPullDrawerOpen(false)} width={620} className="code-pr-drawer">
+      <Drawer title={pullContext ? `PR #${formatNumber(pullContext.number)} · ${pullContext.title}` : t('合併請求')} open={pullDrawerOpen} onClose={closePullDrawer} width={620} className="code-pr-drawer">
         {pullError && <Alert type="error" showIcon message={t('合併請求載入失敗')} description={t(pullError)} action={<Button size="small" onClick={() => void loadPullContext()}>{t('重試')}</Button>} />}
         {pullBusy && !pullContext && <div className="product-inline-loading"><Spin /></div>}
         {pullContext && <PullDetail context={pullContext} repositoryId={repositoryId} principal={principal} canWrite={canWrite} canReport={canWrite && giteaConfigured} onReport={() => openCheckModal()} onRefreshContext={() => loadPullContext()} />}

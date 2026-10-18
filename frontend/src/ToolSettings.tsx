@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigationState } from './shared/useNavigationState';
 import { Alert, Button, Empty, Form, Input, InputNumber, Modal, Select, Segmented, Space, Switch, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { ApiOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
@@ -37,7 +38,7 @@ function safeFailureText(result: ToolConnectionTestResult) {
 
 export function ToolSettings({ projectId, canAdmin }: { projectId: string; canAdmin: boolean }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<SettingsTab>('connections');
+  const [tab, setTab] = useNavigationState<SettingsTab>('tools-tab', 'connections', ['connections', 'sandbox']);
   return <section className="tool-settings-page">
     <Segmented className="tool-settings-tabs" value={tab} onChange={(value) => setTab(value as SettingsTab)} options={[{ value: 'connections', label: t('工具連線') }, { value: 'sandbox', label: t('Sandbox 設定檔') }]} />
     {tab === 'connections' && <ToolConnections projectId={projectId} canAdmin={canAdmin} />}

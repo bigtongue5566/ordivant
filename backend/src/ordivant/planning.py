@@ -441,7 +441,11 @@ def _rule_assignee_valid(session: Session, project_id: str, principal_id: str) -
     if session.scalar(select(ProjectMembership.id).where(ProjectMembership.project_id == project_id, ProjectMembership.principal_id == principal_id)) is None:
         return False
     agent = session.scalar(select(Agent).where(Agent.principal_id == principal_id))
-    return agent is None or (agent.role == "worker" and agent.status != "disabled")
+    if agent is not None:
+        from .service import _lock_agent
+
+        agent = _lock_agent(session, agent)
+    return agent is None or (agent.role == "worker" and agent.status not in {"disabled", "archived"})
 
 
 def _validate_rule(session: Session, project_id: str, actor: Principal, value: dict) -> dict:

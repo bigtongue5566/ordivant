@@ -68,7 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await delivery
             engine.dispose()
 
-    application = FastAPI(title="Ordivant Identity", version="0.4.0", lifespan=lifespan)
+    application = FastAPI(title="Ordivant Identity", version="0.5.0", lifespan=lifespan)
     application.include_router(router, prefix="/api/auth")
     application.include_router(access_tokens_router, prefix="/api/auth")
     application.include_router(sso_router, prefix="/api/auth")

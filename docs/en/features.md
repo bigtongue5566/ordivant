@@ -2,7 +2,7 @@
 
 This guide explains where to find each feature, what it produces, and the limits to keep in mind. Work, Knowledge, and Code support people and Agents collaborating in the same product workflows; routine human work does not need an LLM. Work manages tasks, human execution, and Agent Runs; Knowledge manages shared drafts, document versions, and decisions; Code manages repositories and PRs connected to Gitea and keeps Ordivant discussion and review records. Start with the [project overview](./overview.md), then follow the scenarios below.
 
-This guide describes v0.4.0. If an entry is missing from your screen, ask your administrator to check the installed version, product permissions, and required integrations.
+This guide describes v0.5.0. If an entry is missing from your screen, ask your administrator to check the installed version, product permissions, and required integrations.
 
 ## Human and Agent collaboration {#human-and-agent-collaboration}
 
@@ -168,7 +168,7 @@ An administrator wants people to sign in with the company identity provider whil
 
 ### Where to go and what to do {#permissions-and-sso-steps}
 
-1. Open Account and security > Enterprise SSO. Choose an OIDC provider template, enter the organization's Issuer, Client ID, Client Secret, allowed domains, and invited-only or just-in-time (JIT) account provisioning policy.
+1. Open Organization administration > Enterprise SSO. Choose an OIDC provider template, enter the organization's Issuer, Client ID, Client Secret, allowed domains, and invited-only or just-in-time (JIT) account provisioning policy.
 2. For group-based access, configure the identity provider's groups claim and explicit group-to-product/resource mappings. Save, select Test connection, then sign in as a regular member and verify their access.
 3. Before requiring enterprise sign-in, confirm the administrator recovery path, then enable SSO-only. In Users and invitations, an administrator can change product roles and resource scopes and revoke sessions. Identity audit shows administrative records.
 
@@ -214,7 +214,7 @@ Work Tasks, Knowledge documents, and Code pull requests have a collaboration pan
 
 ## Enterprise provisioning, MFA, and audit {#enterprise-provisioning-mfa-audit}
 
-Administrators use **Account and security → Enterprise governance** to configure explicit SCIM group grants to product resources, inspect the mail queue, set audit retention, and export Identity records as JSONL. SCIM requires a dedicated credential configured by the deployment administrator. It never claims or merges an existing account just because its email matches, and provisioning groups cannot grant admin. When MFA is required, Identity enforces OIDC acr/amr claims from the verified external IdP token; the IdP supplies the actual second factor. If SMTP is not configured, invitation and recovery mail are not sent. See the [administration guide](./guide/administration.md) and [enterprise sign-in guide](./enterprise-sso.md).
+Administrators use **Organization administration → Enterprise governance** to configure explicit SCIM group grants to product resources, inspect the mail queue, set audit retention, and export Identity records as JSONL. SCIM requires a dedicated credential configured by the deployment administrator. It never claims or merges an existing account just because its email matches, and provisioning groups cannot grant admin. When MFA is required, Identity enforces OIDC acr/amr claims from the verified external IdP token; the IdP supplies the actual second factor. If SMTP is not configured, invitation and recovery mail are not sent. See the [administration guide](./guide/administration.md) and [enterprise sign-in guide](./enterprise-sso.md).
 
 ## More user guides {#next-steps}
 

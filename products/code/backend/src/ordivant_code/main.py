@@ -94,7 +94,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Ordivant Code API", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Ordivant Code API", version="0.5.0", lifespan=lifespan)
 
 from .collaboration_adapter import install as install_collaboration
 install_collaboration(app, _get_database, _current_principal)

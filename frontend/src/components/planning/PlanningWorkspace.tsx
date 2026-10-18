@@ -12,6 +12,7 @@ import {
   ImportOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, SettingOutlined, UnorderedListOutlined,
 } from '@ant-design/icons';
 import { api } from '../../api';
+import { useNavigationState } from '../../shared/useNavigationState';
 import { formatDate, formatNumber, t } from '../../i18n';
 import type {
   IntakeFormDefinition, PlanningCapacityRow, PlanningField, PlanningMetadata, PlanningMilestone, PlanningReports,
@@ -62,7 +63,7 @@ export function PlanningWorkspace({ projectId, canManage, canLogWork, canSubmitI
   const [loadingReports, setLoadingReports] = useState(false);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTER);
-  const [tab, setTab] = useState('board');
+  const [tab, setTab] = useNavigationState<string>('planning-tab', 'board', ['board', 'backlog', 'settings', 'intake', 'insights']);
   const [selectedQueryId, setSelectedQueryId] = useState('');
   const [metadataTask, setMetadataTask] = useState<Task | null>(null);
   const [metadataForm] = Form.useForm();
@@ -482,6 +483,7 @@ function PlanningTaskCard({ task, column, columns, canManage, onOpen, onEdit, on
 }
 
 function PlanningSettings({ metadata, canManage, onAdd, onEdit }: { metadata: PlanningMetadata | null; canManage: boolean; onAdd: (kind: ResourceKind, item?: Resource) => void; onEdit: (kind: ResourceKind, item?: Resource) => void }) {
+  const [tab, setTab] = useNavigationState<string>('planning-settings-tab', 'sprint', ['sprint', 'milestone', 'field', 'stage', 'rule', 'form']);
   const tabConfig: Array<{ key: ResourceKind; title: string; rows: Resource[]; columns: ColumnsType<Resource>; }> = [];
   const textCell = (value: unknown) => typeof value === 'string' ? value : '—';
   const makeColumns = (kind: ResourceKind, values: Array<{ title: string; key: string; render?: (row: Resource) => React.ReactNode }>): ColumnsType<Resource> => [
@@ -496,7 +498,7 @@ function PlanningSettings({ metadata, canManage, onAdd, onEdit }: { metadata: Pl
     tabConfig.push({ key: 'rule', title: '事件規則', rows: metadata.rules, columns: makeColumns('rule', [{ title: '名稱', key: 'name' }, { title: '事件', key: 'event', render: (row) => t(ruleEventLabel((row as PlanningRule).event)) }, { title: '動作', key: 'action', render: (row) => t(ruleActionLabel((row as PlanningRule).action)) }, { title: '狀態', key: 'enabled', render: (row) => t((row as PlanningRule).enabled ? '啟用' : '已停用') }]) });
     tabConfig.push({ key: 'form', title: '提報表單', rows: metadata.forms, columns: makeColumns('form', [{ title: '名稱', key: 'name' }, { title: '工作類型', key: 'work_type', render: (row) => t(workTypeLabel((row as IntakeFormDefinition).work_type)) }, { title: '欄位', key: 'fields', render: (row) => formatNumber((row as IntakeFormDefinition).fields.length) }, { title: '狀態', key: 'active', render: (row) => t((row as IntakeFormDefinition).active ? '啟用' : '已停用') }]) });
   }
-  return <div className="planning-settings">{!metadata ? <Empty description={t('規劃設定無法載入')} /> : <Tabs items={tabConfig.map(({ key, title, rows, columns }) => ({ key, label: t(title), children: <><div className="planning-section-actions"><Text type="secondary">{t(settingsHint(key))}</Text><Button type="primary" icon={<PlusOutlined />} disabled={!canManage} onClick={() => onAdd(key)}>{t('新增')}</Button></div><Table<Resource> rowKey="id" size="small" columns={columns} dataSource={rows} pagination={{ pageSize: 8, showSizeChanger: false }} locale={{ emptyText: <Empty description={t('尚未設定')} /> }} /></> }))} />}</div>;
+  return <div className="planning-settings">{!metadata ? <Empty description={t('規劃設定無法載入')} /> : <Tabs activeKey={tab} onChange={setTab} items={tabConfig.map(({ key, title, rows, columns }) => ({ key, label: t(title), children: <><div className="planning-section-actions"><Text type="secondary">{t(settingsHint(key))}</Text><Button type="primary" icon={<PlusOutlined />} disabled={!canManage} onClick={() => onAdd(key)}>{t('新增')}</Button></div><Table<Resource> rowKey="id" size="small" columns={columns} dataSource={rows} pagination={{ pageSize: 8, showSizeChanger: false }} locale={{ emptyText: <Empty description={t('尚未設定')} /> }} /></> }))} />}</div>;
 }
 
 function settingsHint(kind: ResourceKind) { return ({ sprint: 'Sprint 管理規劃週期；關閉 Sprint 不會自動完成任務。', milestone: '里程碑用於標記重要目標日期。', field: '自訂欄位可以補充專案工作需要的資料。', stage: '階段必須對應既有任務狀態，不會取代執行與審核流程。', rule: '事件規則會同步執行，只能套用標籤、指派或將待整理任務送入待執行。', form: '提報只接受已登入的專案成員，提交後建立待整理任務。' } as Record<ResourceKind, string>)[kind]; }

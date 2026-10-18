@@ -1,6 +1,11 @@
 import { t } from './index';
 
 const messages: Record<string,string> = {
+  "project_settings_changed": "專案設定已由其他人更新，請重新載入後再儲存。",
+  "agent_has_active_work": "Agent 仍有未結束的任務或執行，請先停止執行並完成交接。",
+  "agent_in_active_automation": "Agent 仍被啟用中的規則或排程使用，請先停用或改派。",
+  "agent_has_history": "Agent 已有使用紀錄或設定引用，無法永久刪除；請改用封存。",
+  "agent_archived": "Agent 已封存，無法再編輯、指派或執行工作。",
   "active_sprint_exists": "此專案已有進行中的 Sprint，請先關閉它再啟動另一個。",
   "csv_row_limit": "CSV 匯入最多 1,000 筆，請縮小檔案後再試。",
   "csv_too_large": "CSV 匯入最多 1,000 筆，請縮小檔案後再試。",

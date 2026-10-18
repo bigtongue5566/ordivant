@@ -22,22 +22,19 @@
   margin-bottom: 20px;
 }
 
-.auth-brand-row > div,
-.auth-drawer-identity > div {
+.auth-brand-row > div {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.auth-brand-row strong,
-.auth-drawer-identity strong {
+.auth-brand-row strong {
   color: #26252a;
   font-size: 14px;
   font-weight: 650;
 }
 
-.auth-brand-row span:not(.brand-mark),
-.auth-drawer-identity span {
+.auth-brand-row span:not(.brand-mark) {
   color: #77747d;
   font-size: 12px;
 }
@@ -179,40 +176,6 @@
   align-items: center;
   gap: 1px;
   flex: none;
-}
-
-.auth-account-drawer .ant-drawer-content-wrapper {
-  max-width: 100vw;
-}
-
-.auth-account-drawer .ant-drawer-body {
-  min-width: 0;
-  padding: 18px 22px 24px;
-}
-
-.auth-account-drawer .ant-tabs-content-holder,
-.auth-account-drawer .ant-tabs-content,
-.auth-account-drawer .ant-tabs-tabpane {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.auth-account-drawer .ant-tabs-nav {
-  margin-bottom: 17px;
-}
-
-.auth-drawer-identity {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 12px 0 17px;
-  border-bottom: 1px solid #e6e2dd;
-}
-
-.auth-drawer-identity > div {
-  flex: 1;
 }
 
 .auth-settings-panel {

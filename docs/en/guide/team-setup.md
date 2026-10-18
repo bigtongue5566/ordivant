@@ -10,7 +10,7 @@ An administrator can manage people and invitations. A regular member can use onl
 
 ## Invite a member and grant access {#invite-and-scope}
 
-1. Sign in as an administrator and open **Accounts and security** beside your name.
+1. Sign in as an administrator and open **Organization administration** in the sidebar.
 2. Open **Users and invitations**, then choose **Invite user**. Enter the member's name and email. Keep the Suite role as **Member** unless the person must administer users and organization access; select **Administrator** only for that responsibility.
 3. In the product permissions editor, select the needed product role and exact resource scope:
 
@@ -41,13 +41,13 @@ Create an Agent while the intended Work Project is selected; the new Agent is gr
 
 ## Disable or restore a member {#disable-restore}
 
-Open **Accounts and security → Users and invitations**. Use the member's **Enabled** switch to disable access; the account's existing sessions are revoked. To restore access, turn the switch on again. The person must sign in again, and their product roles and resource scopes remain subject to the administrator's grant. The currently signed-in administrator cannot disable their own account from this page; another administrator must handle that change.
+Open **Organization administration → Users and invitations**. Use the member's **Enabled** switch to disable access; the account's existing sessions are revoked. To restore access, turn the switch on again. The person must sign in again, and their product roles and resource scopes remain subject to the administrator's grant. The currently signed-in administrator cannot disable their own account from this page; another administrator must handle that change.
 
 When access changes, also review any separately configured Agent, repository, provider, or external tool access that the person administered. Those identities and credentials are managed separately from the human account.
 
 ## Connect enterprise SSO {#connect-sso}
 
-An Identity administrator opens **Accounts and security → Enterprise SSO** and configures the organization's OIDC provider. The page provides a callback URL to register with the identity provider. Enter the issuer, client ID, client secret, allowed domains, and membership provisioning policy, then save and test the connection. Configure explicit product roles and resource scopes for invited or provisioned members; a matching email domain by itself does not grant project access.
+An Identity administrator opens **Organization administration → Enterprise SSO** and configures the organization's OIDC provider. The page provides a callback URL to register with the identity provider. Enter the issuer, client ID, client secret, allowed domains, and membership provisioning policy, then save and test the connection. Configure explicit product roles and resource scopes for invited or provisioned members; a matching email domain by itself does not grant project access.
 
 To connect an existing local account, use **Explicitly link an existing account** on the same page. Select the **Ordivant account** and enter the stable **Enterprise subject (sub claim)** supplied by the identity provider. At the first enterprise sign-in, the email must still match that local account. Matching email addresses alone never merge accounts. Review the link in the table; unlinking revokes the affected enterprise session.
 

@@ -18,6 +18,26 @@ class ProjectCreate(InputModel):
     budget_usd: float = Field(default=0, ge=0)
 
 
+class ProjectSettingsSnapshot(InputModel):
+    name: str
+    description: str
+    budget_usd: float = Field(ge=0, allow_inf_nan=False)
+
+
+class ProjectPatch(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(max_length=20000)
+    budget_usd: float = Field(ge=0, allow_inf_nan=False)
+    expected: ProjectSettingsSnapshot
+
+    @model_validator(mode="after")
+    def clean_project_name(self):
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("name is required")
+        return self
+
+
 class TaskCreate(InputModel):
     project_id: str
     title: str = Field(min_length=1, max_length=300)

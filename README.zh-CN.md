@@ -48,7 +48,7 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-不要运行 `docker compose down -v`，它会删除数据卷。完整步骤见 [v0.4.0 版本与升级说明](docs/zh-CN/release.md)。
+不要运行 `docker compose down -v`，它会删除数据卷。完整步骤见 [v0.5.0 版本与升级说明](docs/zh-CN/release.md)。
 
 ### 不使用 LLM 的真人协作
 
@@ -81,7 +81,7 @@ docker compose down
 
 ## 版本与边界
 
-当前版本为 **v0.4.0（2026-10-19）**。Work、Knowledge 与 Code 的真人协作不需要模型配置；只有自主 Agent Run 需要有效的模型连接。Knowledge 使用文本搜索；Code 的 Ordivant 审查不会创建 Gitea 批准或 CI 结果。企业 IdP、Git、模型供应商和公开 HTTPS 环境仍需由部署团队根据实际设置验证。详见[版本与升级说明](docs/zh-CN/release.md)、[路线图](docs/zh-CN/roadmap.md)和[版本记录](CHANGELOG.md)。
+当前版本为 **v0.5.0（2026-10-19）**。Work、Knowledge 与 Code 的真人协作不需要模型配置；只有自主 Agent Run 需要有效的模型连接。Knowledge 使用文本搜索；Code 的 Ordivant 审查不会创建 Gitea 批准或 CI 结果。企业 IdP、Git、模型供应商和公开 HTTPS 环境仍需由部署团队根据实际设置验证。详见[版本与升级说明](docs/zh-CN/release.md)、[路线图](docs/zh-CN/roadmap.md)和[版本记录](CHANGELOG.md)。
 
 ## 参与项目
 

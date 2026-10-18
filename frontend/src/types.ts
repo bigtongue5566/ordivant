@@ -26,7 +26,7 @@ export type Agent = {
   team_id: string | null;
   capabilities: string[];
   project_ids: string[];
-  status: 'available' | 'busy' | 'offline' | 'disabled';
+  status: 'available' | 'busy' | 'offline' | 'disabled' | 'archived';
   runtime: 'external' | 'pi';
   model: string | null;
   model_config?: ModelSelection | null;

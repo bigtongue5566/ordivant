@@ -38,7 +38,7 @@ The organization's Identity `admin` manages people and grants; product roles are
 
 ## Configure enterprise OIDC
 
-1. Sign in to the environment as an administrator and open “Accounts and security → Enterprise SSO.”
+1. Sign in to the environment as an administrator and open “Organization administration → Enterprise SSO.”
 2. Create a confidential OIDC web application in your enterprise IdP and enable Authorization Code with PKCE S256.
 3. Register the complete Callback URL shown by Ordivant as a Redirect URI. Do not use wildcards.
 4. Enter the organization's Issuer, Client ID, Client Secret, allowed domains, and membership provisioning policy. To use groups, configure the IdP groups claim and explicit product/scope mappings.
@@ -48,13 +48,13 @@ Members use invitations or an explicitly configured JIT policy; matching an emai
 
 ## SCIM, MFA, mail, and audit governance {#enterprise-provisioning-mfa-mail-audit}
 
-Administrators can open **Account and security → Enterprise governance** from the top-right account menu to check SCIM and mail status, configure group grants and audit retention, export Identity audit records, and inspect or retry retryable mail. The screen displays the SCIM endpoint. A deployment administrator must separately provide ORDIVANT_SCIM_TOKEN_FILE and configure that dedicated bearer credential in the enterprise provisioning service. SCIM supports Users and Groups; SCIM bulk operations are not supported.
+Administrators can open **Organization administration → Enterprise governance** from the sidebar to check SCIM and mail status, configure group grants and audit retention, export Identity audit records, and inspect or retry retryable mail. The screen displays the SCIM endpoint. A deployment administrator must separately provide ORDIVANT_SCIM_TOKEN_FILE and configure that dedicated bearer credential in the enterprise provisioning service. SCIM supports Users and Groups; SCIM bulk operations are not supported.
 
 Before saving a group grant, add the exact group name supplied by the IdP and use the permission editor to select explicit product roles and resource IDs. SCIM groups cannot grant organization-admin rights, and wildcard resource scopes are rejected. A regular SCIM User PATCH that attempts to change SCIM-managed product permissions returns HTTP 409; it cannot manually switch permission ownership. Change the IdP group membership or its mapping here, then let SCIM synchronize the grant. When explicitly linking an OIDC account, use `managed_permissions=false` so SCIM remains the owner of group-derived permissions. If SCIM tries to create a user whose email already belongs to an Ordivant account, provisioning returns a conflict; it does not automatically claim, merge, or change that account. Resolve it through an explicit administrator-managed account-linking or migration process first. Disabling a SCIM user or changing group grants revokes the user's existing Identity sessions.
 
 Docker Compose deployments may opt into the read-only `compose.enterprise.yaml` overlay, which mounts separate secret directories for Identity and Code. Put the SCIM token and SMTP password file in Identity's mount; put Code's deployment configuration and its token files in Code's mount. See the [container guide](../containers.md#enterprise-secret-mounts) and [Code deployment evidence setup](code.md#upstream-governance-and-deployment-evidence). Do not put secret values in `.env`.
 
-MFA is performed by the enterprise IdP. Under **Account and security → Enterprise SSO**, set the required authentication assurance acr values and authentication methods amr (for example, mfa), then require SSO-only sign-in for members. The acr claim must match one of the configured values; amr must include every configured method. Confirm that the IdP issues these claims in its verified sign-in token, then test both member sign-in and the administrator recovery path.
+MFA is performed by the enterprise IdP. Under **Organization administration → Enterprise SSO**, set the required authentication assurance acr values and authentication methods amr (for example, mfa), then require SSO-only sign-in for members. The acr claim must match one of the configured values; amr must include every configured method. Confirm that the IdP issues these claims in its verified sign-in token, then test both member sign-in and the administrator recovery path.
 
 Before invitation and account-recovery mail can be sent, a deployment administrator must configure SMTP host, port, sender, TLS, and, when needed, the username and password file (ORDIVANT_SMTP_HOST, ORDIVANT_SMTP_PORT, ORDIVANT_SMTP_SENDER, ORDIVANT_SMTP_STARTTLS, ORDIVANT_SMTP_USERNAME, and ORDIVANT_SMTP_PASSWORD_FILE). Production requires STARTTLS. Identity does not send mail when required settings are absent. Check the mail queue under **Enterprise governance**; pending or failed messages can be retried, while expired messages cannot. Resource-follow and collaboration-center notices appear in Ordivant and are not sent through this SMTP channel.
 
@@ -71,7 +71,7 @@ Before production use, review TLS, trusted origins, allowed membership provision
 
 ## Personal API and MCP access {#personal-api-and-mcp-access}
 
-Open **Account and security → API and MCP** in the upper-right corner. Enter a purpose name, allowed products, and lifetime, then create a personal access token. The complete token is shown once. The list contains only its prefix, expiry, and last-used time. This panel also provides API and MCP examples for your current environment.
+Open **Account settings → API and MCP** from the account menu at the bottom of the sidebar. Enter a purpose name, allowed products, and lifetime, then create a personal access token. The complete token is shown once. The list contains only its prefix, expiry, and last-used time. This panel also provides API and MCP examples for your current environment.
 
 Use `Authorization: Bearer <PERSONAL_ACCESS_TOKEN>`. The token represents your human account and inherits your current product roles and Project/Space scopes. Administrators can create resources; members can operate only on authorized resources. It grants no Agent identity or additional permissions. The local API roots are:
 

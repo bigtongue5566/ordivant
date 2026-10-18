@@ -5,9 +5,9 @@
 
 本頁說明目前可以使用的功能與尚未支援的項目，不承諾推出日期。你可以透過 [GitHub Issues](https://github.com/ordivant-ai/ordivant/issues) 提出需求或追蹤討論；提出需求不代表一定會開發。
 
-## v0.4.0 新增功能 {#unreleased-development}
+## v0.5.0 新增功能 {#unreleased-development}
 
-v0.4.0 新增個人 API／MCP 權杖、PM／PG／SA／SD／QA／Reviewer 範本、Provider 模型清單，以及 Work 建立專案後選建其他產品的流程。原有看板、Sprint、附件、通知、搜尋與企業整合仍可使用。見[功能導覽](./features.md)、[Work 指南](./guide/work.md)與[升級說明](./release.md)。各產品維持獨立授權，企業整合仍需在自己的環境驗證。
+v0.5.0 新增專案設定、成員存取權管理、清楚的專案／組織導覽、Agent 封存與刪除，以及重新整理後保留位置。個人帳號與組織管理已分開，三語翻譯改為人工維護。Work 的角色仍以產品為單位，各產品維持獨立授權。詳見[版本說明](./release.md)與[專案設定教學](./guide/work.md#project-settings)。
 
 <span id="v0-1-已交付"></span>
 

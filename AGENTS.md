@@ -41,7 +41,7 @@ Python services use Python 3.12 and `uv` (CI pins 0.12.20), each with its own `p
 
 ## Interface and documentation
 
-- Support Traditional Chinese (default), Simplified Chinese, and English through `frontend/src/i18n`. Add English catalog entries, regenerate Simplified Chinese with `npm run i18n:generate --prefix frontend`, and run `npm run i18n:check --prefix frontend`.
+- Support Traditional Chinese (default), Simplified Chinese, and English through `frontend/src/i18n`. Maintain English (`catalogs/*.en.ts`) and Simplified Chinese (`catalogs/*.zh-CN.json`) translations by hand for every Traditional Chinese source key. Translate meaning and regional terminology; do not generate translations with character conversion. Run `npm run i18n:check --prefix frontend` to check coverage, placeholders, and consistency without rewriting catalogs.
 - Keep API identifiers, credentials, code, and user-authored content unchanged when translating. Prefer language users understand over implementation names in ordinary UI controls.
 - Maintain corresponding `docs/`, `docs/en/`, and `docs/zh-CN/` pages with matching section IDs. See [the translation guide](docs/en/i18n.md).
 - The website publishes only topics in `docs/.vitepress/public-pages.json`. Maintainer contracts, research, and validation records stay in the repository and must not enter website navigation, search, or sitemap. This publication boundary does not make repository files private.

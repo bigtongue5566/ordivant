@@ -14,7 +14,7 @@ Work、Knowledge、Code 共用这一套环境的账号。首次启动时打开�
 
 ## 账号与安全性 {#accounts-and-security}
 
-侧栏用户名旁的「账号与安全性」可：
+侧栏底部的账号菜单提供“账号设置”，只管理自己的账号、安全性与 API／MCP。管理员另有侧栏“组织管理”入口，管理用户与邀请、企业 SSO、企业治理与身份审计。两者使用独立界面；桌面版使用左侧导航，小屏幕改用菜单。刷新会保留所在设置页。你可以：
 
 - 查看账号信息、修改密码；修改成功后其他登录设备立即失效。
 - 查看自己的工作阶段、撤销其他登录，或注销全部工作阶段。
@@ -44,7 +44,7 @@ Identity volumes、业务 volumes 与部署所配置的服务机密储存位置�
 
 ## 企业 SSO {#enterprise-sso}
 
-管理员在「账号与安全性 → 企业 SSO」设置企业 OIDC 服务。支持 Entra ID、Google Workspace、Okta、Auth0、Keycloak 与通用 OIDC；SAML、LDAP／AD 可经可选 Keycloak broker 接入。设置流程、群组授权及容器操作见 [企业登录与身分管理](enterprise-sso.md)。
+管理员在「组织管理 → 企业 SSO」设置企业 OIDC 服务。支持 Entra ID、Google Workspace、Okta、Auth0、Keycloak 与通用 OIDC；SAML、LDAP／AD 可经可选 Keycloak broker 接入。设置流程、群组授权及容器操作见 [企业登录与身分管理](enterprise-sso.md)。
 
 激活后，登录页出现企业登录按钮，密码与 MFA 在企业身分服务完成。成员首次登录必须符合允许网域及受邀／JIT 政策，并取得明确产品范围权限。三模块共用同一个平台工作阶段，登录成功不代表能访问全部项目。SSO 账号不使用本机密码复原。
 

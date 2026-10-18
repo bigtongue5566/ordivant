@@ -15,7 +15,7 @@ JSON 使用 UTF-8，时间戳记采 UTC ISO-8601，ID 为字符串。清单端�
 
 `Project`：`{id,key,name,description,organization_id,team_id,budget_usd,created_at}`。
 
-`Agent`：`{id,principal_id,name,role:"worker"|"reviewer",team_id,capabilities:string[],project_ids:string[],status:"available"|"busy"|"offline"|"disabled",runtime:"external"|"pi",model:string|null,model_config:ModelSelection|null,effective_model_config:ModelSelection|null,created_at}`。`principal_id` 为唯读，用来将消息／稽核操作者 ID 对应至 Agent 显示名称；任务指派使用 `id`。[模型契约](model-contracts.md)定义组织连接、加密凭证、默认值及 Agent 覆写。
+`Agent`：`{id,principal_id,name,role:"worker"|"reviewer",team_id,capabilities:string[],project_ids:string[],status:"available"|"busy"|"offline"|"disabled"|"archived",runtime:"external"|"pi",model:string|null,model_config:ModelSelection|null,effective_model_config:ModelSelection|null,created_at}`。`principal_id` 为唯读，用来将消息／稽核操作者 ID 对应至 Agent 显示名称；任务指派使用 `id`。[模型契约](model-contracts.md)定义组织连接、加密凭证、默认值及 Agent 覆写。
 
 凭证签发是明文记载的幂等例外：重送创建 Agent 的请求会回传同一个 Agent，并签发新的单次 token，因此原始 bearer token 不会进入回应缓存。一般变更会重播原始回应。幂等路由包含实际资源 ID，而非路径范本；重播时会重新检查目前的项目访问权。
 
@@ -49,6 +49,7 @@ JSON 使用 UTF-8，时间戳记采 UTC ISO-8601，ID 为字符串。清单端�
 - `POST /api/tasks/{id}/review` 本文 `{decision:"accept"|"reject",comment}` -> TaskContext。仅 reviewer／manager／admin 可运行；提交者不能审查自己的结果，且若已指定审查者则必须遵守。拒绝时将任务设为 ready，并保留历程与证据。
 - `POST /api/tasks/{id}/delegate` 本文 `{agent_id,title,goal,description?,inputs?,scope?,constraints?,acceptance_criteria:string[],priority?,budget_usd?:0}` -> 子 Task；操作者必须是范围内的管理者或父任务的作用中负责人；子任务指派给指定 Agent；委派不能授予访问权。嵌套深度上限为 3。
 - `GET/POST /api/agents`；创建本文 `{name,role,team_id?,capabilities,project_ids,runtime?,model?,model_config?}`。`PATCH /api/agents/{id}` 仅 admin／manager 可停用或编辑能力／模型。明确传入 `model_config: null` 会清除覆写并恢复继承。
+- `GET /api/agents?project_id=&include_archived=false` 默认隐藏已归档的 Agent。`POST /api/agents/{id}/archive` 和 `DELETE /api/agents/{id}` 必须提供 `Idempotency-Key`，操作者需为同组织的 manager/admin，并拥有该 Agent 所属全部项目的权限。未结束的任务（含指定审核）、运行或排队中的执行，以及已启用的规则／计划任务引用都会阻止操作。只有没有业务历史或配置引用的 Agent 才能永久删除；专用凭证、成员资格、设置及未使用的身份会在同一事务中移除。归档设置 `status:"archived"`、禁用身份并撤销令牌，同时保留证据及名称；PATCH 不允许重新启用或编辑。两种操作均保留审计凭据；Agent 删除后，重试仍按缓存中的组织与项目范围重新验证权限。MCP 的 `find_agents(include_archived)`、`archive_agent` 和 `delete_agent` 使用相同 REST 检查，无需 LLM。现有状态字段可容纳新值，无需数据库结构迁移。
 - `GET /api/messages?project_id=&task_id=&inbox=true` 的收件匣收件者为目前操作者；manager 可查看其获准项目中的讨论串。`POST /api/messages` 本文 `{project_id,task_id?,recipient_id?,kind,body,reply_to_id?}` -> Message。收件者与寄件者必须共用已授权项目。回复必须属于同一任务／项目，并自动完成父问题。
 - `POST /api/messages/{id}/ack` 本文 `{status:"accepted"|"completed"}` 仅收件者可运行（manager 可操作，但会留下稽核记录）。
 - `GET /api/events?project_id=&task_id=` -> 由新到旧排列的稽核数组，上限 200 笔。
@@ -109,3 +110,7 @@ Runtime dispatcher 会轮询 Python outbox，并以 event ID 作为 Pi requestId
 ## 本机 Seed {#local-seed}
 
 明确运行 `uv run --project backend python -m ordivant.seed` 会创建一个示范 org、engineering 与 operations 团队、一位 manager 人类用户、worker Agent `planner`、`builder`、`analyst`，以及 reviewer `reviewer`；第二个受范围限制的项目用来证明隔离有效。主要项目 key 为 ORD。Seed 会创建包含 ready／in_progress／blocked／in_review／done 任务、相依性、消息与证据的小型拟真项目。重复 Seed 具幂等性。`.data/bootstrap.json` -> `{manager_token,runtime_token,agents:{planner:{id,token},builder:{id,token},analyst:{id,token},reviewer:{id,token}},project_id,isolated_project_id}`；`.data` 路径以 repository 根目录为基准。这些是产生的开发凭证，不得纳入版控或打印。
+
+## 项目设置更新 {#project-settings-update}
+
+`PATCH /api/projects/{id}` 与 MCP `update_project` 共用项目成员资格及 manager/admin 授权检查。请求体为 `{name,description,budget_usd,expected:{name,description,budget_usd}}`，`expected` 必填且须符合当前数据，否则返回 409 `project_settings_changed`。名称去除首尾空白后须为 1–200 字符，说明最多 20,000 字符，预算须为有限的非负数；代码、组织与团队不可修改。成功返回 Project，变更写入 `project.updated` 审计。支持幂等键，重放时重新检查现有角色与项目访问权限。MCP 的 `request_id` 对应该键。

@@ -138,6 +138,11 @@ jobs:
           npm run test:project-companions
           npm run test:access-tokens
           npm run test:agent-presets
+          npm run test:agent-lifecycle
+          npm run test:navigation
+          npm run test:account-settings
+          npm run test:sidebar
+          npm run test:project-settings
         working-directory: frontend
 
       - name: Build Suite

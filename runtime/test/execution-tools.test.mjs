@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createPlatformTools } from "../dist/platform-tools.js";
-import { sanitizeMcpMetadata, sanitizeMcpOutput } from "../dist/mcp-tools.js";
+import { createMcpExtension, sanitizeMcpMetadata, sanitizeMcpOutput } from "../dist/mcp-tools.js";
+import { createSandboxExtension } from "../dist/sandbox-tools.js";
 import { RunStore } from "../dist/run-store.js";
 import { RuntimeEngine } from "../dist/engine.js";
 import { loadConfig } from "../dist/config.js";
@@ -165,7 +166,7 @@ test("platform tool waits for the lease gate before making its scoped request", 
 
   const result = await tool.execute({}, api, {});
   assert.deepEqual(order, ["pause-gate", "lease-check", "platform-request"]);
-  assert.match(result.content[0].text, /current/);
+  assert.match(result.output[0].text, /current/);
 
   order.length = 0;
   leaseValid = false;
@@ -254,7 +255,7 @@ test("lease-bound platform writes wait for queued renewal and capture the rotate
     { path: "/api/tasks/task-1/renew", token: "lease-before-renew" },
     { path: "/api/tasks/task-1/progress", token: "lease-after-renew" },
   ]);
-  assert.match(toolResult.value.content[0].text, /"progress":15/);
+  assert.match(toolResult.value.output[0].text, /"progress":15/);
 });
 
 test("a fenced execution aborts safely before creating a Pi submission", async () => {
@@ -421,6 +422,73 @@ test("RunStore preserves pending sync and bounded sanitized events across restar
   } finally {
     rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
+});
+
+test("sandbox tool success and binding errors expose model-visible Pi output", async () => {
+  let bound = true;
+  let reads = 0;
+  const run = {
+    request_id: "sandbox-output-run", task_id: "task-1", agent_id: "agent-1",
+    sandbox_capability: "synthetic-sandbox-capability",
+    sandbox_profile: { limits: {} },
+  };
+  const client = { readFile: async () => { reads++; return { path: "note.md", content: "sandbox output evidence" }; } };
+  const extension = createSandboxExtension(client, () => bound ? run : undefined);
+  const tool = extension.tools.find(item => item.name === "sandbox_read_file");
+  const api = { conversationId: "conversation-1" };
+  const result = await tool.execute({ path: "note.md" }, api, {});
+  assert.equal(JSON.parse(result.output[0].text).content, "sandbox output evidence");
+  assert.equal(result.isError, undefined);
+  bound = false;
+  const denied = await tool.execute({ path: "note.md" }, api, {});
+  assert.equal(denied.isError, true);
+  assert.match(denied.output[0].text, /No active sandbox/);
+  assert.equal(reads, 1);
+});
+
+test("MCP calls preserve model-visible errors, redaction and run binding with Pi", async () => {
+  const credential = "synthetic-mcp-output-credential";
+  let calls = 0;
+  const server = createServer(async (request, response) => {
+    if (request.method !== "POST") { response.writeHead(405).end(); return; }
+    assert.equal(request.headers.authorization, `Bearer ${credential}`);
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const message = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    if (message.id === undefined) { response.writeHead(202).end(); return; }
+    let result;
+    if (message.method === "initialize") {
+      result = { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "output-fixture", version: "1.0.0" } };
+    } else if (message.method === "tools/list") {
+      result = { tools: [{ name: "echo", inputSchema: { type: "object", properties: {} } }] };
+    } else {
+      assert.equal(message.method, "tools/call");
+      assert.equal(message.params.name, "echo");
+      calls++;
+      result = { isError: true, content: [{ type: "text", text: `upstream diagnostic ${credential}` }] };
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+  });
+  try {
+    const endpoint = await listen(server);
+    const connection = { id: "output-fixture", name: "Output fixture", endpoint, auth_token: credential, allowed_tools: ["echo"] };
+    let bound = true;
+    const extension = await createMcpExtension("output-run", [connection], {
+      ...config(tmpdir()), toolAllowedHosts: ["127.0.0.1"], toolHttpHosts: ["127.0.0.1"], toolPrivateHosts: ["127.0.0.1"],
+    }, () => bound ? { tool_connections: [connection] } : undefined);
+    const tool = extension.tools[0];
+    const result = await tool.execute({}, { conversationId: "conversation-1" }, {});
+    assert.equal(result.isError, true);
+    assert.match(result.output[0].text, /upstream diagnostic/);
+    assert.match(result.output[0].text, /\[redacted\]/);
+    assert.equal(result.output[0].text.includes(credential), false);
+    bound = false;
+    const denied = await tool.execute({}, { conversationId: "conversation-1" }, {});
+    assert.equal(denied.isError, true);
+    assert.match(denied.output[0].text, /not bound/);
+    assert.equal(calls, 1);
+  } finally { await close(server); }
 });
 
 test("MCP list metadata and tool output redact the exact configured bearer token", () => {

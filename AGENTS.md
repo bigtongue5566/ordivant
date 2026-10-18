@@ -25,7 +25,7 @@ Ordivant is a self-hosted collaboration platform for people and Agents. Human ta
 | `docs/` | Translated user guides and maintainer reference documents |
 | `scripts/`, `tests/`, `.github/workflows/` | Tooling, integration acceptance, and CI |
 
-Python services use Python 3.12 and `uv`, each with its own `pyproject.toml`, `uv.lock`, and environment. JavaScript projects use Node.js 24 and npm with committed lockfiles. Install from the existing lockfiles; update dependencies only when the change requires it. Use a repository-local `.cache/` if the default cache is inaccessible.
+Python services use Python 3.12 and `uv` (CI pins 0.12.20), each with its own `pyproject.toml`, `uv.lock`, and environment. JavaScript projects use Node.js 24 and npm with committed lockfiles. Install from the existing lockfiles; update dependencies only when the change requires it. Use a repository-local `.cache/` if the default cache is inaccessible.
 
 ## Business and authorization rules
 
@@ -50,7 +50,7 @@ Python services use Python 3.12 and `uv`, each with its own `pyproject.toml`, `u
 
 Run affected service tests in their own Python environments and the checks relevant to the change. [CONTRIBUTING.md](CONTRIBUTING.md) lists the complete commands; `.github/workflows/` defines the CI gates.
 
-- Python: `uv sync --project <service> --frozen --extra dev`, then `uv run --project <service> --directory <service> --frozen --no-sync pytest`. Sandbox uses `--group dev` and the test invocation documented in CONTRIBUTING.
+- Python: `uv sync --project <service> --frozen --extra dev`, then `uv run --directory <service> --frozen --no-sync pytest`. Sandbox uses `--group dev` and the test invocation documented in CONTRIBUTING.
 - Runtime: `npm ci --prefix runtime` and `npm test --prefix runtime`.
 - Frontend: run type checking, translation/Markdown checks, affected interaction tests, and the relevant product builds. CI builds all four product modes.
 - Documentation: `npm ci --prefix docs`, `npm run build --prefix docs`, `uv run --project backend --no-sync python scripts/check_docs.py`, and `node scripts/build_docs_redirects.mjs`.

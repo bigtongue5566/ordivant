@@ -4,7 +4,7 @@ Thank you for contributing to Ordivant. This repository is a self-hosted collabo
 
 ## 開發環境
 
-Python 服務使用 Python 3.12 與 `uv`；Runtime 和 React 前端使用 Node.js 24 與 npm。可從 repo 根目錄執行以下命令；各 Python 專案會在自己的目錄建立獨立 `.venv`。
+Python 服務使用 Python 3.12 與 `uv`（CI 固定為 0.12.20）；Runtime 和 React 前端使用 Node.js 24 與 npm。可從 repo 根目錄執行以下命令；各 Python 專案會在自己的目錄建立獨立 `.venv`。
 
 ```sh
 uv sync --project backend --frozen --extra dev
@@ -40,11 +40,11 @@ Work 使用 `ORDIVANT_API_TOKEN` 與 `ordivant.mcp_server`；Code 使用 `ORDIVA
 Python 測試必須在各自的專案環境執行：
 
 ```sh
-uv run --project backend --directory backend --frozen --no-sync pytest
-uv run --project products/identity/backend --directory products/identity/backend --frozen --no-sync pytest
-uv run --project products/knowledge/backend --directory products/knowledge/backend --frozen --no-sync pytest
-uv run --project products/code/backend --directory products/code/backend --frozen --no-sync pytest
-uv run --project sandbox --directory sandbox --frozen --no-sync python -c "import sys; sys.path.insert(0, '..'); import pytest; raise SystemExit(pytest.main())"
+uv run --directory backend --frozen --no-sync pytest
+uv run --directory products/identity/backend --frozen --no-sync pytest
+uv run --directory products/knowledge/backend --frozen --no-sync pytest
+uv run --directory products/code/backend --frozen --no-sync pytest
+uv run --directory sandbox --frozen --no-sync python -c "import sys; sys.path.insert(0, '..'); import pytest; raise SystemExit(pytest.main())"
 ```
 
 Runtime 測試同時執行 TypeScript build 與 Node test suite：

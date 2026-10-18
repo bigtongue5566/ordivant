@@ -15,7 +15,7 @@ JSON 使用 UTF-8，時間戳記採 UTC ISO-8601，ID 為字串。清單端點�
 
 `Project`：`{id,key,name,description,organization_id,team_id,budget_usd,created_at}`。
 
-`Agent`：`{id,principal_id,name,role:"worker"|"reviewer",team_id,capabilities:string[],project_ids:string[],status:"available"|"busy"|"offline"|"disabled",runtime:"external"|"pi",model:string|null,model_config:ModelSelection|null,effective_model_config:ModelSelection|null,created_at}`。`principal_id` 為唯讀，用來將訊息／稽核操作者 ID 對應至 Agent 顯示名稱；任務指派使用 `id`。[模型契約](model-contracts.md)定義組織連線、加密憑證、預設值及 Agent 覆寫。
+`Agent`：`{id,principal_id,name,role:"worker"|"reviewer",team_id,capabilities:string[],project_ids:string[],status:"available"|"busy"|"offline"|"disabled"|"archived",runtime:"external"|"pi",model:string|null,model_config:ModelSelection|null,effective_model_config:ModelSelection|null,created_at}`。`principal_id` 為唯讀，用來將訊息／稽核操作者 ID 對應至 Agent 顯示名稱；任務指派使用 `id`。[模型契約](model-contracts.md)定義組織連線、加密憑證、預設值及 Agent 覆寫。
 
 憑證簽發是明文記載的冪等例外：重送建立 Agent 的請求會回傳同一個 Agent，並簽發新的單次 token，因此原始 bearer token 不會進入回應快取。一般變更會重播原始回應。冪等路由包含實際資源 ID，而非路徑範本；重播時會重新檢查目前的專案存取權。
 
@@ -49,6 +49,7 @@ JSON 使用 UTF-8，時間戳記採 UTC ISO-8601，ID 為字串。清單端點�
 - `POST /api/tasks/{id}/review` 本文 `{decision:"accept"|"reject",comment}` -> TaskContext。僅 reviewer／manager／admin 可執行；提交者不能審查自己的結果，且若已指定審查者則必須遵守。拒絕時將任務設為 ready，並保留歷程與證據。
 - `POST /api/tasks/{id}/delegate` 本文 `{agent_id,title,goal,description?,inputs?,scope?,constraints?,acceptance_criteria:string[],priority?,budget_usd?:0}` -> 子 Task；操作者必須是範圍內的管理者或父任務的作用中負責人；子任務指派給指定 Agent；委派不能授予存取權。巢狀深度上限為 3。
 - `GET/POST /api/agents`；建立本文 `{name,role,team_id?,capabilities,project_ids,runtime?,model?,model_config?}`。`PATCH /api/agents/{id}` 僅 admin／manager 可停用或編輯能力／模型。明確傳入 `model_config: null` 會清除覆寫並恢復繼承。
+- `GET /api/agents?project_id=&include_archived=false` 預設隱藏已封存 Agent。`POST /api/agents/{id}/archive` 與 `DELETE /api/agents/{id}` 必須提供 `Idempotency-Key`，操作者需為同組織的 manager/admin，並有該 Agent 所屬全部專案的權限。未結束的任務（含指定審核）、執行中或排隊中的執行，以及啟用中的規則／排程引用都會阻擋操作。只有沒有業務歷史或設定引用的 Agent 才能永久刪除；專用憑證、成員資格、設定及未使用的身分會在同一交易移除。封存設定 `status:"archived"`、停用身分並撤銷 token，同時保留證據及名稱；PATCH 不允許重新啟用或編輯。兩種操作均保留稽核收據；Agent 刪除後，重試仍依快取的組織與專案範圍重新驗證權限。MCP 的 `find_agents(include_archived)`、`archive_agent` 與 `delete_agent` 使用相同 REST 檢查，無需 LLM。既有狀態欄位可容納新值，不需資料庫結構遷移。
 - `GET /api/messages?project_id=&task_id=&inbox=true` 的收件匣收件者為目前操作者；manager 可檢視其獲准專案中的討論串。`POST /api/messages` 本文 `{project_id,task_id?,recipient_id?,kind,body,reply_to_id?}` -> Message。收件者與寄件者必須共用已授權專案。回覆必須屬於同一任務／專案，並自動完成父問題。
 - `POST /api/messages/{id}/ack` 本文 `{status:"accepted"|"completed"}` 僅收件者可執行（manager 可操作，但會留下稽核記錄）。
 - `GET /api/events?project_id=&task_id=` -> 由新到舊排列的稽核陣列，上限 200 筆。
@@ -109,3 +110,7 @@ Runtime dispatcher 會輪詢 Python outbox，並以 event ID 作為 Pi requestId
 ## 本機 Seed {#local-seed}
 
 明確執行 `uv run --project backend python -m ordivant.seed` 會建立一個示範 org、engineering 與 operations 團隊、一位 manager 人類使用者、worker Agent `planner`、`builder`、`analyst`，以及 reviewer `reviewer`；第二個受範圍限制的專案用來證明隔離有效。主要專案 key 為 ORD。Seed 會建立包含 ready／in_progress／blocked／in_review／done 任務、相依性、訊息與證據的小型擬真專案。重複 Seed 具冪等性。`.data/bootstrap.json` -> `{manager_token,runtime_token,agents:{planner:{id,token},builder:{id,token},analyst:{id,token},reviewer:{id,token}},project_id,isolated_project_id}`；`.data` 路徑以 repository 根目錄為基準。這些是產生的開發憑證，不得納入版控或列印。
+
+## 專案設定更新 {#project-settings-update}
+
+`PATCH /api/projects/{id}` 與 MCP `update_project` 共用專案成員資格及 manager/admin 授權檢查。本文為 `{name,description,budget_usd,expected:{name,description,budget_usd}}`，`expected` 必填且須符合目前資料，否則回傳 409 `project_settings_changed`。名稱去除首尾空白後須為 1–200 字元，說明最多 20,000 字元，預算須為有限的非負數；代碼、組織與團隊不可修改。成功回傳 Project，變更寫入 `project.updated` 稽核。支援冪等金鑰，重播時重新檢查現有角色與專案存取權。MCP 的 `request_id` 對應該金鑰。

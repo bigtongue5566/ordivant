@@ -77,3 +77,7 @@ Work／Knowledge／Code 共用 Identity Cookie 登录。首次加载时检查 `/
 ## 容器验收 {#container-acceptance}
 
 每个选定产品都可搭配自己的数据库及共用 Identity 服务／数据库部署；不得引入 Work／Knowledge／Code 彼此的服务依赖。Development 与 production 使用分开的 Identity 数据及 Cookie 名称。保留既有业务 volume。使用自有隔离 QA Identity 数据测试人类账号流程；绝不可用测试密码初始化用户的第一个 admin。让实际安装环境保持可用，供用户在应用程序中创建自己的 admin。
+
+## 项目授权的冲突检查 {#permission-snapshots}
+
+管理员 `PATCH /api/auth/users/{id}` 可在更新 `permissions` 时附上可选的 `expected_permissions:Permissions`。服务锁定目标用户后比较完整旧权限；不符返回 409 `permissions_changed`，不写入权限、不撤销会话。明确传入 null 或未同时提供新 permissions 返回 422；省略则保持旧客户端兼容行为。项目设置界面使用此快照，仅增减指定 Work scope 并保留其他产品及项目授权。角色仍以产品为单位，SCIM 防护、SSO 手动接管及变更后撤销登录政策保持不变。

@@ -37,6 +37,7 @@ import { CollaborationPanel } from '../shared/CollaborationPanel';
 import { ProductLogin } from '../shared/ProductLogin';
 import { ProductShell } from '../shared/ProductShell';
 import { MarkdownContent, MarkdownPreview } from '../../shared/MarkdownContent';
+import { useNavigationState } from '../../shared/useNavigationState';
 import { CollaborativeMarkdownEditor, type KnowledgeCollaborationState } from '../../shared/CollaborativeMarkdownEditor';
 import { AuthProvider, useAuth } from '../../auth/AuthContext';
 import { AuthAccessDenied } from '../../auth/AuthAccessDenied';
@@ -126,9 +127,9 @@ function KnowledgeWorkspace() {
   const [spaces, setSpaces] = useState<KnowledgeSpace[]>([]);
   const [spacesError, setSpacesError] = useState('');
   const [spacesReload, setSpacesReload] = useState(0);
-  const [spaceId, setSpaceId] = useState('');
+  const [spaceId, setSpaceId] = useNavigationState<string>('space', '');
   const [spaceBusy, setSpaceBusy] = useState(false);
-  const [section, setSection] = useState<KnowledgeSection>('documents');
+  const [section, setSection] = useNavigationState<KnowledgeSection>('section', 'documents', ['documents', 'decisions']);
   const [documents, setDocuments] = useState<KnowledgeDocumentHit[]>([]);
   const [documentsBusy, setDocumentsBusy] = useState(false);
   const [documentsError, setDocumentsError] = useState('');
@@ -259,7 +260,6 @@ function KnowledgeWorkspace() {
         if (!current || requestedResourceId.current !== resourceId) return;
         authorizedResourceId.current = resourceId;
         authorizedResourceSpaceId.current = context.document.space_id;
-        setSection('documents');
         setShowArchived(Boolean(context.document.archived));
         setSpaceId(context.document.space_id);
         selectDocument(resourceId);
@@ -416,7 +416,7 @@ function KnowledgeWorkspace() {
       setAuthError('');
       setPrincipalErrorStatus(0);
       setSpaces([]);
-      setSpaceId('');
+      // Preserve URL navigation during authentication; /spaces validates access.
       setDocuments([]);
       setDecisions([]);
       setDocumentContext(null);
@@ -666,7 +666,7 @@ function KnowledgeWorkspace() {
         onSectionChange={(key) => setSection(key as KnowledgeSection)}
         mode={health?.mode ?? 'unavailable'}
         serviceStatus={healthStatus}
-        headerExtra={<Space size={7}><Select aria-label={t('選擇 Knowledge space')} className="product-scope-select" placeholder={t('選擇 Space')} value={spaceId || undefined} loading={spaceBusy} onChange={(value) => { clearResourceTarget(); setSpaceId(value); selectDocument(''); }} options={spaces.map((space) => ({ value: space.id, label: `${space.key} · ${space.name}` }))} notFoundContent={t('沒有可存取的 Space')} />{canCreateSpace && <Button aria-label={t('建立 Space')} icon={<PlusOutlined />} onClick={() => { spaceForm.resetFields(); setFormError(''); setSpaceModalOpen(true); }}>{t('新增 Space')}</Button>}</Space>}
+        headerExtra={<Space size={7}><Select aria-label={t('選擇 Knowledge space')} className="product-scope-select" placeholder={t('選擇 Space')} value={spaceId || undefined} loading={spaceBusy} onChange={(value) => { clearResourceTarget(); setSpaceId(value); selectDocument(''); }} options={spaces.map((space) => ({ value: space.id, label: `${space.key} · ${space.name}` }))} notFoundContent={t('沒有可存取的 Space')} />{canCreateSpace && <Button aria-label={t('建立 Space')} icon={<PlusOutlined />} onClick={() => { spaceForm.resetFields(); setFormError(''); setSpaceModalOpen(true); }}></Button>}</Space>}
         title={t(section === 'documents' ? '文件庫' : '決策紀錄')}
         eyebrow={currentSpace ? `${currentSpace.key} · ${currentSpace.name}` : 'KNOWLEDGE'}
         actions={canWrite && section === 'documents'

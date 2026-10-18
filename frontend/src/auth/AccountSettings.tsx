@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { ColumnsType } from 'antd/es/table';
-import { Alert, Avatar, Button, Descriptions, Drawer, Form, Input, Modal, Select, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from 'antd';
-import { LogoutOutlined, SettingOutlined } from '@ant-design/icons';
+import { Alert, Avatar, Button, Descriptions, Form, Input, Modal, Select, Switch, Table, Tag, Tooltip, Typography, message } from 'antd';
+import { ApiOutlined, AuditOutlined, ControlOutlined, LockOutlined, LoginOutlined, LogoutOutlined, SettingOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
 import { authApi } from './client';
 import { useAuth } from './AuthContext';
 import type { AuthPermissions, IdentitySessionRecord, IdentityUser, ProductKey } from './types';
@@ -10,8 +10,12 @@ import { EnterpriseSsoPanel, IdentityAuditPanel } from './SsoSettings';
 import { EnterpriseGovernance } from './EnterpriseGovernance';
 import { CollaborationCenter } from '../products/shared/CollaborationCenter';
 import { AccessTokensPanel } from './AccessTokensPanel';
+import { AccountSettingsLayout, type SettingsGroup } from './AccountSettingsLayout';
+import { useNavigationState } from '../shared/useNavigationState';
+import { organizationSettingsEvent } from './settingsNavigation';
 import { formatDate, useI18n, useLocalizedForm } from '../i18n';
 import './auth.css';
+import './account-settings.css';
 
 const { Text, Paragraph } = Typography;
 
@@ -45,18 +49,34 @@ export function AccountControl({
   productLabel,
   displayName,
   businessRole,
+  variant = 'toolbar',
+  renderControls,
+  onAction,
 }: {
   product: ProductKey;
   productLabel: string;
   displayName: string;
   businessRole: string;
+  variant?: 'toolbar' | 'sidebar';
+  renderControls?: (controls: ReactNode) => ReactNode;
+  onAction?: () => void;
 }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useNavigationState<string>('settings', '', ['', 'profile', 'security', 'api-mcp', 'users', 'sso', 'identity-audit', 'governance']);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const [messageApi, contextHolder] = message.useMessage();
   const auth = useAuth();
+  const isAdmin = auth.session?.user.role === 'admin';
+  const settingsTitle = t('帳號設定');
+  const organizationSection = ['users', 'sso', 'identity-audit', 'governance'].includes(settingsSection);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const open = () => setSettingsSection('users');
+    window.addEventListener(organizationSettingsEvent, open);
+    return () => window.removeEventListener(organizationSettingsEvent, open);
+  }, [isAdmin, setSettingsSection]);
 
   async function signOut() {
     setSigningOut(true);
@@ -72,36 +92,46 @@ export function AccountControl({
     }
   }
 
+  const settingsGroups: SettingsGroup[] = [
+    { label: t('個人設定'), sections: [
+      { key: 'profile', label: t('帳號'), description: t('查看個人資料、登入來源與目前的存取權限。'), icon: <UserOutlined />, content: <ProfilePanel businessRole={businessRole} /> },
+      { key: 'security', label: t('安全性'), description: t('管理密碼與已登入的工作階段，保護你的帳號。'), icon: <LockOutlined />, content: <SecurityPanel onLogout={signOut} /> },
+      { key: 'api-mcp', label: t('API 與 MCP'), description: t('建立個人存取權杖，連接工具與外部程式。'), icon: <ApiOutlined />, content: <AccessTokensPanel product={product} /> },
+    ] },
+  ];
+  const organizationGroups: SettingsGroup[] = isAdmin ? [{ label: t('組織管理'), sections: [
+      { key: 'users', label: t('使用者與邀請'), description: t('邀請同事加入，管理帳號與各產品的存取權限。'), icon: <TeamOutlined />, content: <AdminPanel /> },
+      { key: 'sso', label: t('企業 SSO'), description: t('設定企業登入、群組權限與身分帳號連結。'), icon: <LoginOutlined />, content: <EnterpriseSsoPanel /> },
+      { key: 'governance', label: t('企業治理'), description: t('管理帳號佈建、稽核保留期限與郵件寄送。'), icon: <ControlOutlined />, content: <EnterpriseGovernance /> },
+      { key: 'identity-audit', label: t('身分稽核'), description: t('檢視登入、帳號與權限的異動紀錄。'), icon: <AuditOutlined />, content: <IdentityAuditPanel /> },
+    ] }] : [];
+
+  const controls = <div className={`auth-account-control${variant === 'sidebar' ? ' auth-account-control-sidebar' : ''}`} data-product={product}>
+        <CollaborationCenter product={product} showLabels={variant === 'sidebar'} onOpen={onAction} />
+        <Tooltip title={settingsTitle}>
+          <Button type="text" size="small" icon={<SettingOutlined />} aria-label={settingsTitle} onClick={() => { setSettingsSection('profile'); onAction?.(); }}>{variant === 'sidebar' && settingsTitle}</Button>
+        </Tooltip>
+        <Tooltip title={t('登出')}>
+          <Button type="text" size="small" icon={<LogoutOutlined />} aria-label={t('{{product}} 登出', { product: productLabel })} loading={signingOut} onClick={() => { onAction?.(); void signOut(); }}>{variant === 'sidebar' && t('登出')}</Button>
+        </Tooltip>
+      </div>;
+
   return (
     <>
       {contextHolder}
-      <div className="auth-account-control" data-product={product}>
-        <CollaborationCenter product={product} />
-        <Tooltip title={t('帳號與安全性')}>
-          <Button type="text" size="small" icon={<SettingOutlined />} aria-label={t('帳號與安全性')} onClick={() => setOpen(true)} />
-        </Tooltip>
-        <Tooltip title={t('登出')}>
-          <Button type="text" size="small" icon={<LogoutOutlined />} aria-label={t('{{product}} 登出', { product: productLabel })} loading={signingOut} onClick={() => void signOut()} />
-        </Tooltip>
-      </div>
-      <Drawer title={t('帳號與安全性')} open={open} onClose={() => setOpen(false)} width={560} className="auth-account-drawer" destroyOnClose>
-        {signOutError && <Alert className="auth-drawer-alert" type="error" showIcon message={t('登出失敗，工作階段仍有效')} description={t(signOutError)} />}
-        <div className="auth-drawer-identity">
-          <Avatar size={38}>{displayName.slice(0, 1).toUpperCase()}</Avatar>
-          <div><strong>{displayName}</strong><span>{auth.session?.user.email}</span><span>{auth.session?.authentication?.method === 'oidc' ? t('企業登入 · {{provider}}', { provider: auth.session.authentication.provider_name || auth.sso?.display_name || 'OIDC' }) : t('Ordivant 帳號登入')}</span></div>
-          <Tag color={auth.session?.user.role === 'admin' ? 'purple' : 'default'}>{t(auth.session?.user.role === 'admin' ? '管理員' : '成員')}</Tag>
-        </div>
-        <Tabs
-          items={[
-            { key: 'security', label: t('安全性'), children: <SecurityPanel onLogout={signOut} /> },
-            { key: 'profile', label: t('帳號'), children: <ProfilePanel businessRole={businessRole} /> },
-            { key: 'api-mcp', label: t('API 與 MCP'), children: <AccessTokensPanel product={product} /> },
-            ...(auth.session?.user.role === 'admin' ? [{ key: 'users', label: t('使用者與邀請'), children: <AdminPanel /> }] : []),
-            ...(auth.session?.user.role === 'admin' ? [{ key: 'sso', label: t('企業 SSO'), children: <EnterpriseSsoPanel /> }, { key: 'identity-audit', label: t('身分稽核'), children: <IdentityAuditPanel /> }] : []),
-            ...(auth.session?.user.role === 'admin' ? [{ key: 'governance', label: t('企業治理'), children: <EnterpriseGovernance /> }] : []),
-          ]}
-        />
-      </Drawer>
+      {renderControls ? renderControls(controls) : controls}
+      <Modal title={settingsTitle} open={Boolean(settingsSection) && !organizationSection} onCancel={() => setSettingsSection('')} footer={null} width="min(1180px, calc(100vw - 48px))" className="auth-settings-modal" maskClosable={false} destroyOnClose>
+        <AccountSettingsLayout notice={signOutError && <Alert className="auth-drawer-alert" type="error" showIcon message={t('登出失敗，工作階段仍有效')} description={t(signOutError)} />} groups={settingsGroups} activeKey={settingsSection} onChange={setSettingsSection} identity={<>
+          <Avatar size={36}>{displayName.slice(0, 1).toUpperCase()}</Avatar>
+          <div><strong>{displayName}</strong><span>{auth.session?.user.email}</span><Tag color={isAdmin ? 'purple' : 'default'}>{t(isAdmin ? '管理員' : '成員')}</Tag></div>
+        </>} />
+      </Modal>
+      {isAdmin && <Modal title={t('組織管理')} open={organizationSection} onCancel={() => setSettingsSection('')} footer={null} width="min(1180px, calc(100vw - 48px))" className="auth-settings-modal auth-organization-modal" maskClosable={false} destroyOnClose>
+        <AccountSettingsLayout groups={organizationGroups} activeKey={settingsSection} onChange={setSettingsSection} identity={<>
+          <Avatar size={36} icon={<TeamOutlined />} />
+          <div><strong>{t('組織管理')}</strong><span>{displayName}</span><Tag color="purple">{t('管理員')}</Tag></div>
+        </>} />
+      </Modal>}
     </>
   );
 }
@@ -202,7 +232,7 @@ function SecurityPanel({ onLogout }: { onLogout: () => Promise<void> }) {
 
   const columns: ColumnsType<IdentitySessionRecord> = [
     { title: t('工作階段'), key: 'session', render: (_value, session) => <div className="auth-session-cell"><strong>{t(session.current ? '目前工作階段' : '已登入裝置')}</strong><span>{t('最近活動 {{date}}', { date: dateText(session.last_seen_at) })}</span></div> },
-    { title: t('到期時間'), dataIndex: 'expires_at', key: 'expires_at', render: dateText, width: 150 },
+    { title: t('到期時間'), dataIndex: 'expires_at', key: 'expires_at', render: value => <time className="auth-session-date">{dateText(value)}</time>, width: 205 },
     { title: '', key: 'action', width: 88, render: (_value, session) => <Button size="small" danger loading={revoking === session.id} onClick={() => void revokeSession(session)}>{t('撤銷')}</Button> },
   ];
 
@@ -210,7 +240,7 @@ function SecurityPanel({ onLogout }: { onLogout: () => Promise<void> }) {
     <div className="auth-settings-panel">
       {error && <Alert className="auth-drawer-alert" type="error" showIcon message={t('帳號操作失敗')} description={t(error)} action={<Button size="small" onClick={() => void loadSessions()}>{t('重試')}</Button>} />}
       {formError && <Alert className="auth-drawer-alert" type="error" showIcon message={t(formError)} />}
-      {auth.session?.user.credential_type === 'sso' ? <Alert type="info" showIcon message={t('此帳號由企業身分服務管理')} description={t('請透過企業身分服務更新密碼與多重要素驗證。Ordivant 不提供此帳號的密碼或復原碼操作。')} /> : <>
+      {auth.session?.user.credential_type === 'sso' ? <Alert type="info" showIcon message={t('此帳號由企業身分服務管理')} description={t('請透過企業身分服務更新密碼與多重要素驗證。Ordivant 不提供此帳號的密碼或復原碼操作。')} /> : <section className="auth-password-section">
         <div className="auth-section-heading"><div><strong>{t('更改密碼')}</strong><span>{t('完成後會撤銷其他已登入工作階段。')}</span></div></div>
         <Form form={form} layout="vertical" onFinish={(values) => void changePassword(values)} requiredMark={false}>
           <Form.Item name="current_password" label={t('目前密碼')} rules={[{ required: true, message: t('請輸入目前密碼') }]}><Input.Password autoComplete="current-password" /></Form.Item>
@@ -218,9 +248,9 @@ function SecurityPanel({ onLogout }: { onLogout: () => Promise<void> }) {
           <Form.Item name="confirm_password" label={t('再次輸入新密碼')} rules={[{ required: true, message: t('請再次輸入新密碼') }]}><Input.Password autoComplete="new-password" /></Form.Item>
           <Button type="primary" htmlType="submit" loading={changingPassword}>{t('更新密碼')}</Button>
         </Form>
-      </>}
+      </section>}
       <div className="auth-section-heading auth-session-heading"><div><strong>{t('已登入工作階段')}</strong><span>{t('撤銷不再使用的登入。')}</span></div><Button size="small" danger loading={loggingOutAll} onClick={() => void logoutAll()}>{t('登出全部')}</Button></div>
-      <Table<IdentitySessionRecord> rowKey="id" size="small" dataSource={sessions} columns={columns} loading={busy} pagination={false} scroll={{ x: 430 }} locale={{ emptyText: t('沒有其他工作階段') }} />
+      <Table<IdentitySessionRecord> rowKey="id" size="small" dataSource={sessions} columns={columns} loading={busy} pagination={false} scroll={{ x: 570 }} locale={{ emptyText: t('沒有其他工作階段') }} />
       <Button className="auth-reload-sessions" size="small" onClick={() => void loadSessions()}>{t('重新整理工作階段')}</Button>
       <Button className="auth-drawer-signout" icon={<LogoutOutlined />} onClick={() => void onLogout()}>{t('登出此帳號')}</Button>
     </div>

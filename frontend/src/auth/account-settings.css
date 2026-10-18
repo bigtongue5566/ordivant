@@ -1,0 +1,61 @@
+.ant-modal-root .ant-modal.auth-settings-modal {
+  top: 24px;
+  padding-bottom: 24px;
+}
+
+.ant-modal-root .ant-modal.auth-settings-modal .ant-modal-content { padding: 0; overflow: hidden; }
+.ant-modal-root .ant-modal.auth-settings-modal .ant-modal-header { margin: 0; padding: 18px 64px 18px 24px; border-bottom: 1px solid #e8e5ed; }
+.ant-modal-root .ant-modal.auth-settings-modal .ant-modal-title { line-height: 28px; }
+.ant-modal-root .ant-modal.auth-settings-modal .ant-modal-close { top: 18px; inset-inline-end: 20px; }
+.ant-modal-root .ant-modal.auth-settings-modal .ant-modal-body { height: min(790px, calc(100dvh - 112px)); min-height: 0; }
+
+.auth-settings-workspace { display: grid; grid-template-columns: 224px minmax(0, 1fr); height: 100%; min-height: 0; }
+.auth-settings-sidebar { min-width: 0; overflow-y: auto; padding: 24px 14px; background: #f8f7fa; border-inline-end: 1px solid #e8e5ed; }
+.auth-settings-identity { display: flex; align-items: flex-start; gap: 10px; padding: 0 8px 20px; border-bottom: 1px solid #e8e5ed; }
+.auth-settings-identity .ant-avatar { flex: none; background: #e9e3f5; color: #67519d; }
+.auth-settings-identity > div { display: grid; gap: 4px; min-width: 0; }
+.auth-settings-identity strong { color: #2a2633; font-size: 13px; overflow-wrap: anywhere; }
+.auth-settings-identity span:not(.ant-tag) { font-size: 12px; }
+.auth-settings-identity > div > span:not(.ant-tag) { color: #77717f; overflow-wrap: anywhere; }
+.auth-settings-identity .ant-tag { justify-self: start; margin: 2px 0 0; }
+.auth-settings-nav-group { margin-top: 20px; }
+.auth-settings-nav-group > p { margin: 0 10px 8px; color: #77717f; font-size: 12px; }
+.auth-settings-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; margin-top: 3px; padding: 10px 12px; border: 0; border-radius: 6px; background: transparent; color: #514b59; text-align: start; font: inherit; font-size: 13px; line-height: 20px; cursor: pointer; }
+.auth-settings-nav-item:hover { background: #eeebf3; }
+.auth-settings-nav-item > span:first-child { flex: none; font-size: 16px; }
+.auth-settings-nav-item > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.auth-settings-nav-active { background: #eae4f6; color: #6245a5; font-weight: 600; }
+.auth-settings-nav-item:focus-visible,
+.auth-settings-mobile-navigation select:focus-visible { outline: 2px solid #8061bd; outline-offset: 2px; }
+.auth-settings-mobile-navigation { display: none; }
+
+.auth-settings-main { min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 28px 32px 36px; }
+.auth-settings-page-heading { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #e8e5ed; }
+.auth-settings-page-heading h2 { margin: 0; color: #2a2633; font-size: 22px; font-weight: 650; line-height: 1.4; }
+.auth-settings-page-heading p { margin: 8px 0 0; max-width: 72ch; color: #77717f; font-size: 13px; line-height: 1.7; }
+.auth-settings-page-content,
+.auth-settings-page-content > * { min-width: 0; max-width: 100%; }
+.auth-settings-page-content .ant-descriptions-item-content { overflow-wrap: anywhere; }
+.auth-password-section { display: grid; gap: 18px; max-width: 580px; }
+.auth-session-date { white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .ant-modal-root .ant-modal.auth-settings-modal { top: 0; width: 100vw !important; max-width: 100vw; margin: 0; padding: 0; }
+  .ant-modal-root .ant-modal.auth-settings-modal .ant-modal-content { display: flex; flex-direction: column; height: 100dvh; border-radius: 0; }
+  .ant-modal-root .ant-modal.auth-settings-modal .ant-modal-header { flex: none; padding: 18px 64px 18px 20px; }
+  .ant-modal-root .ant-modal.auth-settings-modal .ant-modal-body { flex: 1; height: auto; min-height: 0; }
+  .auth-settings-workspace { display: flex; flex-direction: column; }
+  .auth-settings-sidebar { flex: none; overflow: visible; padding: 12px 20px 16px; border-inline-end: 0; border-bottom: 1px solid #e8e5ed; }
+  .auth-settings-identity,
+  .auth-settings-navigation { display: none; }
+  .auth-settings-mobile-navigation { display: grid; gap: 6px; color: #77717f; font-size: 12px; }
+  .auth-settings-mobile-navigation select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border: 1px solid #d8d1e4; border-radius: 6px; background: white; color: #2a2633; font: inherit; font-size: 14px; }
+  .auth-settings-main { flex: 1; padding: 22px 20px 32px; }
+  .auth-settings-page-heading h2 { font-size: 20px; }
+}
+
+@media (max-width: 380px) {
+  .ant-modal-root .ant-modal.auth-settings-modal .ant-modal-header { padding-inline-start: 16px; }
+  .auth-settings-sidebar { padding-inline: 16px; }
+  .auth-settings-main { padding-inline: 16px; }
+}

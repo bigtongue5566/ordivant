@@ -11,7 +11,7 @@ Ordivant Work、Knowledge、Code 共用一個 Identity 服務。管理員可以�
 ## 管理員設定 {#administrator-setup}
 
 1. 以要設定的 Ordivant 管理員帳號登入。不同部署各自保存帳號及 SSO 設定，請確認使用正確的服務網址。
-2. 開啟「帳號與安全性 → 企業 SSO」。選擇身分服務範本，再填入組織專屬 Issuer URL、Client ID、Client Secret。
+2. 開啟「組織管理 → 企業 SSO」。選擇身分服務範本，再填入組織專屬 Issuer URL、Client ID、Client Secret。
 3. 在身分服務建立 confidential OIDC Web application，允許 Authorization Code 和 PKCE S256。把 Ordivant 顯示的 Callback URL 完整註冊為 Redirect URI；不要使用萬用字元。
 4. 設定允許的完整電子郵件網域、成員佈建方式、預設權限及群組對應。先儲存，再執行「測試連線」。這項測試檢查 discovery/JWKS；真正登入仍需由身分服務授權。
 5. 先用一位企業成員完成登入、產品存取及登出驗收，再切換「僅企業 SSO」。本機管理員帳密入口保留作為復原途徑。
@@ -101,7 +101,7 @@ docker compose -f compose.yaml -f compose.identity-broker.yaml --profile identit
 
 Ordivant 登出會撤銷三個模組共用的工作階段；企業其他應用的工作階段由 IdP 管理。企業 MFA、Conditional Access、密碼規則與人員離職流程需在 IdP 設定。若平台的 SSO 政策填入 required_acr／required_amr，Identity 會驗證已簽署的 IdP claims；acr 必須符合其中一個要求值，amr 必須包含全部指定方式。這些 claim 只是驗證條件，實際 MFA 因子由 IdP 執行。若 IdP 不發送 backchannel logout，管理員應在平台同步停用成員，而不能把 IdP 停用誤認為現有平台 session 立即失效。
 
-「身分稽核」記錄登入、佈建、設定與權限變更、連結／解除連結及登出事件。只有管理員可以檢視或從「帳號與安全性」→「企業治理」匯出 Identity 記錄；匯出不包含 Work、Knowledge 或 Code 的產品事件，也不含密碼、cookie、client secret 或 provider token。
+「身分稽核」記錄登入、佈建、設定與權限變更、連結／解除連結及登出事件。只有管理員可以檢視或從「組織管理」→「企業治理」匯出 Identity 記錄；匯出不包含 Work、Knowledge 或 Code 的產品事件，也不含密碼、cookie、client secret 或 provider token。
 
 <span id="維運與備份"></span>
 <span id="运维与备份"></span>

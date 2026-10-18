@@ -98,6 +98,12 @@ async def create_project(
 
 
 @mcp.tool()
+async def update_project(project_id: str, name: str, description: str, budget_usd: float, expected: dict, request_id: str | None = None) -> dict:
+    """Update project settings with the snapshot last read; server checks scope and manager role."""
+    return await _request("PATCH", f"/api/projects/{project_id}", body={"name": name, "description": description, "budget_usd": budget_usd, "expected": expected}, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
 async def get_project_context(project_id: str) -> dict:
     """Read a project, its tasks, scoped agents, and decisions."""
     return await _request("GET", f"/api/projects/{project_id}/context")
@@ -413,10 +419,24 @@ async def review_result(task_id: str, decision: str, comment: str, request_id: s
 
 
 @mcp.tool()
-async def find_agents(project_id: str | None = None) -> list[dict]:
+async def find_agents(project_id: str | None = None, include_archived: bool = False) -> list[dict]:
     """Find agents whose project access overlaps this credential's scope."""
-    params = {"project_id": project_id} if project_id else None
+    params = {"include_archived": "true" if include_archived else "false"}
+    if project_id:
+        params["project_id"] = project_id
     return await _request("GET", "/api/agents", params=params)
+
+
+@mcp.tool()
+async def archive_agent(agent_id: str, request_id: str | None = None) -> dict:
+    """Archive an idle Agent, revoke its credentials and retain history; manager/admin only."""
+    return await _request("POST", f"/api/agents/{agent_id}/archive", body={}, request_id=request_id or str(uuid.uuid4()))
+
+
+@mcp.tool()
+async def delete_agent(agent_id: str, request_id: str | None = None) -> dict:
+    """Permanently delete an unused Agent only; referenced Agents must be archived instead."""
+    return await _request("DELETE", f"/api/agents/{agent_id}", request_id=request_id or str(uuid.uuid4()))
 
 
 @mcp.tool()

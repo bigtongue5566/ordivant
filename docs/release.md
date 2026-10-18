@@ -3,22 +3,23 @@
 <span id="public-release-v0-1-0"></span>
 <span id="public-release-v0-2-0"></span>
 <span id="public-release-v0-3-0"></span>
+<span id="public-release-v0-4-0"></span>
 
-# Ordivant v0.4.0 公開版本 {#public-release-v0-4-0}
+# Ordivant v0.5.0 公開版本 {#public-release-v0-5-0}
 
-發布日期：2026-10-19。授權：[MIT](../LICENSE)。原始碼與下載：[GitHub Releases](https://github.com/ordivant-ai/ordivant/releases/tag/v0.4.0)。
+發布日期：2026-10-19。授權：[MIT](../LICENSE)。原始碼與下載：[GitHub Releases](https://github.com/ordivant-ai/ordivant/releases/tag/v0.5.0)。
 
 ## 本版內容 {#included-in-this-release}
 <span id="本版內容"></span>
 <span id="本版内容"></span>
 
-- **個人 API 與 MCP**：在「帳號與安全性 → API 與 MCP」建立限定產品及期限的個人權杖，複製目前環境的連線範例，並隨時撤銷。權杖代表本人的真人帳號，每次操作沿用目前角色及資源範圍，不會取得 Agent 身分或額外權限。見[連線指南](./guide/administration.md#personal-api-and-mcp-access)。
-- **六種內建 Agent 範本**：PM、PG、SA、SD、QA 與 Reviewer。新增 Agent 時帶入可編輯的名稱、能力與工作指令；範本按組織保存為不可變版本，既有 Agent 不會被覆寫。見 [Work 指南](./guide/work.md#built-in-agent-templates)。
-- **建立專案時一起建立其他產品**：Work 專案建立後，可選擇建立對應 Knowledge 空間及 Code 專案，也可略過。失敗項目可分別重試，已成功的項目不會重複建立；各產品仍獨立授權。
-- **從 Provider 取得模型**：模型設定可向 OpenAI 相容服務的 `/models` 取得清單，搜尋並選取模型。只有上游明確提供時，才帶入 Context、輸出上限與推理強度，缺漏時仍需手填；不會測試模型推論。見[模型設定](./model-usage.md)。
-- **更清楚的執行設定**：以「執行方式」、「由平台執行」和「由外部程式執行」說明 Agent 的運作；修正指定模型尚未填完整時的畫面錯誤，以及模型清單撐長側欄的問題。
-- **開源協作指南**：重新整理 AGENTS 與貢獻規範，提供通用的目錄、契約、測試與 PR 指引，適用不同開發者和 coding agent。
-- 新功能介面與操作文件支援繁體中文、簡體中文和英文；既有真人工作、文件共編與 Code 協作仍不需要 LLM。
+- **專案設定與範圍導覽**：側欄固定顯示目前專案／空間，頂端顯示所在位置；Work 的「專案設定」可管理名稱、說明、追蹤預算與成員存取權。並行修改會提示衝突，避免覆蓋他人設定。見 [Work 指南](./guide/work.md#project-settings)。
+- **分開個人與組織管理**：「帳號設定」管理個人資料、安全性及 API／MCP；「組織管理」集中使用者、企業 SSO、治理與身分稽核，僅管理員可使用。
+- **Agent 生命週期**：支援停用後重新啟用、封存保留歷史，以及永久刪除未使用的 Agent。仍有未完成工作或啟用中的自動化引用時，服務會拒絕退役操作。封存會撤銷憑證且不能還原。
+- **重新整理後保留位置**：三個模組會保留網址中的頁面與資源選擇；側欄帳號操作收進選單，設定頁改用可讀的分區導覽，並支援小螢幕。
+- **人工維護三語翻譯**：移除 OpenCC.js 與自動繁簡轉換，逐條校訂簡體中文；翻譯檢查驗證完整性及插值且不改寫詞庫。
+
+Work 可逐專案授權存取，但同一成員的 Work 角色在各授權專案共用；目前不支援各專案獨立角色或 Work 唯讀角色。系統管理員才可調整真人成員存取權。Knowledge 空間與 Code 專案維持獨立授權，同名不代表共用權限。
 
 個人權杖完整內容只顯示一次，每位使用者最多 50 個有效權杖，有效期限為 1 至 365 天。密碼變更、帳號復原與停用會撤銷既有權杖；「登出所有裝置」只撤銷瀏覽器工作階段，外部工具須另外撤銷權杖。MCP 目前為本機 stdio bridge，需 uv 與原始碼；不是遠端 Streamable HTTP MCP 服務。新增的連線範例使用佔位值，請在自己的用戶端安全設定權杖。
 
@@ -26,9 +27,9 @@
 <span id="升級與限制"></span>
 <span id="升级与限制"></span>
 
-由 v0.3.0 或更早版本升級前，先依[維運指南](./guide/operations.md)停止服務並備份該 Compose 專案的資料庫、所有持久化資料卷、服務機密及自訂 `.env`。加密金鑰必須與對應資料庫、資料卷一起保存；機密目錄預設為 `.data/container-secrets/`，自訂時備份 `ORDIVANT_SECRETS_DIR` 指定的位置。若使用企業機密掛載，也備份 `ORDIVANT_ENTERPRISE_SECRETS_DIR`。
+由 v0.4.0 或更早版本升級前，先依[維運指南](./guide/operations.md)停止服務並備份該 Compose 專案的資料庫、所有持久化資料卷、服務機密及自訂 `.env`。加密金鑰必須與對應資料庫、資料卷一起保存；機密目錄預設為 `.data/container-secrets/`，自訂時備份 `ORDIVANT_SECRETS_DIR` 指定的位置。若使用企業機密掛載，也備份 `ORDIVANT_ENTERPRISE_SECRETS_DIR`。
 
-將原有 repository 更新至 v0.4.0，沿用原有 Compose 專案名稱、`.env`、機密目錄、Compose 檔案組合及 profiles。服務啟動時會套用資料庫結構更新。從 repository root 執行：
+將原有 repository 更新至 v0.5.0，沿用原有 Compose 專案名稱、`.env`、機密目錄、Compose 檔案組合及 profiles。服務啟動時會套用資料庫結構更新。從 repository root 執行：
 
 ```sh
 docker compose up -d --build --wait

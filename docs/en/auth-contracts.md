@@ -76,3 +76,7 @@ Provide account settings for password change, recovery-code display (once), sess
 ## Container acceptance
 
 Each selected product can deploy with its own database plus the shared identity service/database; no Work/Knowledge/Code peer dependency introduced. Development and production have separate identity data and cookie names. Preserve existing business volumes. Test human account flows against owned isolated QA identity data; never initialize the user's first admin with a test password. Leave real installed environments ready for the user to create their own admin in the app.
+
+## Conflict checks for project grants {#permission-snapshots}
+
+Administrator `PATCH /api/auth/users/{id}` accepts optional `expected_permissions:Permissions` alongside new `permissions`. After locking the target user, the service compares the complete previous grant; a mismatch returns 409 `permissions_changed` without changing permissions or revoking sessions. Explicit null or a snapshot without new permissions returns 422. Omitting the snapshot preserves compatibility with existing clients. Project settings uses the snapshot to add or remove only the selected Work scope while preserving other grants. Roles remain product-wide; SCIM protection, manual SSO ownership changes, and session revocation on successful updates remain unchanged.

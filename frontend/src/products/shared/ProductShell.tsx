@@ -1,9 +1,15 @@
 import { useI18n } from '../../i18n';
 import type { ReactNode } from 'react';
-import { Avatar, Typography } from 'antd';
+import { Typography } from 'antd';
 import type { ProductPrincipal } from './types';
 import { ProductSwitcher, type ProductKey } from './ProductSwitcher';
-import { AccountControl } from '../../auth/AccountSettings';
+import { WorkspaceAccount } from './WorkspaceAccount';
+import { SidebarNavigation } from './SidebarNavigation';
+import { WorkspaceScope } from './WorkspaceScope';
+import { TeamOutlined } from '@ant-design/icons';
+import { useAuth } from '../../auth/AuthContext';
+import { openOrganizationSettings } from '../../auth/settingsNavigation';
+import '../../sidebar.css';
 
 const { Text, Title } = Typography;
 
@@ -41,24 +47,25 @@ export function ProductShell({
   children: ReactNode;
 }) {
   const { t } = useI18n();
+  const auth = useAuth();
   const roles: Record<string,string> = { admin: '管理員', manager: '管理者', writer: '編輯者', reader: '讀者', member: '成員' };
   return (
     <div className={`app-shell product-shell product-${product}`}>
       <aside className="side-rail">
-        <div className="side-brand"><span className="brand-mark">O</span><div><strong>Ordivant</strong><span>{t('Agent 協作管理')}</span></div></div>
-        <ProductSwitcher active={product} />
-        <div className="rail-label">{sectionLabel}</div>
-        <nav className="rail-nav" aria-label={t('{{product}} 導覽', { product: productLabel })}>
-          {navigation.map((item) => <button type="button" key={item.key} className={`nav-item${activeSection === item.key ? ' nav-item-active' : ''}`} onClick={() => onSectionChange(item.key)}><span className="nav-item-icon">{item.icon}</span><span>{item.label}</span>{item.count ? <span className="nav-count">{item.count}</span> : null}</button>)}
-        </nav>
+        <div className="side-brand"><span className="brand-mark">O</span><div><strong>Ordivant</strong><span>{t('團隊與 Agent 協作')}</span></div></div>
+        <ProductSwitcher active={product} showLanguage={false} />
+        {headerExtra && <WorkspaceScope kind={product === 'knowledge' ? 'space' : 'project'}>{headerExtra}</WorkspaceScope>}
+        <SidebarNavigation groups={[
+          { label: sectionLabel, items: navigation },
+          ...(auth.session?.user.role === 'admin' ? [{ label: t('管理與設定'), items: [{ key: 'organization-settings', label: t('組織管理'), icon: <TeamOutlined />, onClick: openOrganizationSettings }] }] : []),
+        ]} active={activeSection} onChange={onSectionChange} />
         <div className="rail-bottom">
-          <div className="workspace-identity"><Avatar size={28}>{principal.name.slice(0, 1).toUpperCase()}</Avatar><div className="workspace-user"><strong>{principal.name}</strong><span>{t(roles[principal.role] ?? principal.role)}</span></div><AccountControl product={product} productLabel={productLabel} displayName={principal.name} businessRole={principal.role} /></div>
-          <div className="rail-service"><span className={`health-dot ${serviceStatus === 'ok' ? 'health-good' : serviceStatus === 'error' ? 'health-bad' : ''}`} />{serviceStatus === 'ok' ? t('{{product}} API 已連線', { product: productLabel }) : serviceStatus === 'error' ? t('{{product}} API 無法連線', { product: productLabel }) : t('檢查服務中')}</div>
+          <WorkspaceAccount product={product} productLabel={productLabel} name={principal.name} role={principal.role} roleLabel={t(roles[principal.role] ?? principal.role)} serviceStatus={serviceStatus} />
         </div>
       </aside>
       <main className="main-pane">
         <header className="topbar product-topbar">
-          <div className="topbar-project"><span className="project-caption">{productLabel}</span>{headerExtra}</div>
+          <nav className="workspace-breadcrumb" aria-label={t('目前位置')}><span>{productLabel}</span>{eyebrow && <><span aria-hidden>/</span><strong title={eyebrow}>{eyebrow}</strong></>}</nav>
           <div className="topbar-right"><Text className={`product-mode${serviceStatus === 'error' ? ' product-mode-error' : ''}`}>{serviceStatus === 'error' ? t('離線') : mode === 'development' ? 'DEV' : mode === 'production' ? 'PROD' : 'API'}</Text></div>
         </header>
         <div className="workspace-content product-content">

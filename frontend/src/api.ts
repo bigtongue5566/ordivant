@@ -131,6 +131,7 @@ export const api = {
   },
   me: () => request<Principal>('/api/me', { method: 'GET' }),
   projects: () => request<Project[]>('/api/projects', { method: 'GET' }),
+  updateProject: (id: string, body: Pick<Project, 'name' | 'description' | 'budget_usd'> & { expected: Pick<Project, 'name' | 'description' | 'budget_usd'> }) => request<Project>(`/api/projects/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   projectContext: (id: string) => request<ProjectContext>(`/api/projects/${encodeURIComponent(id)}/context`, { method: 'GET' }),
   participants: (projectId: string) => request<ProjectParticipant[]>(`/api/projects/${encodeURIComponent(projectId)}/participants`, { method: 'GET' }),
   overview: (projectId: string) => request<Overview>(`/api/overview?project_id=${encodeURIComponent(projectId)}`, { method: 'GET' }),
@@ -173,7 +174,20 @@ export const api = {
     body: JSON.stringify(body),
     ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
   }),
-  agents: () => request<Agent[]>('/api/agents', { method: 'GET' }),
+  agents: (projectId?: string, includeArchived = false) => {
+    const params = new URLSearchParams({ include_archived: String(includeArchived) });
+    if (projectId) params.set('project_id', projectId);
+    return request<Agent[]>(`/api/agents?${params}`, { method: 'GET' });
+  },
+  archiveAgent: (id: string, key: string) => request<Agent>(`/api/agents/${encodeURIComponent(id)}/archive`, {
+    method: 'POST', body: '{}', headers: { 'Idempotency-Key': key },
+  }),
+  setAgentAvailability: (id: string, status: 'available' | 'disabled', key: string) => request<Agent>(`/api/agents/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify({ status }), headers: { 'Idempotency-Key': key },
+  }),
+  deleteAgent: (id: string, key: string) => request<{ id: string; deleted: true }>(`/api/agents/${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: { 'Idempotency-Key': key },
+  }),
   agentTemplates: () => request<AgentTemplate[]>('/api/agent-templates', { method: 'GET' }),
   createAgentTemplate: (body: AgentTemplateCreateInput) => request<AgentTemplate>('/api/agent-templates', { method: 'POST', body: JSON.stringify(body) }),
   publishAgentTemplateVersion: (id: string, body: AgentTemplateVersionInput) => request<AgentTemplate>(`/api/agent-templates/${encodeURIComponent(id)}/versions`, { method: 'POST', body: JSON.stringify(body) }),

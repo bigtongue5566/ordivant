@@ -74,6 +74,7 @@ function describeError(payload: unknown, status: number): { message: string; cod
       access_token_not_found: '找不到此存取權杖。',
       setup_complete: '管理員帳號已建立，請使用帳號登入。',
       user_not_found: '找不到此使用者，清單可能已更新。',
+      permissions_changed: '成員權限已由其他管理員更新，請重新載入後再儲存。',
     };
     return { message: (code && translations[code]) || (typeof value.message === 'string' ? value.message : `請求未完成（HTTP ${status}）。`), code };
   }
@@ -128,7 +129,7 @@ export const authApi = {
   revokeAccessToken: (id: string) => request<void>(`/access-tokens/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   users: () => request<{ users: IdentityUser[] }>('/users'),
   invite: (body: { email: string; name: string; role: IdentityUser['role']; permissions: IdentityUser['permissions'] }) => post<IdentityInvitation>('/invitations', body),
-  updateUser: (id: string, body: { active?: boolean; name?: string; permissions?: IdentityUser['permissions'] }) => request<IdentityUser>(`/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  updateUser: (id: string, body: { active?: boolean; name?: string; permissions?: IdentityUser['permissions']; expected_permissions?: IdentityUser['permissions'] }) => request<IdentityUser>(`/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   oidcStart: (body: { return_to: '/work' | '/knowledge' | '/code' }) => post<{ authorization_url: string }>('/oidc/start', body),
   ssoSettings: () => request<IdentitySsoSettings>('/sso/settings'),
   updateSsoSettings: (body: IdentitySsoSettingsWrite) => request<IdentitySsoSettings>('/sso/settings', { method: 'PUT', body: JSON.stringify(body) }),

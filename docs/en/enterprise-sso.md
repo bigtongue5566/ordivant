@@ -11,7 +11,7 @@ Ordivant Work, Knowledge, and Code share one Identity service. Administrators ca
 ## Administrator setup
 
 1. Sign in as an administrator of the Ordivant deployment you want to configure. Deployments have separate accounts and SSO settings, so confirm that you are using the correct service URL.
-2. Open “Accounts and security → Enterprise SSO.” Choose an identity provider template, then enter the organization-specific Issuer URL, Client ID, and Client Secret.
+2. Open “Organization administration → Enterprise SSO.” Choose an identity provider template, then enter the organization-specific Issuer URL, Client ID, and Client Secret.
 3. Create a confidential OIDC web application in the identity service with Authorization Code and PKCE S256 enabled. Register the complete Callback URL shown by Ordivant as a Redirect URI; do not use wildcards.
 4. Configure allowed full email domains, member provisioning, default permissions, and group mappings. Save, then run “Test connection.” This checks discovery and JWKS; actual sign-in still requires authorization by the identity service.
 5. Validate sign-in, product access, and sign-out with one enterprise member before enabling “Enterprise SSO only.” The local administrator credentials remain available as a recovery path.
@@ -101,7 +101,7 @@ Disabling an account, changing permissions, unlinking an enterprise identity, or
 
 Signing out of Ordivant revokes the session shared by its three modules; the IdP manages sessions in other enterprise applications. Configure enterprise MFA, Conditional Access, password policies, and offboarding in the IdP. If the platform's SSO policy sets required_acr or required_amr, Identity validates claims in the signed IdP token: acr must match one required value, and amr must include every required method. These claims are checks; the IdP performs the actual MFA factor. If the IdP does not send back-channel logout, administrators must also disable the member in Ordivant; disabling an IdP account alone does not immediately invalidate an existing platform session.
 
-The “Identity audit” records sign-ins, provisioning, settings and permission changes, linking/unlinking, and sign-outs. Administrators can view it or export Identity records under **Account and security → Enterprise governance**. This export does not include Work, Knowledge, or Code product events and contains no passwords, cookies, Client Secrets, or provider tokens.
+The “Identity audit” records sign-ins, provisioning, settings and permission changes, linking/unlinking, and sign-outs. Administrators can view it or export Identity records under **Organization administration → Enterprise governance**. This export does not include Work, Knowledge, or Code product events and contains no passwords, cookies, Client Secrets, or provider tokens.
 
 <span id="維運與備份"></span>
 <span id="运维与备份"></span>

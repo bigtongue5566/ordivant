@@ -2,7 +2,7 @@
 
 這份導覽依照日常工作說明 Ordivant 的操作入口、操作後會留下什麼紀錄，以及目前的限制。Work、Knowledge 和 Code 都支援真人與 Agent 在同一產品流程中合作；一般真人操作不需要 LLM。Work 管理任務、真人執行和 Agent Run；Knowledge 管理共同草稿、文件版本和決策；Code 管理連接至 Gitea 的 repository 和 PR，並保存 Ordivant 討論與審查紀錄。先從[專案介紹](./overview.md)選擇適合的產品，再依下列情境操作。
 
-本指南介紹 v0.4.0 的功能。若畫面沒有下述入口，請向管理員確認已安裝版本、產品權限及所需的整合設定。
+本指南介紹 v0.5.0 的功能。若畫面沒有下述入口，請向管理員確認已安裝版本、產品權限及所需的整合設定。
 
 ## 真人與 Agent 協作 {#human-and-agent-collaboration}
 
@@ -168,7 +168,7 @@ Code 的 repository、branch、commit 與 PR 由部署端連接的 Gitea 保存�
 
 ### 入口與操作 {#permissions-and-sso-steps}
 
-1. 開啟「帳號與安全性」→「企業 SSO」，選擇 OIDC Provider 範本，填入組織的 Issuer、Client ID、Client Secret、允許網域及僅限受邀或首次登入自動建立（JIT）的帳號政策。
+1. 開啟「組織管理」→「企業 SSO」，選擇 OIDC Provider 範本，填入組織的 Issuer、Client ID、Client Secret、允許網域及僅限受邀或首次登入自動建立（JIT）的帳號政策。
 2. 如使用群組授權，設定 IdP groups claim 和明確的群組→產品／資源範圍對應。儲存後先按「測試連線」，再以一般成員實際登入並確認授權範圍。
 3. 若要強制成員使用企業登入，確認管理員復原入口可用後才啟用 SSO-only。管理員也可在「使用者與邀請」調整產品角色和資源範圍、撤銷 session，並在「身分稽核」查閱管理記錄。
 
@@ -214,7 +214,7 @@ Work Task、Knowledge 文件與 Code PR 可使用附件與協作面板，查看�
 
 ## 企業佈建、MFA 與稽核 {#enterprise-provisioning-mfa-audit}
 
-管理員在「帳號與安全性」的「企業治理」管理 SCIM 群組到產品／資源的明確授權、郵件佇列、稽核保留和 JSONL 匯出。SCIM 必須使用部署管理員設定的專用憑證；它不會依相同 email 自動認領或合併既有帳號，群組也不能授予 admin。若要求 MFA，Identity 會依外部 IdP 已驗證的 OIDC acr／amr claims 執行登入政策；實際第二因素由 IdP 提供。SMTP 未設定時不會寄送邀請或復原郵件。設定步驟見[管理指南](./guide/administration.md)與[企業登入指南](./enterprise-sso.md)。
+管理員在「組織管理」的「企業治理」管理 SCIM 群組到產品／資源的明確授權、郵件佇列、稽核保留和 JSONL 匯出。SCIM 必須使用部署管理員設定的專用憑證；它不會依相同 email 自動認領或合併既有帳號，群組也不能授予 admin。若要求 MFA，Identity 會依外部 IdP 已驗證的 OIDC acr／amr claims 執行登入政策；實際第二因素由 IdP 提供。SMTP 未設定時不會寄送邀請或復原郵件。設定步驟見[管理指南](./guide/administration.md)與[企業登入指南](./enterprise-sso.md)。
 
 ## 後續操作指南 {#next-steps}
 

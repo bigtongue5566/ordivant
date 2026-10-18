@@ -38,7 +38,7 @@ Identity 的組織管理員（`admin`）可管理成員和授權；產品角色�
 
 ## 設定企業 OIDC {#configure-enterprise-oidc}
 
-1. 以管理員登入該環境，開啟「帳號與安全性 → 企業 SSO」。
+1. 以管理員登入該環境，開啟「組織管理 → 企業 SSO」。
 2. 在企業 IdP 建立機密用戶端類型的 OIDC Web 應用程式，啟用 Authorization Code 與 PKCE S256。
 3. 將 Ordivant 介面顯示的完整 `Callback URL` 註冊為 `Redirect URI`，不可使用萬用字元。
 4. 輸入該組織的 `Issuer`、`Client ID`、`Client Secret`、允許網域與成員佈建政策；需要群組時，設定 IdP 的 `groups` claim 及明確的產品／範圍對應。
@@ -48,13 +48,13 @@ Identity 的組織管理員（`admin`）可管理成員和授權；產品角色�
 
 ## SCIM、MFA、郵件與稽核治理 {#enterprise-provisioning-mfa-mail-audit}
 
-管理員在右上角開啟「帳號與安全性」→「企業治理」，可查看 SCIM／郵件服務狀態、設定群組權限對應與稽核保留政策、匯出 Identity 稽核紀錄，以及查看或重試可重試的郵件。SCIM 端點由此畫面顯示；部署管理員須另外提供 ORDIVANT_SCIM_TOKEN_FILE，並將該專用 bearer credential 設定在企業佈建服務。SCIM 支援 Users 和 Groups；目前不支援 SCIM bulk 操作。
+管理員在側欄開啟「組織管理」→「企業治理」，可查看 SCIM／郵件服務狀態、設定群組權限對應與稽核保留政策、匯出 Identity 稽核紀錄，以及查看或重試可重試的郵件。SCIM 端點由此畫面顯示；部署管理員須另外提供 ORDIVANT_SCIM_TOKEN_FILE，並將該專用 bearer credential 設定在企業佈建服務。SCIM 支援 Users 和 Groups；目前不支援 SCIM bulk 操作。
 
 在「儲存群組授權」前，先依 IdP 提供的群組完整名稱建立對應，再用權限編輯器選取明確的產品角色及資源 ID。SCIM 群組不會取得組織 admin；使用萬用資源範圍也會被拒絕。一般 SCIM User PATCH 若嘗試修改由 SCIM 管理的產品權限，會回傳 HTTP 409；不能透過一般 PATCH 手動切換權限管理來源。請更新 IdP 群組成員或這裡的群組對應，再讓 SCIM 同步。明確連結 OIDC 帳號時，須使用 `managed_permissions=false`，保留 SCIM 作為群組權限的管理來源。SCIM 建立使用者時若同一電子郵件已屬於既有 Ordivant 帳號，佈建會回報衝突，不會自動認領、合併或改變帳號；請先經明確的管理員帳號連結／移轉流程處理。SCIM 停用使用者或改變群組授權會撤銷其既有 Identity sessions。
 
 Docker Compose 部署可選用唯讀的 `compose.enterprise.yaml`，把 Identity 與 Code 的機密目錄分開掛載。SCIM token 與 SMTP 密碼檔放在 Identity 的掛載目錄；Code 部署設定及其 token 檔放在 Code 的目錄。操作步驟見[容器部署指南](../containers.md#enterprise-secret-mounts)與[Code 部署證據設定](code.md#upstream-governance-and-deployment-evidence)。不要把機密值寫入 `.env`。
 
-MFA 由企業 IdP 執行。在「帳號與安全性」→「企業 SSO」設定必須符合的登入強度 acr 值，及必須包含的驗證方式 amr（例如 mfa），再要求使用 SSO-only 成員登入。acr 必須符合清單中的其中一個值，amr 必須包含全部指定方式；請先確認 IdP 實際簽發的已驗證登入權杖包含這些 claims，再測試一般成員和管理員復原路徑。
+MFA 由企業 IdP 執行。在「組織管理」→「企業 SSO」設定必須符合的登入強度 acr 值，及必須包含的驗證方式 amr（例如 mfa），再要求使用 SSO-only 成員登入。acr 必須符合清單中的其中一個值，amr 必須包含全部指定方式；請先確認 IdP 實際簽發的已驗證登入權杖包含這些 claims，再測試一般成員和管理員復原路徑。
 
 寄送邀請與帳號復原郵件前，部署管理員須設定 SMTP host、port、sender、TLS，及需要時的帳號與密碼檔（ORDIVANT_SMTP_HOST、ORDIVANT_SMTP_PORT、ORDIVANT_SMTP_SENDER、ORDIVANT_SMTP_STARTTLS、ORDIVANT_SMTP_USERNAME、ORDIVANT_SMTP_PASSWORD_FILE）。正式環境要求 STARTTLS；未設定必要欄位時 Identity 不會寄信。到「企業治理」查看郵件佇列狀態；暫時或失敗項目可重試，過期郵件不可重試。資源追蹤與協作中心通知只顯示於 Ordivant，不會經此 SMTP 寄送。
 
@@ -71,7 +71,7 @@ MFA 由企業 IdP 執行。在「帳號與安全性」→「企業 SSO」設定�
 
 ## 使用者 API 與 MCP {#personal-api-and-mcp-access}
 
-在右上角開啟「帳號與安全性 → API 與 MCP」，輸入用途名稱、允許的產品與有效期限，再建立個人存取權杖。完整權杖只顯示一次；清單只顯示前綴、到期時間與上次使用時間。此處也提供目前環境的 API 和 MCP 連線範例。
+在側欄帳號選單開啟「帳號設定 → API 與 MCP」，輸入用途名稱、允許的產品與有效期限，再建立個人存取權杖。完整權杖只顯示一次；清單只顯示前綴、到期時間與上次使用時間。此處也提供目前環境的 API 和 MCP 連線範例。
 
 權杖透過 `Authorization: Bearer <PERSONAL_ACCESS_TOKEN>` 使用。它代表你的真人帳號，沿用目前的產品角色及 Project／Space 範圍，不會取得 Agent 身分或額外權限。管理員可建立資源；一般成員只能操作獲授權的資源。三個產品的本機 API 根網址如下：
 

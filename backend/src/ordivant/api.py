@@ -15,7 +15,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from . import agent_presets, automation, execution_settings, planning, runs, sandbox_profiles, service, tool_connections, vcs
+from . import agent_lifecycle, agent_presets, automation, execution_settings, planning, runs, sandbox_profiles, service, tool_connections, vcs
 from .collaboration_adapter import install as install_collaboration
 from .config import app_mode, authorized_dev_proxy
 from .db import Base, SessionLocal, engine, get_db
@@ -56,6 +56,7 @@ from .schemas import (
     OutboxClaimRequest,
     ProgressRequest,
     ProjectCreate,
+    ProjectPatch,
     ProjectFieldCreate,
     ProjectFieldPatch,
     ProjectRuleCreate,
@@ -99,7 +100,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Ordivant API", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Ordivant API", version="0.5.0", lifespan=lifespan)
 
 
 @app.exception_handler(DomainError)
@@ -177,18 +178,25 @@ def _authorize_idempotent_replay(session: Session, actor: Principal, path: str, 
         service.require_role(actor, service.ACTIVE_ROLES)
         if isinstance(response, dict) and response.get("id"):
             service.require_project(session, actor, response["id"])
+    elif parts[:2] == ["api", "projects"] and len(parts) == 3:
+        service.require_project(session, actor, parts[2])
+        service.require_role(actor, service.ACTIVE_ROLES)
     elif path == "/api/agents":
         service.require_role(actor, service.ACTIVE_ROLES)
         for project_id in body.get("project_ids", []):
             service.require_project(session, actor, project_id)
-    elif len(parts) == 3 and parts[:2] == ["api", "agents"]:
-        service.require_role(actor, service.ACTIVE_ROLES)
+    elif len(parts) in {3, 4} and parts[:2] == ["api", "agents"]:
         agent = session.get(Agent, parts[2])
         if agent is None:
-            raise DomainError(404, "not_found", "找不到 agent")
-        principal = session.get(Principal, agent.principal_id)
-        for project_id in service.principal_projects(session, principal.id):
-            service.require_project(session, actor, project_id)
+            # A successful DELETE no longer has an Agent to authorize against.
+            # Its cached receipt retains the original organization/project boundary.
+            service.require_role(actor, service.ACTIVE_ROLES)
+            if not isinstance(response, dict) or response.get("deleted") is not True or response.get("id") != parts[2] or response.get("organization_id") != actor.organization_id:
+                raise DomainError(404, "not_found", "找不到 Agent")
+            for project_id in response.get("project_ids", []):
+                service.require_project(session, actor, project_id)
+        else:
+            agent_lifecycle.managed_agent(session, actor, agent.id)
     elif path == "/api/messages":
         service.require_project(session, actor, body["project_id"])
     elif len(parts) == 4 and parts[:2] == ["api", "messages"]:
@@ -368,6 +376,9 @@ def _perform_mutation(
                 if agent is None:
                     session.rollback()
                     raise DomainError(404, "not_found", "找不到 agent")
+                agent, _, _ = agent_lifecycle.managed_agent(session, actor, agent.id)
+                if agent.status == "archived":
+                    raise conflict("agent_archived", "Agent 已封存，無法再編輯、指派或執行工作。")
                 payload["token"] = issue_token(session, agent.principal_id)
                 session.commit()
             else:
@@ -530,6 +541,12 @@ def post_project(
     data = value.model_dump()
     require_identity_admin_for_scope_creation(session, actor)
     return _perform_mutation(request, session, actor, data, lambda: service.create_project(session, actor, data), 201)
+
+
+@app.patch("/api/projects/{project_id}")
+def patch_project(project_id: str, value: ProjectPatch, request: Request, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    data = value.model_dump()
+    return _perform_mutation(request, session, actor, data, lambda: service.update_project(session, actor, project_id, data))
 
 
 @app.get("/api/projects/{project_id}/context")
@@ -874,8 +891,8 @@ async def patch_task(
 
 
 @app.get("/api/agents")
-def get_agents(project_id: str | None = None, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
-    return service.list_agents(session, actor, project_id)
+def get_agents(project_id: str | None = None, include_archived: bool = False, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return service.list_agents(session, actor, project_id, include_archived=include_archived)
 
 
 @app.post("/api/agents", status_code=201)
@@ -899,6 +916,16 @@ def patch_agent(
 ):
     data = value.model_dump(exclude_unset=True, by_alias=True)
     return _perform_mutation(request, session, actor, data, lambda: service.patch_agent(session, actor, agent_id, data))
+
+
+@app.post("/api/agents/{agent_id}/archive")
+def archive_agent(agent_id: str, request: Request, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return _perform_planning_mutation(request, session, actor, {"operation": "archive"}, lambda: agent_lifecycle.archive_agent(session, actor, agent_id))
+
+
+@app.delete("/api/agents/{agent_id}")
+def delete_agent(agent_id: str, request: Request, session: Session = Depends(get_db), actor: Principal = Depends(get_actor)):
+    return _perform_planning_mutation(request, session, actor, {"operation": "delete"}, lambda: agent_lifecycle.delete_agent(session, actor, agent_id))
 
 
 @app.get("/api/messages")

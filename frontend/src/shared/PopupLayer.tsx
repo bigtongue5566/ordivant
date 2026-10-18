@@ -20,6 +20,7 @@ const supportedTriggers = [
   '.ant-dropdown-open',
   '.ant-popover-open',
   '.ant-popover-trigger',
+  '.workspace-account-toggle', // Keep the account popup host stable when its open class changes.
 ].join(',');
 
 const popupClassPrefixes = [
@@ -76,11 +77,17 @@ function positionRecord(record: PopupRecord): void {
   }
 
   const triggerRect = record.trigger.getBoundingClientRect();
-  const popupRect = popup.getBoundingClientRect();
   const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
   const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
   const edge = 8;
   const gap = 4;
+  const maxWidth = Math.max(0, viewportWidth - edge * 2);
+  setPixelStyle(popup, 'max-width', maxWidth);
+  if (popup.classList.contains('workspace-account-popover')) {
+    // Size the entire border box before measuring wrapped content and placement.
+    setPixelStyle(popup, 'width', Math.min(triggerRect.width, maxWidth));
+  }
+  const popupRect = popup.getBoundingClientRect();
   const spaceBelow = Math.max(0, viewportHeight - triggerRect.bottom - gap - edge);
   const spaceAbove = Math.max(0, triggerRect.top - gap - edge);
   const naturalHeight = Math.max(popupRect.height, popup.scrollHeight, popup.offsetHeight);
@@ -102,7 +109,6 @@ function positionRecord(record: PopupRecord): void {
   setPixelStyle(record.host, 'left', left);
   setPixelStyle(record.host, 'top', top);
   setPixelStyle(popup, 'max-height', availableHeight);
-  setPixelStyle(popup, 'max-width', Math.max(0, viewportWidth - edge * 2));
 }
 
 function schedulePosition(record: PopupRecord): void {

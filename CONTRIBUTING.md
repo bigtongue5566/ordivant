@@ -60,6 +60,11 @@ npm --prefix frontend run build:suite
 npm --prefix frontend run build:work
 npm --prefix frontend run build:knowledge
 npm --prefix frontend run build:code
+npm --prefix frontend run test:agent-lifecycle
+npm --prefix frontend run test:navigation
+npm --prefix frontend run test:account-settings
+npm --prefix frontend run test:sidebar
+npm --prefix frontend run test:project-settings
 ```
 
 整合驗收在隔離的本機資料目錄啟動服務。Work REST/MCP/Pi 驗收前要先建置 Runtime；產品 smoke 會依序啟動 Knowledge 與 Code，不需要 Gitea 或 Docker：
@@ -97,7 +102,7 @@ CI 使用 `demo` Runtime 模式，不呼叫付費模型。除非測試明確要�
 
 ## 介面與文件翻譯
 
-介面訊息使用 `frontend/src/i18n` 的 `t`／`useI18n`，英文詞庫依模組存放，禁止翻譯使用者內容與 API 值。修改後執行 `npm --prefix frontend run i18n:generate` 與 `npm --prefix frontend run i18n:check`。新增文件時，請同時維護原始繁中、`docs/zh-CN`、`docs/en` 的同路徑頁面。完整流程見 [語言與翻譯](docs/i18n.md)。
+介面訊息使用 `frontend/src/i18n` 的 `t`／`useI18n`。每個繁體中文 source key 都要同步撰寫對應模組的英文 `catalogs/*.en.ts` 與簡體中文 `catalogs/*.zh-CN.json`，依語意及當地用詞校訂，不使用自動繁簡轉換產生翻譯。禁止翻譯使用者內容與 API 值。修改後執行 `npm --prefix frontend run i18n:check`，檢查不會改寫翻譯檔。新增文件時，請同時維護原始繁中、`docs/zh-CN`、`docs/en` 的同路徑頁面。完整流程見 [語言與翻譯](docs/i18n.md)。
 
 文件站只發布 `docs/.vitepress/public-pages.json` 明確列出的文章及其三語版本。新增 Markdown 不會自動進入網站、搜尋或 sitemap；新增公開文章時須同步更新清單、導覽及相關連結。PM 台帳、需求研究、開發契約及驗收紀錄保留於 GitHub，供維護者協作與重跑測試。這是網站的內容範圍，不是保密機制；公開 repo 中仍不得放入憑證或私人資料。
 

@@ -48,7 +48,7 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-Do not run `docker compose down -v`; it deletes data volumes. See the [v0.4.0 release and upgrade guide](docs/en/release.md) for the full steps.
+Do not run `docker compose down -v`; it deletes data volumes. See the [v0.5.0 release and upgrade guide](docs/en/release.md) for the full steps.
 
 ### Human collaboration without an LLM
 
@@ -81,7 +81,7 @@ Switch among **Traditional Chinese, Simplified Chinese, and English** on the sig
 
 ## Release and boundaries
 
-The current release is **v0.4.0 (2026-10-19)**. Human collaboration in Work, Knowledge, and Code needs no model configuration; only autonomous Agent Runs require a valid model connection. Knowledge provides text search. Ordivant Code reviews do not create Gitea approvals or CI results. Enterprise IdP, Git, model providers, and public HTTPS environments should be validated by the deployment team. See the [release and upgrade guide](docs/en/release.md), [roadmap](docs/en/roadmap.md), and [changelog](CHANGELOG.md).
+The current release is **v0.5.0 (2026-10-19)**. Human collaboration in Work, Knowledge, and Code needs no model configuration; only autonomous Agent Runs require a valid model connection. Knowledge provides text search. Ordivant Code reviews do not create Gitea approvals or CI results. Enterprise IdP, Git, model providers, and public HTTPS environments should be validated by the deployment team. See the [release and upgrade guide](docs/en/release.md), [roadmap](docs/en/roadmap.md), and [changelog](CHANGELOG.md).
 
 ## Contributing
 

@@ -283,6 +283,8 @@ def update_workflow_schedule(session: Session, actor: Principal, workflow_id: st
     row = _workflow_for_actor(session, actor, workflow_id)
     if not _lock_workflow_key(session, row):
         raise not_found("找不到 workflow key")
+    if value["enabled"]:
+        _validate_steps(session, actor, row.project_id, _loads(row.steps_json, []))
     from .service import _admit_runtime_project
 
     _admit_runtime_project(session, session.get(Project, row.project_id))
@@ -396,7 +398,7 @@ def _create_instance(session: Session, actor: Principal, workflow: WorkflowDefin
 
 def _agent_still_valid(session: Session, project_id: str, agent_id: str, role: str) -> bool:
     agent = session.get(Agent, agent_id)
-    if agent is None or agent.role != role or agent.status == "disabled":
+    if agent is None or agent.role != role or agent.status in {"disabled", "archived"}:
         return False
     return session.scalar(
         select(ProjectMembership.id).where(ProjectMembership.project_id == project_id, ProjectMembership.principal_id == agent.principal_id)

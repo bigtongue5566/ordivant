@@ -14,7 +14,7 @@ const standaloneProduct = ['work', 'knowledge', 'code'].includes(import.meta.env
   ? import.meta.env.MODE as ProductKey
   : null;
 
-export function ProductSwitcher({ active, compact = false }: { active: ProductKey; compact?: boolean }) {
+export function ProductSwitcher({ active, compact = false, showLanguage = true }: { active: ProductKey; compact?: boolean; showLanguage?: boolean }) {
   const { t } = useI18n();
   const visibleProducts = standaloneProduct ? products.filter((product) => product.key === standaloneProduct) : products;
   return (
@@ -24,6 +24,6 @@ export function ProductSwitcher({ active, compact = false }: { active: ProductKe
           <span>{product.icon}</span><span>{product.name}</span>
         </a>
       ))}
-    </nav><LanguageSelect /></>
+    </nav>{showLanguage && <LanguageSelect />}</>
   );
 }

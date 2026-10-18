@@ -608,3 +608,35 @@ def test_loopback_http_production_mode_setup_and_login(tmp_path):
         )
         assert logged_in.status_code == 200
         assert logged_in.json()["user"]["role"] == "admin"
+
+
+def test_permission_snapshot_prevents_stale_project_grants(identity):
+    client, app, settings = identity
+    admin = setup_admin(client)
+    admin_handle = client.cookies.get(settings.cookie_name)
+    invite = client.post('/api/auth/invitations', json={
+        'email': 'scoped-person@example.com', 'name': 'Scoped Person', 'role': 'member',
+        'permissions': {'work': {'role': 'worker', 'scope_ids': ['project-a']}, 'code': {'role': 'reader', 'scope_ids': ['code-a']}},
+    }, headers=origin_headers(admin['csrf_token']))
+    assert invite.status_code == 201
+    accepted = client.post('/api/auth/accept-invitation', json={'invitation_code': invite.json()['invitation_code'], 'password': 'Synthetic project test password 9!'}, headers=origin_headers())
+    assert accepted.status_code == 201
+    member_handle = client.cookies.get(settings.cookie_name)
+    user = accepted.json()['user']
+    switch_cookie(client, settings.cookie_name, admin_handle)
+    route = '/api/auth/users/'+user['id']
+    before = user['permissions']
+    changed = {**before, 'knowledge': {'role': 'reader', 'scope_ids': ['space-a']}}
+    first = client.patch(route, json={'permissions': changed, 'expected_permissions': before}, headers=origin_headers(admin['csrf_token']))
+    assert first.status_code == 200, first.text
+    stale = client.patch(route, json={'permissions': {**before, 'work': {'role': 'worker', 'scope_ids': ['project-a', 'project-b']}}, 'expected_permissions': before}, headers=origin_headers(admin['csrf_token']))
+    assert stale.status_code == 409
+    assert stale.json()['detail']['code'] == 'permissions_changed'
+    latest = first.json()['permissions']
+    after = {**latest, 'work': {'role': 'worker', 'scope_ids': ['project-a', 'project-b']}}
+    saved = client.patch(route, json={'permissions': after, 'expected_permissions': latest}, headers=origin_headers(admin['csrf_token']))
+    assert saved.status_code == 200
+    assert saved.json()['permissions']['code'] == before['code']
+    assert saved.json()['permissions']['knowledge'] == changed['knowledge']
+    assert client.post('/api/auth/introspect', json={'session_token': member_handle}, headers={'Authorization': 'Bearer '+settings.service_secret}).status_code == 401
+    assert client.patch(route, json={'expected_permissions': None, 'permissions': before}, headers=origin_headers(admin['csrf_token'])).status_code == 422

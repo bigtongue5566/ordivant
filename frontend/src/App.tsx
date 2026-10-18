@@ -4,6 +4,7 @@ import {
   Alert,
   Avatar,
   Button,
+  Checkbox,
   Descriptions,
   Divider,
   Drawer,
@@ -28,7 +29,6 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   AppstoreOutlined,
   AuditOutlined,
-  BranchesOutlined,
   CheckOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -38,17 +38,10 @@ import {
   EditOutlined,
   ExclamationCircleOutlined,
   FileSearchOutlined,
-  InboxOutlined,
   LinkOutlined,
-  LockOutlined,
   PlusOutlined,
-  PlayCircleOutlined,
   ReloadOutlined,
   SendOutlined,
-  SettingOutlined,
-  TeamOutlined,
-  ToolOutlined,
-  UnorderedListOutlined,
   UserAddOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
@@ -57,15 +50,22 @@ import { RunConsole } from './RunConsole';
 import { Automation } from './Automation';
 import { ToolSettings } from './ToolSettings';
 import { PlanningWorkspace } from './components/planning/PlanningWorkspace';
+import { ProjectSettings } from './projects/ProjectSettings';
 import { ProjectCompanionsModal } from './components/ProjectCompanionsModal';
 import { agentTemplateFormValues, localizeAgentTemplate } from './agents/templatePresets';
+import { AgentLifecycleActions } from './agents/AgentLifecycleActions';
+import { AgentAvailabilityAction } from './agents/AgentAvailabilityAction';
 import { MarkdownContent } from './shared/MarkdownContent';
+import { useNavigationState } from './shared/useNavigationState';
 import './AgentExecution.css';
+import './sidebar.css';
 import { ProductSwitcher } from './products/shared/ProductSwitcher';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { AuthScreen } from './auth/AuthScreen';
 import { AuthAccessDenied } from './auth/AuthAccessDenied';
-import { AccountControl } from './auth/AccountSettings';
+import { WorkspaceAccount } from './products/shared/WorkspaceAccount';
+import { WorkspaceScope } from './products/shared/WorkspaceScope';
+import { WorkNavigation, type WorkSection } from './navigation/WorkNavigation';
 import { AgentModelConfigFields, ModelSettings } from './models/ModelSettings';
 import { CollaborationPanel } from './products/shared/CollaborationPanel';
 import { formatDate, formatNumber, t as translate, useI18n, useLocalizedForm, localized } from './i18n';
@@ -94,7 +94,7 @@ import type {
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 
-type Section = 'tasks' | 'planning' | 'runs' | 'automation' | 'tools' | 'overview' | 'agents' | 'inbox' | 'audit' | 'model-settings';
+type Section = WorkSection;
 type Lease = Pick<ClaimedExecution, 'execution' | 'lease_token'>;
 type TaskOperation = 'progress' | 'submit' | 'block' | 'release';
 type ExistingPullRequest = {
@@ -123,6 +123,7 @@ const sectionNames: Record<Section, string> = {
   inbox: '協作收件匣',
   audit: '操作稽核',
   'model-settings': '模型連線',
+  'project-settings': '專案設定',
 };
 
 const statusLabel: Record<string, string> = {
@@ -246,29 +247,6 @@ function taskStatusTag(status: TaskStatus, t = translate) {
   return <Tag color={statusColor[status] ?? 'default'}>{statusLabel[status] ? t(statusLabel[status]) : status}</Tag>;
 }
 
-function NavItem({
-  active,
-  icon,
-  label,
-  onClick,
-  count,
-}: {
-  active: boolean;
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  count?: number;
-}) {
-  const { t } = useI18n();
-  return (
-    <button className={`nav-item${active ? ' nav-item-active' : ''}`} onClick={onClick} type="button">
-      <span className="nav-item-icon">{icon}</span>
-      <span>{t(label)}</span>
-      {typeof count === 'number' && count > 0 && <span className="nav-count">{count > 99 ? '99+' : count}</span>}
-    </button>
-  );
-}
-
 export default function App() {
   return <AuthProvider><WorkWorkspace /></AuthProvider>;
 }
@@ -286,7 +264,7 @@ function WorkWorkspace() {
   const [health, setHealth] = useState<'checking' | 'ok' | 'error'>('checking');
   const [apiMode, setApiMode] = useState<'development' | 'production' | ''>('');
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState('');
+  const [projectId, setProjectId] = useNavigationState<string>('project', '');
   const [projectContext, setProjectContext] = useState<ProjectContext | null>(null);
   const [projectParticipants, setProjectParticipants] = useState<ProjectParticipant[]>([]);
   const [participantsBusy, setParticipantsBusy] = useState(false);
@@ -294,7 +272,7 @@ function WorkWorkspace() {
   const [projectBusy, setProjectBusy] = useState(false);
   const [projectError, setProjectError] = useState<string | LocalizedMessage>('');
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [section, setSection] = useState<Section>('tasks');
+  const [section, setSection] = useNavigationState<Section>('section', 'tasks', ['tasks', 'planning', 'runs', 'automation', 'tools', 'overview', 'agents', 'inbox', 'audit', 'model-settings', 'project-settings']);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tasksBusy, setTasksBusy] = useState(false);
   const [tasksError, setTasksError] = useState('');
@@ -316,6 +294,8 @@ function WorkWorkspace() {
   const [companionProject, setCompanionProject] = useState<Project | null>(null);
   const [agentList, setAgentList] = useState<Agent[]>([]);
   const [agentsBusy, setAgentsBusy] = useState(false);
+  const [showArchivedAgents, setShowArchivedAgents] = useState(false);
+  const [directoryRevision, setDirectoryRevision] = useState(0);
   const [agentModalOpen, setAgentModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [agentSaving, setAgentSaving] = useState(false);
@@ -384,8 +364,8 @@ function WorkWorkspace() {
     setClaimAgentId(undefined);
   }, [selectedTaskId]);
 
-  const currentProject = projects.find((project) => project.id === projectId) ?? projectContext?.project ?? null;
-  const people = projectContext?.agents ?? agentList.filter((agent) => !projectId || agent.project_ids.includes(projectId));
+  const currentProject = projects.find((project) => project.id === projectId) ?? (projectContext?.project.id === projectId ? projectContext.project : null);
+  const people = (projectContext?.agents ?? agentList.filter((agent) => !projectId || agent.project_ids.includes(projectId))).filter(agent => agent.status !== 'archived');
   const collaborators = projectParticipants;
   const selectedTask = taskContext?.task ?? tasks.find((task) => task.id === selectedTaskId) ?? null;
   const activeHumanExecution = taskContext?.executions.find((execution) => execution.status === 'running'
@@ -438,7 +418,8 @@ function WorkWorkspace() {
       resourceAttemptKey.current = '';
       prefetchedTaskContext.current = null;
       setProjects([]);
-      setProjectId('');
+      // Keep the requested scope through session discovery/login; the authorized
+      // project list below validates it before selecting a fallback.
       setProjectContext(null);
       setProjectParticipants([]);
       setParticipantsError('');
@@ -497,16 +478,14 @@ function WorkWorkspace() {
     setTaskContextError('');
     api.taskContext(resourceId)
       .then((context) => {
-        if (!current) return;
+        if (!current || requestedResourceId.current !== resourceId) return;
         prefetchedTaskContext.current = { id: context.task.id, context };
-        setSection('tasks');
         setProjectId(context.task.project_id);
         setSelectedTaskId(context.task.id);
         setDrawerOpen(true);
       })
       .catch((error) => {
-        if (!current) return;
-        setSection('tasks');
+        if (!current || requestedResourceId.current !== resourceId) return;
         setSelectedTaskId(resourceId);
         setDrawerOpen(true);
         setTaskContextError(errorText(error));
@@ -537,7 +516,7 @@ function WorkWorkspace() {
       })
       .finally(() => { if (current) setProjectBusy(false); });
     return () => { current = false; };
-  }, [principal, projectId]);
+  }, [principal, projectId, directoryRevision]);
 
   useEffect(() => {
     if (!principal || !projectId) {
@@ -555,7 +534,7 @@ function WorkWorkspace() {
       .catch((error) => { if (current) setParticipantsError(errorText(error)); })
       .finally(() => { if (current) setParticipantsBusy(false); });
     return () => { current = false; };
-  }, [principal, projectId]);
+  }, [principal, projectId, directoryRevision]);
 
   const loadTasks = useCallback(async () => {
     if (!projectId) return;
@@ -606,12 +585,12 @@ function WorkWorkspace() {
     if (!projectId || !principal || section !== 'agents') return;
     let current = true;
     setAgentsBusy(true);
-    api.agents()
+    api.agents(projectId, showArchivedAgents)
       .then((result) => { if (current) setAgentList(result.filter((agent) => agent.project_ids.includes(projectId))); })
       .catch((error) => { if (current) messageApi.error(t(errorText(error))); })
       .finally(() => { if (current) setAgentsBusy(false); });
     return () => { current = false; };
-  }, [messageApi, principal, projectId, section]);
+  }, [messageApi, principal, projectId, section, showArchivedAgents, directoryRevision]);
 
   useEffect(() => {
     if (!projectId || !principal || section !== 'inbox') return;
@@ -674,6 +653,8 @@ function WorkWorkspace() {
   }
 
   function updateResourceQuery(taskId?: string) {
+    requestedResourceId.current = taskId ?? '';
+    resourceAttemptKey.current = '';
     const url = new URL(window.location.href);
     if (taskId) url.searchParams.set('resource', taskId);
     else url.searchParams.delete('resource');
@@ -1095,18 +1076,6 @@ function WorkWorkspace() {
     }
   }
 
-  async function disableAgent(agent: Agent) {
-    try {
-      await api.patch<Agent>(`/api/agents/${encodeURIComponent(agent.id)}`, { status: 'disabled' });
-      setAgentList((current) => current.map((entry) => entry.id === agent.id ? { ...entry, status: 'disabled' } : entry));
-      setProjectContext((current) => current ? { ...current, agents: current.agents.map((entry) => entry.id === agent.id ? { ...entry, status: 'disabled' } : entry) } : current);
-      await refreshParticipants();
-      messageApi.success(t('{{name}} 已停用。', { name: agent.name }));
-    } catch (error) {
-      messageApi.error(t(errorText(error)));
-    }
-  }
-
   async function copyNewAgentToken() {
     if (!newAgentToken) return;
     try {
@@ -1256,13 +1225,26 @@ function WorkWorkspace() {
         return agent.runtime === 'pi' ? t('繼承全域預設（尚未設定）') : agent.model || t('未指定');
       },
     },
-    { title: t('狀態'), dataIndex: 'status', key: 'status', width: 110, render: (value: Agent['status']) => <Tag color={value === 'available' ? 'green' : value === 'busy' ? 'blue' : value === 'disabled' ? 'default' : 'gold'}>{t(({ available: '可用', busy: '執行中', offline: '離線', disabled: '已停用' })[value])}</Tag> },
+    { title: t('狀態'), dataIndex: 'status', key: 'status', width: 110, render: (value: Agent['status']) => <Tag color={value === 'available' ? 'green' : value === 'busy' ? 'blue' : value === 'disabled' || value === 'archived' ? 'default' : 'gold'}>{t(({ available: '可用', busy: '執行中', offline: '離線', disabled: '已停用', archived: '已封存' })[value])}</Tag> },
     {
       title: '',
       key: 'actions',
-        width: 160,
+        width: 360,
         render: (_: unknown, agent) => (
-          <Space><Button size="small" icon={<EditOutlined />} disabled={!canManageAgents} onClick={() => openEditAgent(agent)} aria-label={t('編輯 {{name}}', { name: agent.name })}>{t('編輯')}</Button><Button size="small" icon={<LockOutlined />} disabled={!canManageAgents || agent.status === 'disabled'} onClick={() => void disableAgent(agent)} aria-label={t('停用 {{name}}', { name: agent.name })}>{t('停用')}</Button></Space>
+          <Space wrap><Button size="small" icon={<EditOutlined />} disabled={!canManageAgents || agent.status === 'archived'} onClick={() => openEditAgent(agent)} aria-label={t('編輯 {{name}}', { name: agent.name })}>{t('編輯')}</Button>
+            <AgentAvailabilityAction agent={agent} canManage={canManageAgents} onUpdated={updated => {
+              setAgentList(current => current.map(entry => entry.id === updated.id ? updated : entry));
+              setProjectContext(current => current ? { ...current, agents: current.agents.map(entry => entry.id === updated.id ? updated : entry) } : current);
+              void refreshParticipants();
+              setDirectoryRevision(current => current + 1);
+            }} />
+            <AgentLifecycleActions agent={agent} canManage={canManageAgents} onRetired={(retired, deleted) => {
+              setAgentList(current => current.flatMap(entry => entry.id !== retired.id ? [entry] : !deleted && showArchivedAgents ? [retired] : []));
+              setProjectContext(current => current ? { ...current, agents: current.agents.filter(entry => entry.id !== retired.id) } : current);
+              void refreshParticipants();
+              setDirectoryRevision(current => current + 1);
+            }} />
+          </Space>
         ),
     },
   ];
@@ -1279,39 +1261,13 @@ function WorkWorkspace() {
   if (authBusy || principalSessionKey !== auth.session.csrf_token) return <>{messageContext}<div className="auth-loading"><Spin size="large" /><Text>{t('正在確認 Work 存取權')}</Text></div></>;
   if (!principal) return <>{messageContext}<AuthAccessDenied product="work" productName="Work" error={principalError} forbidden={principalErrorStatus === 403} onRetry={() => window.location.reload()} /></>;
 
-  const navSections: Array<{ id: Section; icon: React.ReactNode; label: string; count?: number }> = [
-    { id: 'tasks', icon: <UnorderedListOutlined />, label: '任務' },
-    { id: 'planning', icon: <AppstoreOutlined />, label: '規劃工作區' },
-    { id: 'runs', icon: <PlayCircleOutlined />, label: 'Run 執行' },
-    { id: 'automation', icon: <BranchesOutlined />, label: '自動化' },
-    { id: 'tools', icon: <ToolOutlined />, label: '工具與沙箱' },
-    { id: 'overview', icon: <AppstoreOutlined />, label: '專案總覽' },
-    { id: 'agents', icon: <TeamOutlined />, label: 'Agent 名錄' },
-    { id: 'inbox', icon: <InboxOutlined />, label: '協作收件匣', count: inbox.filter((item) => item.status === 'delivered').length },
-    { id: 'audit', icon: <AuditOutlined />, label: '操作稽核' },
-  ];
-  if (auth.session.user.role === 'admin') navSections.push({ id: 'model-settings', icon: <SettingOutlined />, label: '模型連線' });
-
   return (
     <div className="app-shell">
       {messageContext}
       <aside className="side-rail">
-        <div className="side-brand"><span className="brand-mark">O</span><div><strong>Ordivant</strong><span>{t('Agent 作業管理')}</span></div></div>
-        <ProductSwitcher active="work" />
-        <div className="rail-label">{t('工作區')}</div>
-        <div className="rail-nav" role="navigation" aria-label={t('主要導覽')}>
-          {navSections.map((item) => <NavItem key={item.id} active={section === item.id} icon={item.icon} label={item.label} count={item.id === 'inbox' ? undefined : item.count} onClick={() => setSection(item.id)} />)}
-        </div>
-        <div className="rail-bottom">
-        <div className="workspace-identity"><Avatar size={28}>{principal.name.slice(0, 1).toUpperCase()}</Avatar><div className="workspace-user"><strong>{principal.name}</strong><span>{principalRoleLabel[principal.role] ? t(principalRoleLabel[principal.role]) : principal.role}</span></div><AccountControl product="work" productLabel="Ordivant Work" displayName={principal.name} businessRole={principal.role} /></div>
-          <div className="rail-service"><span className={`health-dot ${health === 'ok' ? 'health-good' : health === 'error' ? 'health-bad' : ''}`} />{t(health === 'ok' ? 'API 已連線' : health === 'error' ? 'API 連線中斷' : '檢查服務中')}</div>
-        </div>
-      </aside>
-
-      <main className="main-pane">
-        <header className="topbar">
-          <div className="topbar-project">
-            <span className="project-caption">{t('專案')}</span>
+        <div className="side-brand"><span className="brand-mark">O</span><div><strong>Ordivant</strong><span>{t('團隊與 Agent 協作')}</span></div></div>
+        <ProductSwitcher active="work" showLanguage={false} />
+          <WorkspaceScope>
             <Select
               aria-label={t('選擇專案')}
               value={projectId || undefined}
@@ -1329,7 +1285,20 @@ function WorkWorkspace() {
               notFoundContent={t('尚無可存取的專案')}
             />
             {canCreateProject && <Button icon={<PlusOutlined />} onClick={() => setProjectModalOpen(true)} aria-label={t('建立專案')} title={t('建立專案')} />}
-          </div>
+          </WorkspaceScope>
+        <WorkNavigation active={section} onChange={setSection} isAdmin={auth.session.user.role === 'admin'} unreadCount={inbox.filter(item => item.status === 'delivered').length} />
+        <div className="rail-bottom">
+          <WorkspaceAccount product="work" productLabel="Ordivant Work" name={principal.name} role={principal.role} roleLabel={principalRoleLabel[principal.role] ? t(principalRoleLabel[principal.role]) : principal.role} serviceStatus={health} />
+        </div>
+      </aside>
+
+      <main className="main-pane">
+        <header className="topbar">
+          <nav className="workspace-breadcrumb" aria-label={t('目前位置')}>
+            <span>Work</span><span aria-hidden>/</span>
+            <strong title={section === 'model-settings' ? t('組織管理') : currentProject ? `${currentProject.key} · ${currentProject.name}` : t('選擇專案')}>{section === 'model-settings' ? t('組織管理') : currentProject ? `${currentProject.key} · ${currentProject.name}` : t('選擇專案')}</strong>
+            <span aria-hidden>/</span><span>{t(sectionNames[section])}</span>
+          </nav>
           <div className="topbar-right">
             <Tag bordered={false} color={apiMode === 'production' ? 'green' : 'purple'}>{apiMode === 'production' ? 'PROD' : apiMode === 'development' ? 'DEV' : 'API'}</Tag>
             <Tooltip title={t('重新整理工作資料')}><Button type="text" icon={<ReloadOutlined />} onClick={() => { void loadTasks(); if (projectId) api.overview(projectId).then(setOverview).catch((error) => messageApi.error(t(errorText(error)))); }} aria-label={t('重新整理')} /></Tooltip>
@@ -1393,13 +1362,21 @@ function WorkWorkspace() {
 
               {section === 'tools' && <ToolSettings key={projectId} projectId={projectId} canAdmin={auth.session.user.role === 'admin'} />}
 
+              {section === 'project-settings' && participantsError && <Alert type="error" showIcon message={t('專案成員無法載入')} description={t(participantsError)} action={<Button loading={participantsBusy} onClick={() => void retryParticipants()}>{t('重試')}</Button>} />}
+              {section === 'project-settings' && currentProject && <ProjectSettings key={projectId} project={currentProject} participants={projectParticipants} participantsBusy={participantsBusy} canManage={canManageAgents}
+                onUpdated={updated => {
+                  setProjects(current => current.map(entry => entry.id === updated.id ? updated : entry));
+                  setProjectContext(current => current?.project.id === updated.id ? { ...current, project: updated } : current);
+                  setDirectoryRevision(value => value + 1);
+                }} onParticipantsChanged={() => setDirectoryRevision(value => value + 1)} onOpenAgents={() => setSection('agents')} onCreateCompanions={() => setCompanionProject(currentProject)} />}
+
               {section === 'model-settings' && auth.session.user.role === 'admin' && <ModelSettings />}
 
               {section === 'agents' && (
                 <section className="table-section">
-                  <div className="section-tools"><span>{agentsBusy ? t('正在載入') : t('{{count}} 位 Agent', { count: formatNumber(agentList.length) })}</span><span>{t('能力與模型設定來自 Ordivant API')}</span></div>
+                  <div className="section-tools"><span>{agentsBusy ? t('正在載入') : t('{{count}} 位 Agent', { count: formatNumber(agentList.length) })}</span><Checkbox checked={showArchivedAgents} onChange={event => setShowArchivedAgents(event.target.checked)}>{t('顯示已封存的 Agent')}</Checkbox><span>{t('能力與模型設定來自 Ordivant API')}</span></div>
                   {newAgentToken && <Alert className="token-alert" type="warning" showIcon closable onClose={() => setNewAgentToken('')} message={t('Agent 憑證只會顯示一次')} description={<div className="token-value"><code>{newAgentToken}</code><Space wrap><Button size="small" icon={<CopyOutlined />} onClick={() => void copyNewAgentToken()}>{t('複製 token')}</Button><Text>{t('外部程式可使用此憑證以此 Agent 身分連線。請妥善保管，不要提交至版本控制或寫入日誌；關閉提示後無法再次查看。')}</Text></Space></div>} />}
-                  <Table<Agent> rowKey="id" columns={agentColumns} dataSource={agentList} loading={agentsBusy} pagination={{ pageSize: 15, showSizeChanger: false }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('此專案尚無 Agent')} /> }} scroll={{ x: 720 }} />
+                  <Table<Agent> rowKey="id" columns={agentColumns} dataSource={agentList} loading={agentsBusy} pagination={{ pageSize: 15, showSizeChanger: false }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('此專案尚無 Agent')} /> }} scroll={{ x: 980 }} />
                 </section>
               )}
 

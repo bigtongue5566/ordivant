@@ -14,7 +14,6 @@ The following direct dependencies were checked against installed package metadat
 | Yjs / y-protocols / y-codemirror.next | MIT | https://github.com/yjs |
 | Pi Durable / Pi AI / Chord 1.0.3 | MIT | https://github.com/earendil-works/pi |
 | MCP TypeScript client 2.3.1 | Apache-2.0 | https://github.com/modelcontextprotocol/typescript-sdk |
-| OpenCC.js (offline translation development tool) | MIT | https://github.com/nk2028/opencc-js |
 | TypeScript / Vite / VitePress | Apache-2.0 / MIT / MIT | Respective package metadata and upstream repositories |
 
 The frontend and documentation build tools carry applicable dependency notices in their installed distributions and generated assets. `node_modules` and generated sites are not committed as source.

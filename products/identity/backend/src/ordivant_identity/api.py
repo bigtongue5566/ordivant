@@ -758,11 +758,16 @@ def patch_user(
     settings = _settings(request)
     _check_csrf(ctx, settings, x_csrf_token)
     _require_admin(ctx)
-    target = db.get(User, user_id)
+    statement = select(User).where(User.id == user_id)
+    if body.permissions is not None:
+        statement = statement.with_for_update()
+    target = db.scalar(statement.execution_options(populate_existing=True))
     if target is None:
         raise DomainError(404, "user_not_found", "User not found")
 
     fields = body.model_fields_set
+    if body.expected_permissions is not None and permissions_data(body.expected_permissions) != permissions_data(target.permissions):
+        raise DomainError(409, "permissions_changed", "Permissions were changed by another administrator; reload before saving")
     if "active" in fields and body.active is False and target.active and target.role == "admin":
         admin_ids = db.scalars(
             select(User.id)

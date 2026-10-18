@@ -3,22 +3,23 @@
 <span id="public-release-v0-1-0"></span>
 <span id="public-release-v0-2-0"></span>
 <span id="public-release-v0-3-0"></span>
+<span id="public-release-v0-4-0"></span>
 
-# Ordivant v0.4.0 release {#public-release-v0-4-0}
+# Ordivant v0.5.0 release {#public-release-v0-5-0}
 
-Released: 2026-10-19. License: [MIT](../../LICENSE). Source and downloads: [GitHub Releases](https://github.com/ordivant-ai/ordivant/releases/tag/v0.4.0).
+Released: 2026-10-19. License: [MIT](../../LICENSE). Source and downloads: [GitHub Releases](https://github.com/ordivant-ai/ordivant/releases/tag/v0.5.0).
 
 ## Included in this release {#included-in-this-release}
 <span id="本版內容"></span>
 <span id="本版内容"></span>
 
-- **Personal API and MCP access**: Create a product-scoped, expiring token under Account and security → API and MCP, copy connection examples for your environment, and revoke it at any time. Tokens act as the human owner using current roles and resource scopes; they grant no Agent identity or additional permissions. See the [connection guide](./guide/administration.md#personal-api-and-mcp-access).
-- **Six built-in Agent templates**: PM, PG, SA, SD, QA, and Reviewer. Creating an Agent fills editable names, capabilities, and instructions. Templates are immutable versions per organization and do not overwrite existing Agents. See the [Work guide](./guide/work.md#built-in-agent-templates).
-- **Companion products during project creation**: After creating a Work project, optionally create its Knowledge space and Code project. Retry failed products individually without duplicating successful results; authorization remains separate for each product.
-- **Discover Provider models**: Fetch, search, and select models from an OpenAI-compatible `/models` endpoint. Context, output limits, and reasoning efforts are populated only when explicitly supplied by the upstream service; otherwise enter them manually. Discovery does not run model inference. See [Model settings](./model-usage.md).
-- **Clearer execution settings**: Execution method, Run by the platform, and Run by an external program explain how an Agent operates. Fixes prevent incomplete model selections from crashing the screen and keep long model lists from stretching the navigation rail.
-- **Open-source contribution guidance**: Updated AGENTS and contribution conventions describe repository paths, contracts, tests, and PR expectations for different developers and coding agents.
-- New controls and operating guides support Traditional Chinese, Simplified Chinese, and English. Existing human tasks, shared document editing, and Code collaboration still need no LLM.
+- **Project settings and scoped navigation**: the sidebar identifies the current project or space, with a breadcrumb for the current location. Work Project settings manages names, descriptions, tracking budgets, and member access. Conflicting edits require reloading instead of overwriting another editor. See the [Work guide](./guide/work.md#project-settings).
+- **Separate personal and organization settings**: Account settings holds personal profile, security, and API/MCP access. Organization administration holds users, enterprise SSO, governance, and identity audit for administrators only.
+- **Agent lifecycle**: re-enable disabled Agents, archive them while retaining history, or permanently delete unused Agents. The service blocks retirement while unfinished work or enabled automation references remain. Archiving revokes credentials and cannot be reversed.
+- **Keep your place after refresh**: all three modules retain page and resource selections in the URL. Account actions use a compact menu, and settings use readable section navigation with support for small screens.
+- **Authored translations in three languages**: removed OpenCC.js and automatic character conversion, manually reviewed Simplified Chinese, and added coverage and interpolation checks that never rewrite catalogs.
+
+Work access can be granted per project, but each member has one Work role across all granted projects. Independent roles per project and a read-only Work role are not supported. Only system administrators can change human member access. Knowledge spaces and Code projects retain separate permissions; matching names do not share access.
 
 The full personal token is shown once. Each user may have up to 50 active tokens, expiring in 1 to 365 days. Password changes, account recovery, and account deactivation revoke existing tokens. Sign out of all devices revokes browser sessions only; revoke external-tool tokens separately. MCP currently uses a local stdio bridge requiring uv and the source checkout, not a remote Streamable HTTP MCP service. Connection examples use placeholders; configure the token securely in your own client.
 
@@ -26,9 +27,9 @@ The full personal token is shown once. Each user may have up to 50 active tokens
 <span id="升級與限制"></span>
 <span id="升级与限制"></span>
 
-Before upgrading from v0.3.0 or earlier, follow the [operations guide](./guide/operations.md) to stop services and back up the Compose project's databases, all persistent volumes, service secrets, and custom `.env`. Keep encryption keys with the matching databases and volumes. Secrets default to `.data/container-secrets/`; back up the location selected by `ORDIVANT_SECRETS_DIR` if customized. Also back up `ORDIVANT_ENTERPRISE_SECRETS_DIR` if enterprise secret mounts are enabled.
+Before upgrading from v0.4.0 or earlier, follow the [operations guide](./guide/operations.md) to stop services and back up the Compose project's databases, all persistent volumes, service secrets, and custom `.env`. Keep encryption keys with the matching databases and volumes. Secrets default to `.data/container-secrets/`; back up the location selected by `ORDIVANT_SECRETS_DIR` if customized. Also back up `ORDIVANT_ENTERPRISE_SECRETS_DIR` if enterprise secret mounts are enabled.
 
-Update the existing repository to v0.4.0 while preserving the original Compose project name, `.env`, secrets directory, Compose file combination, and profiles. Services apply database schema updates at startup. From the repository root, run:
+Update the existing repository to v0.5.0 while preserving the original Compose project name, `.env`, secrets directory, Compose file combination, and profiles. Services apply database schema updates at startup. From the repository root, run:
 
 ```sh
 docker compose up -d --build --wait

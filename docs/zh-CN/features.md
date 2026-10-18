@@ -2,7 +2,7 @@
 
 本指南结合日常场景，说明各项功能的入口、操作结果和现有限制。Work、Knowledge 和 Code 都支持真人与 Agent 在同一产品流程中协作；常规人工操作不需要 LLM。Work 管理任务、真人执行和 Agent Run；Knowledge 管理共同草稿、文档版本与决策；Code 管理连接到 Gitea 的仓库与 PR，并保存 Ordivant 讨论和审核记录。先查看[项目介绍](./overview.md)，再按以下场景操作。
 
-本指南介绍 v0.4.0 的功能。如果画面没有下述入口，请向管理员确认已安装版本、产品权限和所需的集成配置。
+本指南介绍 v0.5.0 的功能。如果画面没有下述入口，请向管理员确认已安装版本、产品权限和所需的集成配置。
 
 ## 真人与 Agent 协作 {#human-and-agent-collaboration}
 
@@ -168,7 +168,7 @@ Code 的 repository、branch、commit 和 PR 由部署端配置的 Gitea 保存�
 
 ### 操作入口 {#permissions-and-sso-steps}
 
-1. 打开“账号与安全性”→“企业 SSO”。选择 OIDC Provider 模板，填写组织的 Issuer、Client ID、Client Secret、允许的域名，以及仅限受邀或首次登录自动创建（JIT）的账号政策。
+1. 打开“组织管理”→“企业 SSO”。选择 OIDC Provider 模板，填写组织的 Issuer、Client ID、Client Secret、允许的域名，以及仅限受邀或首次登录自动创建（JIT）的账号政策。
 2. 如需基于群组授权，在身份服务中设置 groups claim 和明确的群组→产品／资源范围映射。保存后点击“测试连接”，再以普通成员身份登录并检查实际权限。
 3. 如需强制使用企业登录，先确认管理员恢复入口可用，再启用 SSO-only。管理员还可在“用户与邀请”中调整产品角色和资源范围、撤销 session，并在“身份审计”中查阅管理记录。
 
@@ -214,7 +214,7 @@ Work Task、Knowledge 文档和 Code PR 可使用附件与协作面板，查看�
 
 ## 企业布建、MFA 与审计 {#enterprise-provisioning-mfa-audit}
 
-管理员在「账号与安全性」的「企业治理」中配置 SCIM 群组到产品／资源的明确授权、查看邮件队列、设置审计保留并以 JSONL 导出 Identity 记录。SCIM 必须使用部署管理员配置的专用凭证；它不会因 email 相同而自动认领或合并现有账号，群组也不能授予 admin。要求 MFA 时，Identity 会依据外部 IdP 已验证的 OIDC acr／amr claims 强制登录政策；实际第二因素由 IdP 提供。未设置 SMTP 时不会发送邀请或恢复邮件。设置步骤见[管理指南](./guide/administration.md)和[企业登录指南](./enterprise-sso.md)。
+管理员在「组织管理」的「企业治理」中配置 SCIM 群组到产品／资源的明确授权、查看邮件队列、设置审计保留并以 JSONL 导出 Identity 记录。SCIM 必须使用部署管理员配置的专用凭证；它不会因 email 相同而自动认领或合并现有账号，群组也不能授予 admin。要求 MFA 时，Identity 会依据外部 IdP 已验证的 OIDC acr／amr claims 强制登录政策；实际第二因素由 IdP 提供。未设置 SMTP 时不会发送邀请或恢复邮件。设置步骤见[管理指南](./guide/administration.md)和[企业登录指南](./enterprise-sso.md)。
 
 ## 更多用户指南 {#next-steps}
 

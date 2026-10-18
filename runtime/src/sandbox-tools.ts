@@ -1,5 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
+import type { ToolExecutionResult } from "@earendil-works/pi-durable";
 import type { RunExecutionContext } from "./types.js";
 import { SandboxClient } from "./sandbox-client.js";
 
@@ -9,8 +10,8 @@ type ActiveRunLookup = (conversationId: string) => (RunExecutionContext & {
   agent_id: string;
 }) | undefined;
 
-function resultText(value: unknown, isError = false) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) };
+function resultText(value: unknown, isError = false): ToolExecutionResult {
+  return { output: [{ type: "text", text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) };
 }
 
 async function runContext(api: { conversationId: unknown }, activeRun: ActiveRunLookup) {

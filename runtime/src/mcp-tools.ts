@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Client, StreamableHTTPClientTransport, type Tool as McpTool } from "@modelcontextprotocol/client";
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
-import type { ToolExecutionApi, ToolRegistration } from "@earendil-works/pi-durable";
+import type { ToolExecutionApi, ToolExecutionResult, ToolRegistration } from "@earendil-works/pi-durable";
 import type { RunExecutionContext, RuntimeConfig, ToolConnectionCredential } from "./types.js";
 import { assertToolEndpointAllowed, guardedFetch } from "./tool-policy.js";
 
@@ -113,14 +113,14 @@ export async function createMcpExtension(
         parameters,
         replay: "unsafe",
         outputLimits: { maxBytes: 32_000, retain: "head" },
-        execute: async (args: Record<string, unknown>, api: ToolExecutionApi) => {
+        execute: async (args: Record<string, unknown>, api: ToolExecutionApi): Promise<ToolExecutionResult> => {
           const run = activeRun(String(api.conversationId));
           if (!run || !run.tool_connections?.some((item) => item.id === connection.id)) {
-            return { content: [{ type: "text", text: "MCP connection is not bound to this run." }], isError: true };
+            return { output: [{ type: "text", text: "MCP connection is not bound to this run." }], isError: true };
           }
           await run.beforeToolOperation?.();
           const result = await callMcpTool(connection, tool.name, args, config);
-          return { content: [{ type: "text", text: result.text }], isError: result.isError };
+          return { output: [{ type: "text", text: result.text }], isError: result.isError };
         },
       }));
     }

@@ -1,6 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
-import type { ToolExecutionApi } from "@earendil-works/pi-durable";
+import type { ToolExecutionApi, ToolExecutionResult } from "@earendil-works/pi-durable";
 import { PlatformClient } from "./platform-client.js";
 import type { RunExecutionContext } from "./types.js";
 
@@ -10,8 +10,8 @@ export type ActiveRunLookup = (conversationId: string) => (RunExecutionContext &
   agent_id: string;
 }) | undefined;
 
-function jsonToolResult(value: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(value) }] };
+function jsonToolResult(value: unknown): ToolExecutionResult {
+  return { output: [{ type: "text", text: JSON.stringify(value) }] };
 }
 
 export function createPlatformTools(client: PlatformClient, activeRun: ActiveRunLookup) {

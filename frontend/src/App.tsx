@@ -57,6 +57,8 @@ import { RunConsole } from './RunConsole';
 import { Automation } from './Automation';
 import { ToolSettings } from './ToolSettings';
 import { PlanningWorkspace } from './components/planning/PlanningWorkspace';
+import { ProjectCompanionsModal } from './components/ProjectCompanionsModal';
+import { agentTemplateFormValues, localizeAgentTemplate } from './agents/templatePresets';
 import { MarkdownContent } from './shared/MarkdownContent';
 import './AgentExecution.css';
 import { ProductSwitcher } from './products/shared/ProductSwitcher';
@@ -311,6 +313,7 @@ function WorkWorkspace() {
   const [taskSaving, setTaskSaving] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectSaving, setProjectSaving] = useState(false);
+  const [companionProject, setCompanionProject] = useState<Project | null>(null);
   const [agentList, setAgentList] = useState<Agent[]>([]);
   const [agentsBusy, setAgentsBusy] = useState(false);
   const [agentModalOpen, setAgentModalOpen] = useState(false);
@@ -351,8 +354,11 @@ function WorkWorkspace() {
   useLocalizedForm(operationForm);
   const [reviewForm] = Form.useForm();
   useLocalizedForm(reviewForm);
-  const agentRuntime = (Form.useWatch('runtime', agentForm) as Agent['runtime'] | undefined) ?? 'external';
+  const agentRuntime = (Form.useWatch('runtime', agentForm) as Agent['runtime'] | undefined) ?? 'pi';
   const agentModelMode = Form.useWatch('modelMode', agentForm) as 'inherit' | 'override' | undefined;
+  const selectedAgentTemplateId = Form.useWatch('template_id', agentForm) as string | undefined;
+  const selectedAgentTemplate = agentTemplates.find(template => template.id === selectedAgentTemplateId);
+  const agentTemplateName = useRef('');
   const taskRequestSequence = useRef(0);
   const agentExecutionOptionsSequence = useRef(0);
   const pendingDispatchKey = useRef<{ taskId: string; agentId: string; key: string } | null>(null);
@@ -786,10 +792,14 @@ function WorkWorkspace() {
         team_id: values.team_id || undefined,
         budget_usd: values.budget_usd ?? 0,
       });
-      await refreshProjectList(created.id);
       setProjectModalOpen(false);
       projectForm.resetFields();
+      setProjects(current => [created, ...current.filter(project => project.id !== created.id)]);
+      setProjectId(created.id);
+      setCompanionProject(created);
       messageApi.success(t('專案已建立。'));
+      // Creation has succeeded even if the follow-up list refresh is unavailable.
+      void refreshProjectList(created.id).catch(error => messageApi.error(t(errorText(error))));
     } catch (error) {
       messageApi.error(t(errorText(error)));
     } finally {
@@ -800,7 +810,7 @@ function WorkWorkspace() {
   async function claimTask(agentId?: string) {
     if (!selectedTask || !principal) return;
     if (principal.kind === 'runtime') {
-      messageApi.error(t('Runtime 身分不可代替 Agent 認領任務。'));
+      messageApi.error(t('執行服務身分不可代替 Agent 認領任務。'));
       return;
     }
     if (agentId && (principal.kind !== 'human' || !canManageAgents || selectedTask.assignee_principal_id || (selectedTask.assignee_id && selectedTask.assignee_id !== agentId))) {
@@ -985,28 +995,23 @@ function WorkWorkspace() {
   }
 
   function applyTemplateToAgentForm(template: AgentTemplate) {
-    agentForm.setFieldsValue({
-      role: template.definition.role,
-      runtime: 'pi',
-      capabilities: template.definition.capabilities,
-      template_id: template.id,
-      modelMode: template.definition.model_config ? 'override' : 'inherit',
-      model_config: template.definition.model_config ?? undefined,
-      execution_config: {
-        instructions: template.definition.instructions,
-        tool_connection_ids: template.definition.tool_connection_ids,
-        sandbox_profile_id: template.definition.sandbox_profile_id,
-        limits: template.definition.limits,
-      },
-    });
+    const localized = localizeAgentTemplate(template);
+    const name = String(agentForm.getFieldValue('name') ?? '');
+    if (!editingAgent && (!name.trim() || name === agentTemplateName.current)) {
+      agentForm.setFieldValue('name', localized.name);
+      agentTemplateName.current = localized.name;
+    }
+    const values = agentTemplateFormValues(template);
+    agentForm.setFieldsValue(editingAgent ? { ...values, runtime: editingAgent.runtime } : values);
   }
 
   function openNewAgent(template?: AgentTemplate) {
     setEditingAgent(null);
+    agentTemplateName.current = '';
     setNewAgentToken('');
     agentForm.resetFields();
     agentForm.setFieldsValue({
-      role: 'worker', capabilities: [], runtime: 'external', modelMode: 'inherit', model: undefined, model_config: undefined, template_id: undefined,
+      role: 'worker', capabilities: [], runtime: 'pi', modelMode: 'inherit', model: undefined, model_config: undefined, template_id: undefined,
       execution_config: { instructions: '', tool_connection_ids: [], sandbox_profile_id: null, limits: { max_turns: 20, timeout_seconds: 600 } },
     });
     if (template) applyTemplateToAgentForm(template);
@@ -1017,6 +1022,7 @@ function WorkWorkspace() {
 
   function openEditAgent(agent: Agent) {
     setEditingAgent(agent);
+    agentTemplateName.current = '';
     agentForm.resetFields();
     agentForm.setFieldsValue({
       name: agent.name,
@@ -1233,7 +1239,7 @@ function WorkWorkspace() {
       dataIndex: 'name',
       key: 'name',
       render: (_: unknown, agent) => (
-        <div className="agent-identity"><Avatar size={30} className="agent-avatar">{agent.name.slice(0, 1).toUpperCase()}</Avatar><div><strong>{agent.name}</strong><div className="subline">{t(agent.role === 'reviewer' ? '審核者' : '執行者')} · {t(agent.runtime === 'pi' ? 'Pi 執行環境' : '外部執行環境')}</div></div></div>
+        <div className="agent-identity"><Avatar size={30} className="agent-avatar">{agent.name.slice(0, 1).toUpperCase()}</Avatar><div><strong>{agent.name}</strong><div className="subline">{t(agent.role === 'reviewer' ? '審核者' : '執行者')} · {t(agent.runtime === 'pi' ? '平台執行' : '外部程式執行')}</div></div></div>
       ),
     },
     { title: t('能力'), dataIndex: 'capabilities', key: 'capabilities', render: (items: string[]) => <span>{items?.length ? items.join(' · ') : t('未設定')}</span> },
@@ -1392,7 +1398,7 @@ function WorkWorkspace() {
               {section === 'agents' && (
                 <section className="table-section">
                   <div className="section-tools"><span>{agentsBusy ? t('正在載入') : t('{{count}} 位 Agent', { count: formatNumber(agentList.length) })}</span><span>{t('能力與模型設定來自 Ordivant API')}</span></div>
-                  {newAgentToken && <Alert className="token-alert" type="warning" showIcon closable onClose={() => setNewAgentToken('')} message={t('Agent 憑證只會顯示一次')} description={<div className="token-value"><code>{newAgentToken}</code><Space wrap><Button size="small" icon={<CopyOutlined />} onClick={() => void copyNewAgentToken()}>{t('複製 token')}</Button><Text>{t('若為本機開發，請將憑證設在該 Agent 專用 runtime 環境；不要提交至版本控制或寫入日誌。關閉提示後無法再次查看。')}</Text></Space></div>} />}
+                  {newAgentToken && <Alert className="token-alert" type="warning" showIcon closable onClose={() => setNewAgentToken('')} message={t('Agent 憑證只會顯示一次')} description={<div className="token-value"><code>{newAgentToken}</code><Space wrap><Button size="small" icon={<CopyOutlined />} onClick={() => void copyNewAgentToken()}>{t('複製 token')}</Button><Text>{t('外部程式可使用此憑證以此 Agent 身分連線。請妥善保管，不要提交至版本控制或寫入日誌；關閉提示後無法再次查看。')}</Text></Space></div>} />}
                   <Table<Agent> rowKey="id" columns={agentColumns} dataSource={agentList} loading={agentsBusy} pagination={{ pageSize: 15, showSizeChanger: false }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('此專案尚無 Agent')} /> }} scroll={{ x: 720 }} />
                 </section>
               )}
@@ -1444,7 +1450,7 @@ function WorkWorkspace() {
                 <Button icon={<UserAddOutlined />} onClick={() => void claimTask(claimAgentId)} disabled={!claimAgentId || !people.some((agent) => agent.id === claimAgentId && agent.role === 'worker' && agent.status === 'available' && (!selectedTask.assignee_id || agent.id === selectedTask.assignee_id))}>{t('代 Agent 認領')}</Button>
               </>}
               {!lease && principal.kind === 'human' && canManageAgents && selectedTask.assignee_id && !selectedTask.assignee_principal_id && selectedTask.status === 'ready' && dispatchAgents.length > 0 && <>
-                <Tag color="purple">{t('Pi Agent：{{name}}', { name: dispatchAgents[0].name })}</Tag>
+                <Tag color="purple">{t('平台 Agent：{{name}}', { name: dispatchAgents[0].name })}</Tag>
                 <Button icon={<SendOutlined />} onClick={() => void dispatchSelectedTask()} disabled={dispatchBusy} loading={dispatchBusy}>{t('派發給 Agent')}</Button>
               </>}
               {lease && <Tag color="green" icon={<CheckCircleOutlined />}>{t(lease.lease_token ? '目前工作階段持有執行租約' : '目前由你執行')}</Tag>}
@@ -1511,6 +1517,8 @@ function WorkWorkspace() {
         </Form>
       </Modal>
 
+      {companionProject && <ProjectCompanionsModal key={companionProject.id} project={companionProject} onClose={() => setCompanionProject(null)} />}
+
       {canCreateProject && <Modal title={t('建立專案')} open={projectModalOpen} onCancel={() => setProjectModalOpen(false)} onOk={() => projectForm.submit()} confirmLoading={projectSaving} okText={t('建立專案')} cancelText={t('取消')} destroyOnClose>
         <Form form={projectForm} layout="vertical" onFinish={(values) => void saveProject(values)}>
           <Form.Item name="key" label={t('專案代碼')} rules={[{ required: true, message: t('請輸入專案代碼') }]}><Input maxLength={12} placeholder={t('例如 ORD')} /></Form.Item>
@@ -1523,16 +1531,12 @@ function WorkWorkspace() {
 
       <Modal className="agent-execution-modal" title={editingAgent ? t('編輯 Agent · {{name}}', { name: editingAgent.name }) : t('新增 Agent')} open={agentModalOpen} onCancel={() => { setAgentModalOpen(false); setEditingAgent(null); }} onOk={() => agentForm.submit()} confirmLoading={agentSaving} okButtonProps={{ disabled: agentRuntime === 'pi' && agentModelMode === 'override' && (modelCatalogLoading || Boolean(modelCatalogError)) }} okText={editingAgent ? t('儲存變更') : t('建立 Agent')} cancelText={t('取消')} width={760} destroyOnClose>
         <Form form={agentForm} layout="vertical" onFinish={(values) => void saveAgent(values)}>
-          <Form.Item name="name" label={t('名稱')} rules={[{ required: true }]}><Input maxLength={100} disabled={Boolean(editingAgent)} /></Form.Item>
-          <Form.Item name="role" label={t('角色')} rules={[{ required: true }]}><Select disabled={Boolean(editingAgent)} options={[{ value: 'worker', label: t('執行者') }, { value: 'reviewer', label: t('審核者') }]} /></Form.Item>
-          <Form.Item name="runtime" label={t('Runtime')} rules={[{ required: true }]}><Select disabled={Boolean(editingAgent)} options={[{ value: 'external', label: t('外部 Runtime') }, { value: 'pi', label: 'Pi Durable' }]} /></Form.Item>
-          {agentExecutionOptionsError.length > 0 && <Alert className="agent-execution-alert" type="error" showIcon message={t('範本或執行資源無法完整載入')} description={<div>{agentExecutionOptionsError.map(({ source, error }, index) => <div key={`${source}-${index}`}>{t(source, { error: t(error) })}</div>)}</div>} action={<Button size="small" loading={agentExecutionOptionsLoading} onClick={() => void loadAgentExecutionOptions()}>{t('重試')}</Button>} />}
-          <Form.Item name="template_id" label={t('Agent 範本版本')} extra={t('選擇後會套用此不可變版本；可再調整執行設定。')}>
+          <Form.Item name="template_id" label={t('Agent 範本版本')} extra={<>{t('選擇後會套用此不可變版本；可再調整執行設定。')}{selectedAgentTemplate && <div>{localizeAgentTemplate(selectedAgentTemplate).description}</div>}</>}>
             <Select
               allowClear
               loading={agentExecutionOptionsLoading}
               placeholder={t('不套用範本')}
-              options={agentTemplates.filter((template) => !editingAgent || template.definition.role === editingAgent.role).map((template) => ({ value: template.id, label: `${template.key} · v${formatNumber(template.version)} · ${template.name}` }))}
+              options={agentTemplates.filter((template) => !editingAgent || template.definition.role === editingAgent.role).map((template) => ({ value: template.id, label: `${template.builtin_key ? `${t('內建')} · ` : ''}${localizeAgentTemplate(template).name} · v${formatNumber(template.version)}` }))}
               onChange={(templateId: string | undefined) => {
                 if (!templateId) {
                   agentForm.setFieldValue('template_id', undefined);
@@ -1543,6 +1547,12 @@ function WorkWorkspace() {
               }}
             />
           </Form.Item>
+          <Form.Item name="name" label={t('名稱')} rules={[{ required: true }]}><Input maxLength={100} disabled={Boolean(editingAgent)} /></Form.Item>
+          <Form.Item name="role" label={t('角色')} rules={[{ required: true }]}><Select disabled={Boolean(editingAgent)} options={[{ value: 'worker', label: t('執行者') }, { value: 'reviewer', label: t('審核者') }]} /></Form.Item>
+          <Form.Item name="runtime" label={t('執行方式')} rules={[{ required: true }]} extra={<>{agentRuntime === 'pi' ? t('使用已設定的模型，由平台啟動與追蹤 Agent；需管理員啟用執行服務。') : t('由你自行串接的程式透過 API 或 MCP 認領任務、回報進度與成果；平台不會啟動它。')}{editingAgent && <div>{t('建立後無法變更執行方式。')}</div>}</>}>
+            <Select disabled={Boolean(editingAgent)} options={[{ value: 'pi', label: t('由平台執行（建議）') }, { value: 'external', label: t('由外部程式執行') }]} />
+          </Form.Item>
+          {agentExecutionOptionsError.length > 0 && <Alert className="agent-execution-alert" type="error" showIcon message={t('範本或執行資源無法完整載入')} description={<div>{agentExecutionOptionsError.map(({ source, error }, index) => <div key={`${source}-${index}`}>{t(source, { error: t(error) })}</div>)}</div>} action={<Button size="small" loading={agentExecutionOptionsLoading} onClick={() => void loadAgentExecutionOptions()}>{t('重試')}</Button>} />}
           <AgentModelConfigFields
             form={agentForm}
             catalog={modelCatalog}
@@ -1553,7 +1563,7 @@ function WorkWorkspace() {
           />
           <Form.Item name="capabilities" label={t('能力標籤')}><Select mode="tags" tokenSeparators={[',']} placeholder="frontend, testing" /></Form.Item>
           <div className="agent-execution-fields">
-            <div className="agent-execution-heading"><strong>{t('Pi 執行設定')}</strong><Text type="secondary">{t('套用於新 Run；已建立的 Run 保留當時快照。')}</Text></div>
+            <div className="agent-execution-heading"><strong>{t('Agent 工作設定')}</strong><Text type="secondary">{t('套用於新 Run；已建立的 Run 保留當時快照。')}</Text></div>
             <Form.Item name={['execution_config', 'instructions']} label={t('Agent 指令')}><TextArea rows={4} maxLength={16000} showCount /></Form.Item>
             <div className="agent-execution-grid">
               <Form.Item name={['execution_config', 'tool_connection_ids']} label={t('可用工具連線')} rules={[{ validator: async (_, value: string[]) => { if ((value?.length ?? 0) > 30) throw new Error(t('工具連線最多 {{count}} 個', { count: formatNumber(30) })); } }]}><Select mode="multiple" maxCount={30} allowClear placeholder={t('不綁定外部連線')} options={agentToolConnections.map((connection) => ({ value: connection.id, label: `${connection.name}${connection.enabled ? '' : ` · ${t('已停用')}`}`, disabled: !connection.enabled }))} /></Form.Item>
@@ -1812,7 +1822,7 @@ function ExecutionRow({ execution, executorName, executorKind }: { execution: Ex
         <div className="execution-top"><strong>{labels[execution.status] ? t(labels[execution.status]) : execution.status}</strong><span>{displayDate(execution.started_at)}</span></div>
         {execution.summary && <MarkdownContent content={execution.summary} />}
         {execution.status === 'running' && <Progress percent={execution.progress} size="small" />}
-        <div className="execution-meta">{executorKind && <Tag color={executorKind === 'human' ? 'cyan' : 'purple'}>{t(executorKind === 'human' ? '真人' : executorKind === 'agent' ? 'Agent' : 'Runtime')}</Tag>}<Tag>{executorName}</Tag><span>{money(execution.cost_usd)}</span><Tag color={execution.cost_source === 'self_reported' ? 'orange' : 'green'}>{t(execution.cost_source === 'self_reported' ? '自陳' : '量測')}</Tag>{execution.finished_at && <span>{displayDate(execution.finished_at)}</span>}</div>
+        <div className="execution-meta">{executorKind && <Tag color={executorKind === 'human' ? 'cyan' : 'purple'}>{t(executorKind === 'human' ? '真人' : executorKind === 'agent' ? 'Agent' : '執行服務')}</Tag>}<Tag>{executorName}</Tag><span>{money(execution.cost_usd)}</span><Tag color={execution.cost_source === 'self_reported' ? 'orange' : 'green'}>{t(execution.cost_source === 'self_reported' ? '自陳' : '量測')}</Tag>{execution.finished_at && <span>{displayDate(execution.finished_at)}</span>}</div>
       </div>
     </div>
   );

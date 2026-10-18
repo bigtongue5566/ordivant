@@ -68,3 +68,35 @@ Audit export is an administrator-only JSONL file containing only fields permitte
 Organization administrators configure providers, API URLs, keys, and models, then choose an organization default. When creating or editing an Agent, inherit that default or select another configured model. Saved keys and tool access tokens are never refilled in plaintext; enter a new value to replace one. See [model settings](../model-usage.md) and the [Run and tools guide](../execution-usage.md).
 
 Before production use, review TLS, trusted origins, allowed membership provisioning policies, Project/Space scopes, and recovery-code storage. SSO does not replace server-side authorization in each product.
+
+## Personal API and MCP access {#personal-api-and-mcp-access}
+
+Open **Account and security → API and MCP** in the upper-right corner. Enter a purpose name, allowed products, and lifetime, then create a personal access token. The complete token is shown once. The list contains only its prefix, expiry, and last-used time. This panel also provides API and MCP examples for your current environment.
+
+Use `Authorization: Bearer <PERSONAL_ACCESS_TOKEN>`. The token represents your human account and inherits your current product roles and Project/Space scopes. Administrators can create resources; members can operate only on authorized resources. It grants no Agent identity or additional permissions. The local API roots are:
+
+The examples below use the default Docker Compose address, `http://127.0.0.1:8088`. Replace it with your own port or HTTPS domain when different. The interface generates examples for the current website.
+
+| Product | Local API root | Starting operations |
+|---|---|---|
+| Work | `http://127.0.0.1:8088/api` | `GET /me`, `GET /projects` |
+| Knowledge | `http://127.0.0.1:8088/knowledge-api` | `GET /me`, `GET /spaces` |
+| Code | `http://127.0.0.1:8088/code-api` | `GET /me`, `GET /projects` |
+
+For example, check your Work identity first:
+
+```sh
+curl "http://127.0.0.1:8088/api/me" -H "Authorization: Bearer <PERSONAL_ACCESS_TOKEN>"
+```
+
+MCP uses a local stdio bridge and requires uv plus an Ordivant source checkout. Add the panel's configuration example to an MCP client that supports stdio. Replace the source directory and token, then launch each product's own Python project:
+
+| Product | Project directory | Module | Environment variables |
+|---|---|---|---|
+| Work | `backend` | `ordivant.mcp_server` | `ORDIVANT_API_URL`, `ORDIVANT_API_TOKEN` |
+| Knowledge | `products/knowledge/backend` | `ordivant_knowledge.mcp_server` | `ORDIVANT_KNOWLEDGE_API_URL`, `ORDIVANT_KNOWLEDGE_API_TOKEN` |
+| Code | `products/code/backend` | `ordivant_code.mcp_server` | `ORDIVANT_CODE_API_URL`, `ORDIVANT_CODE_API_TOKEN` |
+
+The command is `uv run --project <ABSOLUTE_PROJECT_PATH> python -m <MODULE>`. Use the API root above and a token that allows that product. Call `get_me` first, then Work's `list_projects`, Knowledge's `list_spaces`, or Code's `list_code_projects`. Resource creation uses `create_project`, `create_space`, or `create_code_project`, respectively. These tools and existing business tools delegate to REST APIs with the same authorization. Mutating operations accept `request_id`; reuse it when retrying the same operation.
+
+Revoke a token in the list at any time. Expiry, account deactivation, and permission changes apply to subsequent requests. Password changes and completed account recovery also revoke existing tokens. **Sign out all devices** revokes browser sessions only; revoke external-tool tokens separately. Tokens cannot manage or create other tokens: management still requires a browser session and CSRF verification.

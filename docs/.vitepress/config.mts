@@ -61,7 +61,7 @@ const localeTheme = (prefix: string, language: 'zh-Hant' | 'en' | 'zh-Hans') => 
       { text: text.features, link: route('/features') },
       { text: text.usage, link: route('/guide/work') },
       { text: text.deploy, link: route('/containers') },
-      { text: 'v0.3.0', link: route('/release') },
+      { text: 'v0.4.0', link: route('/release') },
     ],
     sidebar: [
       { text: text.startGroup, items: [

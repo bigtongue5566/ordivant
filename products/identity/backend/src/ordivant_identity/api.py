@@ -23,6 +23,7 @@ from .models import (
     IdentityAuditEvent,
     IdentityLink,
     Invitation,
+    PersonalAccessToken,
     RecoveryCode,
     SetupMarker,
     SSOConfiguration,
@@ -208,6 +209,14 @@ def _new_recovery_codes(db: Session, user: User, settings: Settings) -> list[str
         for code in codes
     )
     return codes
+
+
+def _revoke_personal_access_tokens(db: Session, user_id: str, revoked_at: datetime) -> None:
+    db.execute(
+        update(PersonalAccessToken)
+        .where(PersonalAccessToken.user_id == user_id, PersonalAccessToken.revoked_at.is_(None))
+        .values(revoked_at=revoked_at)
+    )
 
 
 def _set_cookie(response: Response, handle: str, settings: Settings) -> None:
@@ -516,6 +525,7 @@ def change_password(
         .where(AuthSession.user_id == ctx.user.id, AuthSession.revoked_at.is_(None))
         .values(revoked_at=now)
     )
+    _revoke_personal_access_tokens(db, ctx.user.id, now)
     recovery_codes = _new_recovery_codes(db, ctx.user, settings)
     auth_session, raw_handle = _new_session(db, ctx.user, settings)
     _audit(db, "local.password_changed", actor_id=ctx.user.id, user_id=ctx.user.id)
@@ -570,6 +580,7 @@ def recover(body: RecoverRequest, request: Request, response: Response, db: Sess
         .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
         .values(revoked_at=now)
     )
+    _revoke_personal_access_tokens(db, user.id, now)
     recovery_codes = _new_recovery_codes(db, user, settings)
     auth_session, raw_handle = _new_session(db, user, settings)
     _clear_throttle(db, scope)
@@ -790,6 +801,8 @@ def patch_user(
             .where(AuthSession.user_id == target.id, AuthSession.revoked_at.is_(None))
             .values(revoked_at=now)
         )
+        if "active" in fields and body.active is False:
+            _revoke_personal_access_tokens(db, target.id, now)
         if target.id == ctx.user.id:
             _clear_cookie(response, settings)
     target.updated_at = _now()

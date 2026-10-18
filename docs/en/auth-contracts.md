@@ -4,6 +4,16 @@ The user requires usable human account login in development and production and w
 
 The enterprise identity revision adds OIDC, provisioning, group grants, lifecycle revocation and audit through the same Identity service. `sso-contracts.md` defines the additive routes and fields; the native account/session contracts below remain in force.
 
+## Personal API and MCP access tokens {#personal-access-tokens}
+
+- Humans create `ord_pat_` personal tokens in account settings. Store only a SHA-256 hash; return the raw value once on creation and never log it or include it in audit events.
+- `GET /api/auth/access-tokens` returns `{tokens:[metadata]}`. `POST` to the same path accepts `{name,products:["work"|"knowledge"|"code"],expires_in_days:1..365}` (default 30) and returns `{token,access_token:metadata}`. `DELETE /api/auth/access-tokens/{id}` returns 204. Management is owner-only and requires a Cookie session; mutations also require an exact allowed Origin and CSRF. Serialize creation to enforce a limit of 50 active tokens per user under concurrency.
+- Metadata is `{id,name,prefix,products,created_at,expires_at,last_used_at,revoked_at}` with UTC ISO timestamps and null for unused/unrevoked values. It excludes the hash and complete credential. Creation and revocation produce Identity audit events.
+- Internal `POST /api/auth/access-tokens/introspect` requires service bearer authentication and `{access_token,product}`; it returns `{user:User,token_id,expires_at}`. Invalid/revoked/expired tokens or inactive accounts return 401; an incorrect product returns 403. This route bypasses browser Origin checks only. All responses use `Cache-Control: no-store`.
+- Product bridges introspect personal tokens using the fixed Identity URL and service secret, load current permissions on every request, and map to the same human principal. Invalid Authorization never falls back to Cookie authentication; network or malformed responses fail closed with 503. Tokens preserve claim, independent review, scope, and idempotency rules, and grant no Agent identity.
+- Creation allows only products currently granted to the user. Permission changes apply to subsequent requests. Password change, account recovery, and deactivation revoke existing tokens. `logout-all` affects browser sessions only; external tokens are revoked separately. Tokens cannot use management routes to expand access or issue more tokens.
+- Work, Knowledge, and Code stdio MCP bridges accept personal bearer tokens and delegate business operations to their respective REST APIs. `get_me` confirms the principal. Resource creation tools accept `request_id` and generate a UUID when omitted. The interface provides product-specific local commands, environment variables, and API root examples with credential placeholders.
+
 ## Ownership
 
 - PM owns these contracts, Compose/tooling, dropdown fixes and final acceptance.

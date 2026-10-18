@@ -2,7 +2,7 @@
 
 This guide explains where to find each feature, what it produces, and the limits to keep in mind. Work, Knowledge, and Code support people and Agents collaborating in the same product workflows; routine human work does not need an LLM. Work manages tasks, human execution, and Agent Runs; Knowledge manages shared drafts, document versions, and decisions; Code manages repositories and PRs connected to Gitea and keeps Ordivant discussion and review records. Start with the [project overview](./overview.md), then follow the scenarios below.
 
-This guide describes v0.3.0. If an entry is missing from your screen, ask your administrator to check the installed version, product permissions, and required integrations.
+This guide describes v0.4.0. If an entry is missing from your screen, ask your administrator to check the installed version, product permissions, and required integrations.
 
 ## Human and Agent collaboration {#human-and-agent-collaboration}
 

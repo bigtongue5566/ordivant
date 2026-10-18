@@ -1,0 +1,16 @@
+{
+  "從 API 取得模型": "从 API 取得模型",
+  "使用目前連線讀取模型清單；留白的 API Key 會使用此 Provider 已儲存的金鑰。": "使用目前连接读取模型清单；留白的 API Key 会使用此 Provider 已保存的密钥。",
+  "取得模型失敗：{{error}}": "取得模型失败：{{error}}",
+  "API 回傳 {{count}} 個模型；選擇後加入，儲存設定才會生效。": "API 回传 {{count}} 个模型；选择后加入，保存设置才会生效。",
+  "搜尋並選擇 API 模型": "搜索并选择 API 模型",
+  "加入所選模型": "加入所选模型",
+  "API 未提供的 Context、輸出上限與推理強度需自行補填；現有模型設定會保留。": "API 未提供的 Context、输出上限与推理强度需自行补填；现有模型设置会保留。",
+  "請提供 API Key；變更 Base URL 時必須重新提供金鑰。": "请提供 API Key；变更 Base URL 时必须重新提供密钥。",
+  "請輸入有效的 Provider API Base URL。": "请输入有效的 Provider API Base URL。",
+  "Provider 拒絕模型清單請求，請檢查金鑰及權限。": "Provider 拒绝模型清单请求，请检查密钥及权限。",
+  "Provider 不支援 /models，請手動新增模型。": "Provider 不支持 /models，请手动添加模型。",
+  "無法取得 Provider 模型清單，請稍後重試。": "无法取得 Provider 模型清单，请稍后重试。",
+  "取得 Provider 模型清單逾時，請稍後重試。": "取得 Provider 模型清单逾时，请稍后重试。",
+  "Provider 回傳的模型清單格式無效。": "Provider 回传的模型清单格式无效。"
+}

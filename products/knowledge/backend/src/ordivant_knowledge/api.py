@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from .errors import conflict, forbidden, not_found
 from .config import authorized_dev_proxy
-from .identity import cookie_principal, identity_configured, require_identity_admin_for_scope_creation
+from .identity import bearer_principal, cookie_principal, identity_configured, require_identity_admin_for_scope_creation
 from .models import (
     AuditEvent,
     Decision,
@@ -93,7 +93,7 @@ async def get_principal(
     authorization: Annotated[str | None, Header()] = None,
 ) -> PrincipalContext:
     if authorization is not None:
-        return authenticate(session, authorization)
+        return await bearer_principal(request, session) or authenticate(session, authorization)
     principal = await cookie_principal(request, session)
     if principal is not None:
         return principal

@@ -15,15 +15,16 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from . import automation, execution_settings, planning, runs, sandbox_profiles, service, tool_connections, vcs
+from . import agent_presets, automation, execution_settings, planning, runs, sandbox_profiles, service, tool_connections, vcs
 from .collaboration_adapter import install as install_collaboration
 from .config import app_mode, authorized_dev_proxy
 from .db import Base, SessionLocal, engine, get_db
 from .migrations import migrate_collaboration
 from .errors import DomainError, conflict
-from .identity import cookie_principal, identity_configured, require_identity_admin_for_scope_creation, sync_project_directory
+from .identity import bearer_principal, cookie_principal, identity_configured, require_identity_admin_for_scope_creation, sync_project_directory
 from .models import Agent, IdempotencyRecord, Message, OutboxEvent, Principal, Task
 from .model_settings import (
+    discover_provider_models,
     get_model_catalog,
     get_model_settings,
     renew_runtime_delivery,
@@ -50,6 +51,7 @@ from .schemas import (
     MessageAck,
     MessageCreate,
     ModelSettingsPut,
+    ModelDiscoveryRequest,
     OutboxAckRequest,
     OutboxClaimRequest,
     ProgressRequest,
@@ -91,10 +93,13 @@ async def lifespan(_app: FastAPI):
     app_mode()
     Base.metadata.create_all(bind=engine)
     migrate_collaboration(engine)
+    with SessionLocal() as session:
+        agent_presets.ensure_all_builtin_agent_templates(session)
+        session.commit()
     yield
 
 
-app = FastAPI(title="Ordivant API", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Ordivant API", version="0.4.0", lifespan=lifespan)
 
 
 @app.exception_handler(DomainError)
@@ -102,13 +107,14 @@ async def domain_error_handler(_request: Request, error: DomainError):
     return JSONResponse(
         status_code=error.status_code,
         content={"detail": {"code": error.code, "message": error.message}},
+        headers={"Cache-Control": "no-store"} if _request.url.path.startswith("/api/model-settings") else None,
     )
 
 
 @app.exception_handler(RequestValidationError)
 async def request_validation_error_handler(request: Request, error: RequestValidationError):
     if (
-        request.url.path == "/api/model-settings"
+        request.url.path.startswith("/api/model-settings")
         or request.url.path.startswith("/api/tool-connections")
         or request.url.path.startswith("/api/agent-templates")
     ):
@@ -118,13 +124,19 @@ async def request_validation_error_handler(request: Request, error: RequestValid
         ]
     else:
         errors = error.errors()
-    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(errors)},
+        headers={"Cache-Control": "no-store"} if request.url.path.startswith("/api/model-settings") else None,
+    )
 
 
 async def get_actor(request: Request, session: Session = Depends(get_db)) -> Principal:
     authorization = request.headers.get("Authorization")
     if authorization is not None:
-        actor = authenticate_header(session, authorization)
+        actor = await bearer_principal(request, session)
+        if actor is None:
+            actor = authenticate_header(session, authorization)
     else:
         actor = await cookie_principal(request, session)
         if actor is None:
@@ -487,6 +499,15 @@ def put_model_settings(
         if hasattr(submitted_key, "get_secret_value"):
             provider["api_key"] = submitted_key.get_secret_value()
     return _perform_uncached_mutation(session, lambda: replace_model_settings(session, actor, data))
+
+
+@app.post("/api/model-settings/discover")
+def discover_provider_models_route(
+    value: ModelDiscoveryRequest,
+    session: Session = Depends(get_db),
+    actor: Principal = Depends(get_actor),
+):
+    return JSONResponse(content=discover_provider_models(session, actor, value.model_dump()), headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/model-catalog")

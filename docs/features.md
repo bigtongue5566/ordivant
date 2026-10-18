@@ -2,7 +2,7 @@
 
 這份導覽依照日常工作說明 Ordivant 的操作入口、操作後會留下什麼紀錄，以及目前的限制。Work、Knowledge 和 Code 都支援真人與 Agent 在同一產品流程中合作；一般真人操作不需要 LLM。Work 管理任務、真人執行和 Agent Run；Knowledge 管理共同草稿、文件版本和決策；Code 管理連接至 Gitea 的 repository 和 PR，並保存 Ordivant 討論與審查紀錄。先從[專案介紹](./overview.md)選擇適合的產品，再依下列情境操作。
 
-本指南介紹 v0.3.0 的功能。若畫面沒有下述入口，請向管理員確認已安裝版本、產品權限及所需的整合設定。
+本指南介紹 v0.4.0 的功能。若畫面沒有下述入口，請向管理員確認已安裝版本、產品權限及所需的整合設定。
 
 ## 真人與 Agent 協作 {#human-and-agent-collaboration}
 

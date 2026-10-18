@@ -34,6 +34,8 @@ Agent create/edit/list add `execution_config:ExecutionConfig` and `template_id:n
 
 `AgentTemplate`: `{id,key,version,name,description,definition:{role:"worker"|"reviewer",capabilities:string[],instructions:string,model_config:null|ModelSelection,tool_connection_ids:string[],sandbox_profile_id:null|string,limits:{max_turns,timeout_seconds}},created_at}`.
 
+Built-ins also expose read-only `builtin_key:"pm"|"pg"|"sa"|"sd"|"qa"|"reviewer"|null`. Startup backfills six v1 templates for existing organizations; new organizations receive them at creation. Repeated initialization preserves existing data. Custom templates and derived versions return null; only exact built-in versions are localized in the interface. PM/PG/SA/SD/QA use worker and Reviewer uses reviewer, with no model, tool, or Sandbox binding.
+
 - `GET /api/agent-templates` lists visible organization versions; mutations manager/admin only.
 - `POST /api/agent-templates` body `{key,name,description?,definition}` creates v1; duplicate key conflicts.
 - `POST /api/agent-templates/{id}/versions` body `{name,description?,definition}` publishes a new immutable version of that key. Earlier versions remain unchanged. Parallel publication must not duplicate version numbers.

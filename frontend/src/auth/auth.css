@@ -598,3 +598,4 @@
     align-items: flex-start;
   }
 }
+.access-token-example { max-width: 100%; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper-muted); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }

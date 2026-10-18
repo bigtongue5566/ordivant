@@ -9,6 +9,7 @@ import { PermissionEditor, usePermissionCatalogs } from './permissions';
 import { EnterpriseSsoPanel, IdentityAuditPanel } from './SsoSettings';
 import { EnterpriseGovernance } from './EnterpriseGovernance';
 import { CollaborationCenter } from '../products/shared/CollaborationCenter';
+import { AccessTokensPanel } from './AccessTokensPanel';
 import { formatDate, useI18n, useLocalizedForm } from '../i18n';
 import './auth.css';
 
@@ -94,6 +95,7 @@ export function AccountControl({
           items={[
             { key: 'security', label: t('安全性'), children: <SecurityPanel onLogout={signOut} /> },
             { key: 'profile', label: t('帳號'), children: <ProfilePanel businessRole={businessRole} /> },
+            { key: 'api-mcp', label: t('API 與 MCP'), children: <AccessTokensPanel product={product} /> },
             ...(auth.session?.user.role === 'admin' ? [{ key: 'users', label: t('使用者與邀請'), children: <AdminPanel /> }] : []),
             ...(auth.session?.user.role === 'admin' ? [{ key: 'sso', label: t('企業 SSO'), children: <EnterpriseSsoPanel /> }, { key: 'identity-audit', label: t('身分稽核'), children: <IdentityAuditPanel /> }] : []),
             ...(auth.session?.user.role === 'admin' ? [{ key: 'governance', label: t('企業治理'), children: <EnterpriseGovernance /> }] : []),

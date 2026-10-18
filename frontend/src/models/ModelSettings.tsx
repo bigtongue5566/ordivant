@@ -1,5 +1,5 @@
 import type { LocalizedMessage } from '../i18n';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -18,7 +18,7 @@ import type { FormInstance } from 'antd/es/form';
 import { DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { formatNumber, useI18n, useLocalizedForm, localized } from '../i18n';
-import type { Agent, ModelCatalog, ModelDefinition, ModelProvider, ModelSelection, ModelSettings, ModelSettingsUpdate, ReasoningEffort } from '../types';
+import type { Agent, DiscoveredModel, ModelCatalog, ModelDefinition, ModelProvider, ModelSelection, ModelSettings, ModelSettingsUpdate, ReasoningEffort } from '../types';
 import './model-settings.css';
 
 const { Text } = Typography;
@@ -36,6 +36,13 @@ type SettingsFormValue = {
   has_default: boolean;
   default?: Partial<ModelSelection>;
 };
+
+function isCompleteModelSelection(selection: Partial<ModelSelection> | null | undefined): selection is ModelSelection {
+  return Boolean(selection?.provider_id && selection.model_id
+    && selection.reasoning_effort && Object.hasOwn(reasoningEffortLabels, selection.reasoning_effort)
+    && typeof selection.max_output_tokens === 'number'
+    && Number.isInteger(selection.max_output_tokens) && selection.max_output_tokens >= 16);
+}
 
 function errorText(error: unknown) {
   if (error instanceof Error && 'sourceMessage' in error) return String(error.sourceMessage);
@@ -273,6 +280,51 @@ function ProviderEditor({ providerIndex, form, onRemove }: { providerIndex: numb
   const { t } = useI18n();
   const provider = (Form.useWatch(['providers', providerIndex], form) ?? {}) as Partial<ProviderFormValue>;
   const models = (Form.useWatch(['providers', providerIndex, 'models'], form) ?? []) as ModelDefinition[];
+  const [discovering, setDiscovering] = useState(false);
+  const [discovered, setDiscovered] = useState<DiscoveredModel[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [discoveryError, setDiscoveryError] = useState<string | LocalizedMessage>('');
+  const requestVersion = useRef(0);
+
+  useEffect(() => {
+    requestVersion.current += 1;
+    setDiscovered(null);
+    setSelected([]);
+    setDiscoveryError('');
+    setDiscovering(false);
+    return () => { requestVersion.current += 1; };
+  }, [provider.id, provider.base_url, provider.api_key, providerIndex]);
+
+  async function discoverModels() {
+    const version = ++requestVersion.current;
+    setDiscovering(true);
+    setDiscoveryError('');
+    setDiscovered(null);
+    setSelected([]);
+    const current = form.getFieldValue(['providers', providerIndex]) as ProviderFormValue;
+    const connection = { id: current.id, base_url: current.base_url, api_key: current.api_key };
+    try {
+      await form.validateFields([['providers', providerIndex, 'id'], ['providers', providerIndex, 'base_url']]);
+      const result = await api.discoverModels(connection);
+      const latest = form.getFieldValue(['providers', providerIndex]) as ProviderFormValue | undefined;
+      if (version !== requestVersion.current || latest?.id !== connection.id || latest?.base_url !== connection.base_url || latest?.api_key !== connection.api_key) return;
+      setDiscovered(result.models);
+    } catch (discoveryFailure) {
+      if (version === requestVersion.current && !(typeof discoveryFailure === 'object' && discoveryFailure !== null && 'errorFields' in discoveryFailure)) {
+        setDiscoveryError(localized('取得模型失敗：{{error}}', { error: localized(errorText(discoveryFailure)) }));
+      }
+    } finally {
+      if (version === requestVersion.current) setDiscovering(false);
+    }
+  }
+
+  function addSelectedModels() {
+    const current = (form.getFieldValue(['providers', providerIndex, 'models']) ?? []) as ModelDefinition[];
+    const existing = new Set(current.map((model) => model.id));
+    const additions = (discovered ?? []).filter((model) => selected.includes(model.id) && !existing.has(model.id));
+    form.setFieldValue(['providers', providerIndex, 'models'], [...current, ...additions.map((model) => ({ ...model, reasoning_efforts: model.reasoning_efforts ?? [] }))]);
+    setSelected([]);
+  }
 
   return (
     <article className="model-provider">
@@ -320,6 +372,26 @@ function ProviderEditor({ providerIndex, form, onRemove }: { providerIndex: numb
         </Form.Item>
       </div>
       <div className="model-list-heading"><strong>{t('可用模型 metadata')}</strong><Text type="secondary">{t('供 Agent 選擇使用')}</Text></div>
+      <div className="model-discovery">
+        <Button icon={<ReloadOutlined />} loading={discovering} disabled={!provider.id || !provider.base_url} onClick={() => void discoverModels()}>{t('從 API 取得模型')}</Button>
+        <Text type="secondary">{t('使用目前連線讀取模型清單；留白的 API Key 會使用此 Provider 已儲存的金鑰。')}</Text>
+        {discoveryError && <Alert type="error" showIcon message={t(discoveryError)} />}
+        {discovered !== null && <>
+          <Text>{t('API 回傳 {{count}} 個模型；選擇後加入，儲存設定才會生效。', { count: formatNumber(discovered.length) })}</Text>
+          <Select
+            className="full-width"
+            mode="multiple"
+            showSearch
+            optionFilterProp="label"
+            placeholder={t('搜尋並選擇 API 模型')}
+            value={selected}
+            onChange={setSelected}
+            options={discovered.map((model) => ({ value: model.id, label: `${model.name} (${model.id})`, disabled: models.some((existing) => existing.id === model.id) }))}
+          />
+          <Button disabled={!selected.length} icon={<PlusOutlined />} onClick={addSelectedModels}>{t('加入所選模型')}</Button>
+          <Text type="secondary">{t('API 未提供的 Context、輸出上限與推理強度需自行補填；現有模型設定會保留。')}</Text>
+        </>}
+      </div>
       <Form.List name={[providerIndex, 'models']}>
         {(fields, { add, remove }) => (
           <div className="model-definitions">
@@ -362,7 +434,8 @@ export function AgentModelConfigFields({
 }) {
   const { t } = useI18n();
   const mode = (Form.useWatch('modelMode', form) as 'inherit' | 'override' | undefined) ?? 'inherit';
-  const selectedConfig = Form.useWatch('model_config', form) as ModelSelection | undefined;
+  // Nested fields are incomplete while mounting or changing provider/model.
+  const selectedConfig = Form.useWatch('model_config', form) as Partial<ModelSelection> | undefined;
   const providerId = Form.useWatch(['model_config', 'provider_id'], form) as string | undefined;
   const modelId = Form.useWatch(['model_config', 'model_id'], form) as string | undefined;
   const provider = catalog?.providers.find((item) => item.id === providerId);
@@ -374,7 +447,7 @@ export function AgentModelConfigFields({
   if (form.getFieldValue('runtime') !== 'pi') {
     return (
       <>
-        <Form.Item name="model" label={t('Legacy model 識別')} extra={t('External runtime 沿用既有 model 字串；此欄位不包含 provider 金鑰。')}>
+        <Form.Item name="model" label={t('外部程式使用的模型（選填）')} extra={t('僅記錄外部程式使用的模型名稱；實際模型與連線由外部程式設定。')}>
           <Input placeholder={t('選填，例如 provider/model')} />
         </Form.Item>
       </>
@@ -474,9 +547,9 @@ export function AgentModelConfigFields({
       )}
       <div className="agent-effective-model">
         <Text type="secondary">{t('有效模型')}</Text>
-        {effectiveSelection
+        {isCompleteModelSelection(effectiveSelection)
           ? <span><strong>{modelName(effectiveSelection, catalog)}</strong><small>{effectiveSelection.provider_id} · {t(reasoningEffortLabels[effectiveSelection.reasoning_effort])} ({effectiveSelection.reasoning_effort}) · {formatNumber(effectiveSelection.max_output_tokens)} tokens</small></span>
-          : <Text type="secondary">{t('尚未設定全域預設')}</Text>}
+          : <Text type="secondary">{mode === 'override' ? t('請完成此 Agent 的模型設定') : t('尚未設定全域預設')}</Text>}
       </div>
       <Form.Item hidden name="model"><Input /></Form.Item>
     </div>

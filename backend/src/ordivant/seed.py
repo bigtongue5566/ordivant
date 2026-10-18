@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
+from .agent_presets import ensure_builtin_agent_templates
 from .config import data_dir
 from .db import Base, SessionLocal, engine
 from .models import (
@@ -155,6 +156,7 @@ def seed() -> dict:
             organization = Organization(id=new_id(), name="Ordivant Demo Organization", created_at=now_utc())
             session.add(organization)
             session.flush()
+            ensure_builtin_agent_templates(session, organization.id)
 
         teams: dict[str, Team] = {}
         for name in ("Engineering", "Operations"):

@@ -7,6 +7,7 @@ import { BranchesOutlined, ClockCircleOutlined, PlusOutlined, ReloadOutlined, Ro
 import { api, createIdempotencyKey, isDefinitiveClientError } from './api';
 import { formatDate, formatNumber, useI18n, useLocalizedForm, localized } from './i18n';
 import type { Agent, AgentTemplate, AgentTemplateDefinition, ModelCatalog, SandboxProfile, ToolConnection, Workflow, WorkflowInstance, WorkflowStep } from './types';
+import { localizeAgentTemplate } from './agents/templatePresets';
 import './Automation.css';
 
 const { Text, Title } = Typography;
@@ -177,7 +178,8 @@ function AgentTemplatePanel({ projectId, canManage, onApplyTemplate }: { project
     setEditor({ kind: 'version', template });
     setFormError('');
     form.resetFields();
-    form.setFieldsValue({ name: template.name, description: template.description, definition: template.definition });
+    const localized = localizeAgentTemplate(template);
+    form.setFieldsValue({ name: localized.name, description: localized.description, definition: localized.definition });
   }
 
   async function saveTemplate(values: TemplateFormValues) {
@@ -210,7 +212,7 @@ function AgentTemplatePanel({ projectId, canManage, onApplyTemplate }: { project
   }
 
   const columns: ColumnsType<AgentTemplate> = [
-    { title: t('範本'), key: 'template', render: (_: unknown, item) => <div className="automation-name-cell"><strong>{item.name}</strong><span>{item.key} · v{formatNumber(item.version)}</span></div> },
+    { title: t('範本'), key: 'template', render: (_: unknown, item) => <div className="automation-name-cell"><strong>{localizeAgentTemplate(item).name}{item.builtin_key && <Tag>{t('內建')}</Tag>}</strong><span>{item.key} · v{formatNumber(item.version)}</span><span>{localizeAgentTemplate(item).description}</span></div> },
     { title: t('角色'), dataIndex: ['definition', 'role'], key: 'role', width: 90, render: (role: AgentTemplateDefinition['role']) => t(role === 'reviewer' ? '審核者' : '執行者') },
     { title: t('能力'), dataIndex: ['definition', 'capabilities'], key: 'capabilities', render: (items: string[]) => items?.length ? items.join(' · ') : t('未設定') },
     { title: t('更新時間'), dataIndex: 'created_at', key: 'created_at', width: 150, render: (value: string) => formatDate(value, { hour12: false, timeStyle: 'short', dateStyle: 'short' }) },
@@ -470,7 +472,7 @@ function WorkflowStepEditor({ form, agents }: { form: FormInstance<WorkflowFormV
             <Form.Item name={[field.name, 'priority']} label={t('優先級')} rules={[{ required: true }]}><Select options={[{ value: 'urgent', label: t('緊急') }, { value: 'high', label: t('高') }, { value: 'medium', label: t('一般') }, { value: 'low', label: t('低') }]} /></Form.Item>
             <Form.Item className="automation-form-span" name={[field.name, 'description']} label={t('描述')} rules={[{ max: 10000 }]}><TextArea rows={2} maxLength={10000} /></Form.Item>
             <Form.Item name={[field.name, 'dependency_keys']} label={t('相依步驟')} rules={[{ validator: async (_, value: string[]) => { if ((value?.length ?? 0) > 20) throw new Error(t('每個步驟最多 {{count}} 個相依項目', { count: formatNumber(20) })); } }]}><Select mode="multiple" maxCount={20} allowClear options={dependencyOptions} placeholder={t('此步驟可先執行')} /></Form.Item>
-            <Form.Item name={[field.name, 'agent_id']} label={t('指定 Pi Agent')}><Select allowClear placeholder={t('依能力選擇')} options={workers.map((agent) => ({ value: agent.id, label: `${agent.name} · ${agentStatusLabels[agent.status] ? t(agentStatusLabels[agent.status]) : agent.status}` }))} /></Form.Item>
+            <Form.Item name={[field.name, 'agent_id']} label={t('指定平台 Agent')}><Select allowClear placeholder={t('依能力選擇')} options={workers.map((agent) => ({ value: agent.id, label: `${agent.name} · ${agentStatusLabels[agent.status] ? t(agentStatusLabels[agent.status]) : agent.status}` }))} /></Form.Item>
             <Form.Item name={[field.name, 'capabilities']} label={t('候選能力')} rules={[{ validator: async (_, value: string[]) => { if ((value?.length ?? 0) > 100) throw new Error(t('候選能力最多 {{count}} 項', { count: formatNumber(100) })); } }]}><Select mode="tags" maxCount={100} allowClear placeholder={t('指定 Agent 時留白')} options={capabilities} /></Form.Item>
             <Form.Item name={[field.name, 'reviewer_id']} label={t('獨立審核者')}><Select allowClear placeholder={t('依專案審核規則')} options={reviewers.map((agent) => ({ value: agent.id, label: agent.name }))} /></Form.Item>
             <Form.Item className="automation-form-span" name={[field.name, 'acceptance_criteria']} label={t('驗收條件')} extra={t('每行一項')}><TextArea rows={2} /></Form.Item>

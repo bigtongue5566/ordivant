@@ -1,6 +1,7 @@
 import type { IdentityAuditEvent, IdentityInvitation, IdentitySession, IdentitySessionRecord, IdentitySsoLink, IdentitySsoSettings, IdentitySsoSettingsWrite, IdentitySsoTestResult, IdentityStatus, IdentityUser } from './types';
 import { t } from '../i18n';
 import { describeApiError } from '../i18n/errors';
+import type { PersonalAccessToken, ProductKey } from './types';
 
 const authApiPrefix = import.meta.env.VITE_AUTH_API_PREFIX || '/auth-api';
 const publicAuthPaths = new Set(['/status', '/me', '/setup', '/login', '/accept-invitation', '/recover', '/request-recovery']);
@@ -68,6 +69,9 @@ function describeError(payload: unknown, status: number): { message: string; cod
       origin_not_allowed: '此登入頁面尚未列入服務允許來源，請聯絡系統管理員。',
       self_lockout: '無法停用目前登入的管理員帳號。',
       session_not_found: '找不到此登入工作階段，或它已被撤銷。',
+      token_limit: '有效存取權杖已達上限，請先撤銷不再使用的權杖。',
+      token_product_forbidden: '你或此權杖未獲授權使用所選產品。',
+      access_token_not_found: '找不到此存取權杖。',
       setup_complete: '管理員帳號已建立，請使用帳號登入。',
       user_not_found: '找不到此使用者，清單可能已更新。',
     };
@@ -119,6 +123,9 @@ export const authApi = {
   changePassword: (body: { current_password: string; new_password: string }) => post<IdentitySession>('/change-password', body),
   sessions: () => request<{ sessions: IdentitySessionRecord[] }>('/sessions'),
   revokeSession: (id: string) => request<void>(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  accessTokens: () => request<{ tokens: PersonalAccessToken[] }>('/access-tokens'),
+  createAccessToken: (body: { name: string; products: ProductKey[]; expires_in_days: number }) => post<{ token: string; access_token: PersonalAccessToken }>('/access-tokens', body),
+  revokeAccessToken: (id: string) => request<void>(`/access-tokens/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   users: () => request<{ users: IdentityUser[] }>('/users'),
   invite: (body: { email: string; name: string; role: IdentityUser['role']; permissions: IdentityUser['permissions'] }) => post<IdentityInvitation>('/invitations', body),
   updateUser: (id: string, body: { active?: boolean; name?: string; permissions?: IdentityUser['permissions'] }) => request<IdentityUser>(`/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),

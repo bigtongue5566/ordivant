@@ -10,7 +10,7 @@ from pydantic import TypeAdapter, EmailStr, ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from .api import _audit, _now, _iso, get_db
+from .api import _audit, _now, _iso, _revoke_personal_access_tokens, get_db
 from .enterprise_models import EnterprisePolicy, ScimResource
 from .models import User, AuthSession
 from .schemas import permissions_data
@@ -123,6 +123,8 @@ def apply(db: Session, row: ScimResource, body: dict, *, replace: bool = False) 
             if type(body["active"]) is not bool:
                 raise ScimError(400, "active must be a boolean")
             user.active = body["active"]
+            if not body["active"]:
+                _revoke_personal_access_tokens(db, user.id, _now())
         if "emails" in body:
             emails = body["emails"]
             if not isinstance(emails, list) or len(emails) > 20 or any(not isinstance(item, dict) or not isinstance(item.get("value"), str) or item["value"].casefold() != user.email for item in emails):

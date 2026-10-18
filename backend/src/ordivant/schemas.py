@@ -324,6 +324,12 @@ class ModelProviderInput(InputModel):
     models: list[ModelDefinition] = Field(default_factory=list)
 
 
+class ModelDiscoveryRequest(InputModel):
+    id: str = Field(min_length=1, max_length=120)
+    base_url: str = Field(min_length=1, max_length=2000)
+    api_key: SecretStr | None = None
+
+
 class ModelSettingsPut(InputModel):
     revision: int | None = Field(default=None, ge=0)
     providers: list[ModelProviderInput]

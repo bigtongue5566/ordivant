@@ -5,9 +5,9 @@
 
 This page explains what is available today and what is not supported yet. It does not promise delivery dates. Use [GitHub Issues](https://github.com/ordivant-ai/ordivant/issues) to suggest needs, discuss them, or follow progress; a request does not guarantee development.
 
-## New in v0.3.0 {#unreleased-development}
+## New in v0.4.0 {#unreleased-development}
 
-v0.3.0 adds Work planning, Knowledge document organization, and cross-product attachments, mentions, subscriptions, notifications, and search. It also adds SCIM, SMTP, OIDC login policies, and audit administration. See the [feature tour](./features.md) for operating steps and the [upgrade guide](./release.md) before updating an existing installation. Enterprise integrations require administrator configuration; validate your own IdP/directory and external Git services in your actual environment.
+v0.4.0 adds personal API/MCP tokens, PM/PG/SA/SD/QA/Reviewer templates, Provider model discovery, and optional companion products after Work project creation. Existing boards, Sprints, attachments, notifications, search, and enterprise integrations remain available. See the [feature tour](./features.md), [Work guide](./guide/work.md), and [upgrade guide](./release.md). Products retain separate authorization; validate enterprise integrations in your own environment.
 
 <span id="v0-1-已交付"></span>
 

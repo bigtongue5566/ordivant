@@ -115,6 +115,54 @@ async def _introspect(identity_url: str, service_token: str, session_token: str)
     return user, csrf_token
 
 
+async def _introspect_access_token(identity_url: str, service_token: str, access_token: str) -> dict[str, Any]:
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(3.0, connect=1.0), follow_redirects=False, trust_env=False,
+        ) as client:
+            response = await client.post(
+                f"{identity_url}/api/auth/access-tokens/introspect",
+                headers={"Authorization": f"Bearer {service_token}"},
+                json={"access_token": access_token, "product": "code"},
+            )
+    except httpx.HTTPError as exc:
+        raise _unavailable() from exc
+    if response.status_code == 401:
+        raise DomainError(401, "unauthenticated", "Personal access token is invalid or expired")
+    if response.status_code == 403:
+        raise DomainError(403, "token_product_forbidden", "Personal access token does not allow this product")
+    if response.status_code != 200:
+        raise _unavailable()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise _unavailable() from exc
+    user = payload.get("user") if isinstance(payload, dict) else None
+    if (
+        not isinstance(user, dict)
+        or not isinstance(user.get("id"), str) or not user["id"] or len(user["id"]) > 255
+        or not isinstance(user.get("name"), str) or not user["name"] or len(user["name"]) > 160
+        or not isinstance(user.get("active"), bool)
+    ):
+        raise _unavailable()
+    return user
+
+
+async def bearer_principal(request: Request, session: Session) -> Principal | None:
+    """Personal tokens resolve to the same human principal as browser sessions."""
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer ord_pat_"):
+        return None
+    access_token = authorization[7:].strip()
+    if not 20 <= len(access_token) <= 512:
+        raise DomainError(401, "unauthenticated", "Personal access token is invalid or expired")
+    if not identity_configured():
+        raise DomainError(401, "unauthenticated", "Personal access tokens require Identity")
+    _, identity_url, service_token = _configuration()
+    user = await _introspect_access_token(identity_url, service_token, access_token)
+    return _sync_principal(session, user)
+
+
 def _require_browser_mutation(request: Request, csrf_token: str) -> None:
     if request.method.upper() in {"GET", "HEAD"}:
         return

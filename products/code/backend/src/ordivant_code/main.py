@@ -16,7 +16,7 @@ from .config import app_mode, load_gitea_config
 from .db import Base, SessionLocal, engine, get_db
 from .errors import DomainError
 from . import models  # noqa: F401
-from .identity import cookie_principal, identity_configured, require_identity_admin_for_scope_creation
+from .identity import bearer_principal, cookie_principal, identity_configured, require_identity_admin_for_scope_creation
 from .schemas import (
     BranchCreate,
     CheckCreate,
@@ -70,7 +70,7 @@ async def _current_principal(
     session: Session = Depends(_get_database),
 ) -> Principal:
     if authorization is not None:
-        return authenticate(session, authorization)
+        return await bearer_principal(request, session) or authenticate(session, authorization)
     principal = await cookie_principal(request, session)
     if principal is not None:
         return principal
@@ -94,7 +94,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Ordivant Code API", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Ordivant Code API", version="0.4.0", lifespan=lifespan)
 
 from .collaboration_adapter import install as install_collaboration
 install_collaboration(app, _get_database, _current_principal)

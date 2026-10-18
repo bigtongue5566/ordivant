@@ -78,6 +78,7 @@ export default {
   'Context {{context}} · 輸出上限 {{output}}': 'Context {{context}} · output limit {{output}}',
   '有效模型': 'Effective model',
   '尚未設定全域預設': 'No global default is configured',
+  '請完成此 Agent 的模型設定': 'Complete the model settings for this Agent',
 
   '正在檢查帳號服務': 'Checking the account service',
   '企業帳號': 'Enterprise account',

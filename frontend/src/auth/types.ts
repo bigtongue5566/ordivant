@@ -38,6 +38,17 @@ export type IdentitySessionRecord = {
   current: boolean;
 };
 
+export type PersonalAccessToken = {
+  id: string;
+  name: string;
+  prefix: string;
+  products: ProductKey[];
+  created_at: string;
+  expires_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};
+
 export type IdentityInvitation = {
   invitation_code: string;
   expires_at: string;

@@ -11,6 +11,7 @@ import type {
   ModelCatalog,
   ModelSettings,
   ModelSettingsUpdate,
+  ModelDiscoveryResult,
   Overview,
   IntakeFormDefinition,
   PlanningField,
@@ -81,7 +82,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
-  if (init.method && init.method !== 'GET' && path !== '/api/model-settings' && !headers.has('Idempotency-Key')) {
+  if (init.method && init.method !== 'GET' && !path.startsWith('/api/model-settings') && !headers.has('Idempotency-Key')) {
     headers.set('Idempotency-Key', requestId());
   }
 
@@ -209,6 +210,7 @@ export const api = {
   createSandboxProfile: (body: SandboxProfileMutationInput) => request<SandboxProfile>('/api/sandbox-profiles', { method: 'POST', body: JSON.stringify(body) }),
   updateSandboxProfile: (id: string, body: SandboxProfileMutationInput) => request<SandboxProfile>(`/api/sandbox-profiles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   modelSettings: () => request<ModelSettings>('/api/model-settings', { method: 'GET' }),
+  discoverModels: (body: { id: string; base_url: string; api_key?: string }) => request<ModelDiscoveryResult>('/api/model-settings/discover', { method: 'POST', body: JSON.stringify(body) }),
   saveModelSettings: (body: ModelSettingsUpdate) => request<void>('/api/model-settings', { method: 'PUT', body: JSON.stringify(body) }),
   modelCatalog: () => request<ModelCatalog>('/api/model-catalog', { method: 'GET' }),
   messages: (projectId: string, inbox = false) => {

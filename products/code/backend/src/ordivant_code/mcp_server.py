@@ -4,7 +4,7 @@ import os
 import uuid
 import json
 from typing import Literal
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -12,8 +12,16 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("Ordivant Code")
 
 
+def _normalize_api_base_url(value: str) -> str:
+    parts = urlsplit(value)
+    path = parts.path.rstrip("/")
+    if path.endswith("/api"):
+        path = path[:-4]
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment)).rstrip("/")
+
+
 async def _request(method: str, path: str, *, body: dict | None = None, request_id: str | None = None):
-    base = os.getenv("ORDIVANT_CODE_API_URL", "http://127.0.0.1:8020").rstrip("/")
+    base = _normalize_api_base_url(os.getenv("ORDIVANT_CODE_API_URL", "http://127.0.0.1:8020"))
     token = os.getenv("ORDIVANT_CODE_API_TOKEN", "")
     if not token:
         raise RuntimeError("ORDIVANT_CODE_API_TOKEN is required")
@@ -33,9 +41,31 @@ async def _request(method: str, path: str, *, body: dict | None = None, request_
 
 
 @mcp.tool()
+async def get_me() -> dict:
+    """Read the principal associated with this configured credential."""
+    return await _request("GET", "/me")
+
+
+@mcp.tool()
 async def list_code_projects() -> list[dict]:
     """List Code projects available to the configured credential."""
     return await _request("GET", "/projects")
+
+
+@mcp.tool()
+async def create_code_project(
+    key: str,
+    name: str,
+    description: str = "",
+    request_id: str | None = None,
+) -> dict:
+    """Create a Code project using the configured credential's server-side authorization."""
+    return await _request(
+        "POST",
+        "/projects",
+        body={"key": key, "name": name, "description": description},
+        request_id=request_id or str(uuid.uuid4()),
+    )
 
 
 @mcp.tool()

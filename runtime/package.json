@@ -13,9 +13,9 @@
     "test": "npm run build && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@earendil-works/chord": "1.0.3",
-    "@earendil-works/pi-ai": "1.0.3",
-    "@earendil-works/pi-durable": "1.0.3",
+    "@earendil-works/chord": "1.0.4",
+    "@earendil-works/pi-ai": "1.0.4",
+    "@earendil-works/pi-durable": "1.0.4",
     "@modelcontextprotocol/client": "2.3.1"
   },
   "devDependencies": {

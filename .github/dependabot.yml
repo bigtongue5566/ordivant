@@ -59,6 +59,22 @@ updates:
       timezone: Asia/Taipei
     open-pull-requests-limit: 5
     groups:
+      # Pi packages share branded types and must resolve to one compatible set.
+      pi-runtime-patch-minor:
+        patterns:
+          - "@earendil-works/chord"
+          - "@earendil-works/pi-ai"
+          - "@earendil-works/pi-durable"
+        update-types:
+          - minor
+          - patch
+      pi-runtime-major:
+        patterns:
+          - "@earendil-works/chord"
+          - "@earendil-works/pi-ai"
+          - "@earendil-works/pi-durable"
+        update-types:
+          - major
       npm-patch-minor:
         patterns:
           - "*"

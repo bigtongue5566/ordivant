@@ -38,7 +38,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.7.0",
-    "opencc-js": "1.0.5",
+    "opencc-js": "1.4.2",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   }

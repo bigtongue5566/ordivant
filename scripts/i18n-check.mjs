@@ -17,7 +17,16 @@ const readCatalog = filename => {
 const english = {};
 const modules = {};
 const converter = Converter({ from: 'twp', to: 'cn' });
-const convert = text => converter(text).replaceAll('帐号', '账号').replaceAll('缺省', '默认').replaceAll('接口语言', '界面语言');
+// Keep product meanings stable when upstream regional dictionaries change.
+// Audit and independent review are distinct concepts in Ordivant.
+const terminology = [
+  ['稽核', '審計'], ['預設', '默認'], ['透過', '通過'],
+  ['介面契約', '接口契約'], ['共用介面', '共用接口'], ['介面與資料規格', '接口與資料規格'],
+];
+const convert = text => {
+  for (const [source, target] of terminology) text = text.replaceAll(source, target);
+  return converter(text).replaceAll('帐号', '账号').replaceAll('缺省', '默认').replaceAll('接口语言', '界面语言');
+};
 const placeholders = value => [...value.matchAll(/\{\{(\w+)\}\}/g)].map(match => match[1]).sort();
 const errors = [];
 for (const name of fs.readdirSync(directory).filter(name => name.endsWith('.en.ts')).sort()) {
@@ -74,6 +83,17 @@ check('saved preference and document language',()=>{const s=makeStore({saved:'zh
 check('corrupt and inaccessible storage',()=>{assert.equal(makeStore({saved:'invalid'}).getLocale(),'en');const s=makeStore({denied:true});s.setLocale('zh-TW');assert.equal(s.getLocale(),'zh-TW');});
 check('cross-tab synchronization',()=>{const s=makeStore();s.handlers.storage({key:'ordivant.locale',newValue:'zh-CN'});assert.equal(s.getLocale(),'zh-CN');assert.equal(s.document.documentElement.lang,'zh-Hans');s.handlers.storage({key:'other',newValue:'en'});assert.equal(s.getLocale(),'zh-CN');});
 check('translation interpolation preserves external values',()=>{const s=makeStore();const value='<script>使用者內容</script>';assert.equal(s.t('{{product}} 導覽',{product:value}),`${value} navigation`);assert.equal(s.t('unknown user content'), 'unknown user content');s.setLocale('zh-CN');assert.equal(s.t('介面語言'),'界面语言');const message=s.localized('模型連線設定無法載入：{{error}}',{error:s.localized('請求未完成。')});s.setLocale('en');assert.equal(s.t(message),'Could not load model connections: The request could not be completed.');});
+check('Simplified Chinese preserves audit, review and default meanings',()=>{
+  const s=makeStore({saved:'zh-CN'});
+  assert.equal(s.t('操作稽核'),'操作审计');
+  assert.equal(s.t('審核者'),'审核者');
+  assert.equal(s.t('全域預設模型'),'全域默认模型');
+  const developerPrompt=Object.keys(english).find(key=>key.startsWith('你是程式開發者（PG）。'));
+  const designerPrompt=Object.keys(english).find(key=>key.startsWith('你是系統設計師（SD）。'));
+  assert.ok(s.t(developerPrompt).includes('接口契约'));
+  assert.ok(s.t(developerPrompt).includes('共用接口'));
+  assert.ok(s.t(designerPrompt).includes('接口与数据规格'));
+});
 check('date and number locale formats',()=>{const s=makeStore();assert.equal(s.formatDate(null),'—');assert.equal(s.formatDate('invalid'),'—');const date=new Date('2026-10-08T00:00:00Z');for(const locale of ['en','zh-TW','zh-CN']) {s.setLocale(locale);const options={dateStyle:'full',timeZone:'UTC'};assert.equal(s.formatDate(date,options),new Intl.DateTimeFormat(locale,options).format(date));assert.equal(s.formatNumber(1234.5),new Intl.NumberFormat(locale).format(1234.5));}});
 check('localized API errors retain codes and hide raw server text',()=>{
   for (const locale of ['zh-TW','zh-CN','en']) {

@@ -4,6 +4,8 @@
 
 ## Work 公开 API {#public-work-api}
 
+- `POST /api/model-settings/discover`：仅组织管理员；Cookie 须通过 Origin／CSRF。请求 `{id,base_url,api_key?}` 读取 OpenAI 兼容的 `{base_url}/models`，返回 `{source:"provider_api",models:[{id,name,context_window?,max_output_tokens?,reasoning_efforts?}]}`。留空只会重用同组织、同 Provider ID、相同 Base URL 的已保存密钥。未提供的模型能力保持未知，不猜测数值；获取列表不改变现有设置和 revision。请求超时 15 秒、最大响应 1 MiB／2,000 项、不重试、不跟随重定向、不返回上游错误正文、不经过幂等缓存，响应带 `Cache-Control:no-store`。
+
 - `GET /api/model-settings`：仅限组织管理员。回传 `{providers:Provider[], default:ModelSelection|null,revision:number}`。绝不回传 API key 或 ciphertext。
 - `PUT /api/model-settings`：仅限组织管理员；Cookie 验证须通过 Origin／CSRF。本文 `{providers:[{id,name,base_url,api_key?:string,enabled:boolean,models:ModelDefinition[]}],default:ModelSelection|null}`。省略 `api_key` 或传入空值会保留该 Provider 现有 key。添加激活中的 Provider 必须提供 key。替换设置时，只能在目前组织及相同 Provider ID 范围内保留 key；变更 base URL 必须明确提供新 key。Key 在服务器端以本机 encryption key 加密后保存在被忽略的 Work 数据目录。凭证绝不可出现在幂等缓存、稽核、错误或一般回应中。若实作可行，写入应支持 revision／CAS 以避免更新遗失；mutation 不可缓存机密。
 - `GET /api/model-catalog`：已授权 Work 人类用户或范围内 Agent 可调用。回传所属组织的 `{providers:Provider[],default:ModelSelection|null,revision:number}`，只含已激活／已设置的 Provider，并省略凭证。Agent 表单使用此数据。

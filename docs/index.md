@@ -155,11 +155,11 @@ Code 可為 PR 保存綁定目前 head SHA 的 Ordivant 本地討論與審查紀
 
 Ordivant 採 **MIT 授權**，可自行使用、修改及部署。Work、Knowledge 與 Code 可各自部署；資料由你管理。共用登入支援本地帳號與企業 OIDC，選用 Keycloak 可橋接 SAML／LDAP。
 
-目前公開版本為 **v0.3.0（2026-10-15）**。此版本的 Work、Knowledge、Code 真人協作不需要 LLM；只有自主 Agent Run 需要模型設定。Knowledge 提供文字搜尋，Code 的 Git 寫入需要 Gitea；此版本尚未提供向量搜尋、內建 CI、硬性金額預算或分散式執行。Docker 沙箱沒有網路或主機目錄存取，使用已備妥的工具執行工作；需要更強隔離時應配置 VM 執行環境。查看[版本與升級說明](./release.md)。
+目前公開版本為 **v0.4.0（2026-10-19）**。此版本的 Work、Knowledge、Code 真人協作不需要 LLM；只有自主 Agent Run 需要模型設定。Knowledge 提供文字搜尋，Code 的 Git 寫入需要 Gitea；此版本尚未提供向量搜尋、內建 CI、硬性金額預算或分散式執行。Docker 沙箱沒有網路或主機目錄存取，使用已備妥的工具執行工作；需要更強隔離時應配置 VM 執行環境。查看[版本與升級說明](./release.md)。
 
-## v0.3.0：團隊協作與企業整合 {#unreleased-p0-p1}
+## v0.4.0：快速建立團隊與外部連線 {#unreleased-p0-p1}
 
-現在可用看板、Backlog、Epic 和 Sprint 規劃工作，用工時與容量檢視安排；文件支援頁面階層、範本、留言和版本還原。三個產品都可使用附件、提及、訂閱、通知與權限範圍內的搜尋，並新增 SCIM、SMTP 和稽核管理。查看[功能與限制](./roadmap.md#unreleased-development)。
+用六種職務範本建立 Agent，從 Provider 取得可用模型，並在建立 Work 專案時選擇一起建立 Knowledge 空間和 Code 專案。真人也可建立個人權杖，透過 API 或 MCP 使用自己獲授權的功能。查看[版本說明](./release.md)及[連線教學](./guide/administration.md#personal-api-and-mcp-access)。
 
 外部模型與工具需自行提供連線及授權，可能產生供應商費用。未設定模型的 DEMO 只演示執行流程；真實交付請核對成果、來源與供應商用量。
 

@@ -4,6 +4,17 @@
 
 企业身分修订通过同一个 Identity 服务添加 OIDC、账号布建、群组授权、生命周期撤销与稽核。`sso-contracts.md` 定义添加的路由与字段；以下原生账号／工作阶段契约仍然有效。
 
+
+## 个人 API 与 MCP 存取权杖 {#personal-access-tokens}
+
+- 真人在帐号设定建立 `ord_pat_` 个人权杖，资料库只存 SHA-256 杂凑；原始值仅在建立回应中显示一次。不得记录原始值到日志或稽核事件。
+- `GET /api/auth/access-tokens` → `{tokens:[metadata]}`；`POST` 相同路径，本文 `{name,products:["work"|"knowledge"|"code"],expires_in_days:1..365}`（预设 30）→ `{token,access_token:metadata}`；`DELETE /api/auth/access-tokens/{id}` → 204。只可管理自己的权杖，须 Cookie session；变更还须精确 Origin 与 CSRF。每位使用者最多 50 个有效权杖，建立序列化以防并发超额。
+- Metadata：`{id,name,prefix,products,created_at,expires_at,last_used_at,revoked_at}`，时间为 UTC ISO 字串，未使用／未撤销为 null；不包含杂凑或完整值。权杖建立及撤销写入 Identity 稽核。
+- 内部 `POST /api/auth/access-tokens/introspect` 使用 service bearer，本文 `{access_token,product}` → `{user:User,token_id,expires_at}`。无效／撤销／到期／停用为 401；产品不符为 403。该端点免除浏览器 Origin，但不免除服务验证。所有回应 `Cache-Control: no-store`。
+- 产品辨识个人权杖后，使用固定 Identity URL 与内部 secret introspect，逐次载入最新权限并同步相同的 human principal。无效 Authorization 不得退回 Cookie；网路或格式错误 fail closed 503。个人权杖不改变 claim、独立 review、范围或幂等规则，不授予 Agent 身分。
+- 建立时仅允许使用者已获授权产品；后续权限变更立即套用。密码变更／帐号复原／停用撤销既有权杖；`logout-all` 只撤浏览器 session，外部权杖须另撤。权杖不能呼叫管理路由来自行扩权或签发新权杖。
+- Work、Knowledge、Code 的 stdio MCP bridge 接受同一种 personal bearer，业务操作呼叫各自 REST API。`get_me` 可确认身分；建立资源工具接受 `request_id`，未提供时产生 UUID。介面依产品提供本机命令、环境变数和 API 根网址范例，值使用占位符。
+
 ## 责任范围 {#ownership}
 
 - PM 负责这些契约、Compose／工具、下拉列表修正与最终验收。

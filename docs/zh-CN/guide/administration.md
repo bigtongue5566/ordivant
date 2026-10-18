@@ -68,3 +68,35 @@ MFA 由企业 IdP 执行。在「账号与安全性」→「企业 SSO」设置�
 组织管理员先设置模型供应商、API 网址、密钥及模型，再选择组织默认值。创建或编辑 Agent 时，可继承默认值或选用其他已设置模型。已保存的密钥与工具访问令牌不会回填明文；要更换时请输入新的值。操作步骤见[模型设置](../model-usage.md)与[Run 及工具指南](../execution-usage.md)。
 
 正式环境使用前，请检查 TLS、可信任的网站来源（Origin）、允许的成员布建策略、Project／Space 授权范围，以及恢复码的保管方式。SSO 不会取代各产品的服务器端授权。
+
+## 使用者 API 与 MCP {#personal-api-and-mcp-access}
+
+在右上角开启「帐号与安全性 → API 与 MCP」，输入用途名称、允许的产品与有效期限，再建立个人存取权杖。完整权杖只显示一次；清单只显示前缀、到期时间与上次使用时间。此处也提供目前环境的 API 和 MCP 连线范例。
+
+权杖透过 `Authorization: Bearer <PERSONAL_ACCESS_TOKEN>` 使用。它代表你的真人帐号，沿用目前的产品角色及 Project／Space 范围，不会取得 Agent 身分或额外权限。管理员可建立资源；一般成员只能操作获授权的资源。三个产品的本机 API 根网址如下：
+
+以下以默认 Docker Compose 的 `http://127.0.0.1:8088` 为例；如果使用不同端口或 HTTPS 域名，请改为自己环境的网址。界面会根据当前网站生成对应示例。
+
+| 产品 | 本机 API 根网址 | 起始操作 |
+|---|---|---|
+| Work | `http://127.0.0.1:8088/api` | `GET /me`、`GET /projects` |
+| Knowledge | `http://127.0.0.1:8088/knowledge-api` | `GET /me`、`GET /spaces` |
+| Code | `http://127.0.0.1:8088/code-api` | `GET /me`、`GET /projects` |
+
+例如先确认 Work 身分：
+
+```sh
+curl "http://127.0.0.1:8088/api/me" -H "Authorization: Bearer <PERSONAL_ACCESS_TOKEN>"
+```
+
+MCP 使用本机 stdio bridge，需安装 uv 并取得 Ordivant 原始码。把介面的设定范例加入支援 stdio 的 MCP 用户端；替换原始码目录与权杖后，以各产品自己的 Python 专案启动：
+
+| 产品 | 专案目录 | 模组 | 环境变数 |
+|---|---|---|---|
+| Work | `backend` | `ordivant.mcp_server` | `ORDIVANT_API_URL`、`ORDIVANT_API_TOKEN` |
+| Knowledge | `products/knowledge/backend` | `ordivant_knowledge.mcp_server` | `ORDIVANT_KNOWLEDGE_API_URL`、`ORDIVANT_KNOWLEDGE_API_TOKEN` |
+| Code | `products/code/backend` | `ordivant_code.mcp_server` | `ORDIVANT_CODE_API_URL`、`ORDIVANT_CODE_API_TOKEN` |
+
+启动命令形式为 `uv run --project <专案绝对路径> python -m <模组>`。网址使用上表的 API 根网址；权杖须允许对应产品。先呼叫 `get_me` 确认身分，再使用 Work 的 `list_projects`、Knowledge 的 `list_spaces` 或 Code 的 `list_code_projects`。建立资源的工具分别为 `create_project`、`create_space`、`create_code_project`；这些工具及既有业务工具都交由 REST API 执行相同授权。变更操作接受 `request_id`，重试同一次操作时请重用该值。
+
+可随时在权杖清单撤销连线；到期、帐号停用或产品权限变更会影响后续请求。变更密码或完成帐号复原也会撤销既有权杖。「登出所有装置」只撤销浏览器工作阶段；外部工具须另外撤销权杖。权杖不能管理或建立其他权杖，管理操作仍需浏览器登入及 CSRF 验证。

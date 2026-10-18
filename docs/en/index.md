@@ -155,11 +155,11 @@ When an Agent lacks information or a tool, add inputs, authorize the appropriate
 
 Ordivant is **MIT licensed**. Use, modify, and deploy it yourself. Work, Knowledge, and Code can be deployed independently, and you manage the data. Shared sign-in supports local accounts and enterprise OIDC; optional Keycloak can bridge SAML and LDAP.
 
-The currently published release is **v0.3.0 (2026-10-15)**. Human collaboration in Work, Knowledge, and Code needs no LLM; only autonomous Agent Runs require model settings. Knowledge offers text search, and Code Git writes require Gitea. This release does not include vector search, built-in CI, hard dollar budgets, or distributed execution. Docker sandboxes have no network or host-directory access and use tools already present in the environment. Configure VM execution when stronger isolation is required. See the [release and upgrade guide](./release.md).
+The currently published release is **v0.4.0 (2026-10-19)**. Human collaboration in Work, Knowledge, and Code needs no LLM; only autonomous Agent Runs require model settings. Knowledge offers text search, and Code Git writes require Gitea. This release does not include vector search, built-in CI, hard dollar budgets, or distributed execution. Docker sandboxes have no network or host-directory access and use tools already present in the environment. Configure VM execution when stronger isolation is required. See the [release and upgrade guide](./release.md).
 
-## v0.3.0: team collaboration and enterprise integrations {#unreleased-p0-p1}
+## v0.4.0: team setup and external access {#unreleased-p0-p1}
 
-Plan work with boards, backlogs, Epics, and Sprints, and inspect work logs and capacity. Organize documents with page hierarchies, templates, comments, and version restoration. All three products offer attachments, mentions, subscriptions, notifications, and search within current permissions. SCIM, SMTP, and audit administration are also available. See [features and limits](./roadmap.md#unreleased-development).
+Create Agents from six role templates, fetch available models from your Provider, and optionally create a Knowledge space and Code project with a new Work project. People can create personal tokens to use authorized features through API or MCP. See the [release notes](./release.md) and [connection tutorial](./guide/administration.md#personal-api-and-mcp-access).
 
 Provide and authorize your own model and tool connections; external providers may charge for use. Unconfigured DEMO runs illustrate the execution flow. For actual delivery, check results, sources, and provider usage.
 

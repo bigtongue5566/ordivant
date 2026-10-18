@@ -9,6 +9,7 @@ import threading
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
+import httpx
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import DateTime, ForeignKey, String, Text, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
@@ -167,16 +168,85 @@ def get_model_catalog(session: Session, actor: Principal) -> dict:
 
 
 def _check_base_url(base_url: str) -> None:
-    parsed = urlsplit(base_url)
+    try:
+        parsed = urlsplit(base_url)
+        parsed.port
+    except ValueError:
+        raise bad_request("invalid_provider_url", "Provider base_url 必須是有效的 HTTP(S) base URL") from None
     if (
         parsed.scheme not in {"http", "https"}
-        or not parsed.netloc
+        or not parsed.hostname
+        or any(ord(c) < 33 for c in base_url)
         or parsed.username is not None
         or parsed.password is not None
         or parsed.query
         or parsed.fragment
     ):
         raise bad_request("invalid_provider_url", "Provider base_url 必須是有效的 HTTP(S) base URL")
+
+
+def _model_discovery_client() -> httpx.Client:
+    return httpx.Client(timeout=15, follow_redirects=False, trust_env=False)
+
+
+def discover_provider_models(session: Session, actor: Principal, body: dict) -> dict:
+    require_model_admin(session, actor)
+    if any(ord(c) < 32 for c in body["base_url"]):
+        raise bad_request("invalid_provider_url", "Provider base_url 必須是有效的 HTTP(S) base URL")
+    base_url = body["base_url"].strip().rstrip("/")
+    _check_base_url(base_url)
+    submitted_key = body.get("api_key")
+    key = submitted_key.get_secret_value() if hasattr(submitted_key, "get_secret_value") else submitted_key
+    if not key:
+        prior = session.get(ModelProviderSetting, (actor.organization_id, body["id"]))
+        # Never forward a saved credential to a different endpoint or organization.
+        if not prior or prior.base_url.rstrip("/") != base_url or not prior.api_key_ciphertext:
+            raise bad_request("provider_key_required", "請提供 API Key；變更 Base URL 時必須重新提供金鑰。")
+        key = _decrypt_secret(prior.api_key_ciphertext, actor.organization_id, prior.provider_id)
+
+    try:
+        with _model_discovery_client() as client:
+            with client.stream("GET", base_url + "/models", headers={"Authorization": f"Bearer {key}", "Accept": "application/json"}) as response:
+                if response.status_code in {401, 403}:
+                    raise DomainError(502, "provider_models_unauthorized", "Provider 拒絕模型清單請求，請檢查金鑰及權限。")
+                if response.status_code in {404, 405, 501}:
+                    raise DomainError(502, "provider_models_unsupported", "Provider 不支援 /models，請手動新增模型。")
+                if response.status_code != 200:
+                    raise DomainError(502, "provider_models_unavailable", "無法取得 Provider 模型清單，請稍後重試。")
+                content = bytearray()
+                for chunk in response.iter_bytes(chunk_size=65536):
+                    content.extend(chunk)
+                    if len(content) > 1024 * 1024:
+                        raise ValueError("catalog too large")
+        payload = json.loads(content)
+        items = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(items, list) or len(items) > 2000:
+            raise ValueError("invalid catalog")
+        models = {}
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError("invalid model")
+            model_id = item.get("id")
+            if not isinstance(model_id, str) or not model_id.strip() or len(model_id) > 200 or any(ord(c) < 32 for c in model_id):
+                raise ValueError("invalid model id")
+            name = item.get("name")
+            model = {"id": model_id, "name": name if isinstance(name, str) and 0 < len(name) <= 200 else model_id}
+            # Standard /models returns IDs only; never invent execution limits or capabilities.
+            for field, minimum in (("context_window", 1), ("max_output_tokens", 16)):
+                value = item.get(field)
+                if type(value) is int and minimum <= value <= 2**53 - 1:
+                    model[field] = value
+            efforts = item.get("reasoning_efforts")
+            if isinstance(efforts, list) and efforts and all(isinstance(effort, str) and effort in {"low", "medium", "high", "xhigh", "max"} for effort in efforts):
+                model["reasoning_efforts"] = list(dict.fromkeys(efforts))
+            models.setdefault(model_id, model)
+        return {"models": sorted(models.values(), key=lambda model: model["id"]), "source": "provider_api"}
+    except httpx.TimeoutException:
+        raise DomainError(504, "provider_models_timeout", "取得 Provider 模型清單逾時，請稍後重試。") from None
+    except httpx.HTTPError:
+        raise DomainError(502, "provider_models_unavailable", "無法取得 Provider 模型清單，請稍後重試。") from None
+    except (ValueError, TypeError, UnicodeError):
+        raise DomainError(502, "provider_models_invalid", "Provider 回傳的模型清單格式無效。") from None
 
 
 def _selection_data(value: dict | None) -> dict | None:

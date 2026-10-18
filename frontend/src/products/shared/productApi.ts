@@ -25,7 +25,7 @@ export function createProductApi(prefix: string) {
     if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
     const credential = token || getProductCredential(prefix);
     if (credential) headers.set('Authorization', `Bearer ${credential}`);
-    if (init.method && init.method !== 'GET') headers.set('Idempotency-Key', createRequestId());
+    if (init.method && init.method !== 'GET' && !headers.has('Idempotency-Key')) headers.set('Idempotency-Key', createRequestId());
 
     let response: Response;
     try {
@@ -53,7 +53,12 @@ export function createProductApi(prefix: string) {
   return {
     setToken(value: string | null) { token = value; setProductCredential(prefix, value); },
     get<T>(path: string) { return request<T>(path, { method: 'GET' }); },
-    post<T>(path: string, body: unknown) { return request<T>(path, { method: 'POST', body: JSON.stringify(body) }); },
+    post<T>(path: string, body: unknown, options: { idempotencyKey?: string; signal?: AbortSignal } = {}) {
+      return request<T>(path, {
+        method: 'POST', body: JSON.stringify(body), signal: options.signal,
+        headers: options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : undefined,
+      });
+    },
     patch<T>(path: string, body: unknown) { return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }); },
     me() { return request<ProductPrincipal>('/me', { method: 'GET' }); },
     health() { return request<ProductHealth>('/health', { method: 'GET' }); },

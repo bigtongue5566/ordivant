@@ -90,6 +90,13 @@ export type ModelProviderInput = Pick<ModelProvider, 'id' | 'name' | 'base_url' 
   api_key?: string;
 };
 
+export type DiscoveredModel = Pick<ModelDefinition, 'id' | 'name'> & Partial<Omit<ModelDefinition, 'id' | 'name'>>;
+
+export type ModelDiscoveryResult = {
+  models: DiscoveredModel[];
+  source: 'provider_api';
+};
+
 export type ModelSettingsUpdate = {
   revision: number;
   providers: ModelProviderInput[];
@@ -367,6 +374,7 @@ export type AgentTemplateDefinition = {
 
 export type AgentTemplate = {
   id: string;
+  builtin_key?: 'pm' | 'pg' | 'sa' | 'sd' | 'qa' | 'reviewer' | null;
   key: string;
   version: number;
   name: string;

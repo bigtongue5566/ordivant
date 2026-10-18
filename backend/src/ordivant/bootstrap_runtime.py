@@ -10,6 +10,7 @@ import tempfile
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from .agent_presets import ensure_builtin_agent_templates
 from .config import data_dir
 from .db import Base, SessionLocal, engine
 from .identity import _EMPTY_DATABASE_ORGANIZATION_ID
@@ -83,6 +84,7 @@ def initialize_runtime(*, directory: Path | None = None, factory=None) -> None:
                 organization = Organization(id=_EMPTY_DATABASE_ORGANIZATION_ID, name="Identity Organization", created_at=now_utc())
                 session.add(organization)
                 session.flush()
+                ensure_builtin_agent_templates(session, organization.id)
             existing_token = previous.get("runtime_token")
             if existing_token is not None:
                 principal = principal_for_token(session, existing_token) if isinstance(existing_token, str) else None

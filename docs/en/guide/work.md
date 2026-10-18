@@ -4,6 +4,27 @@ Work organizes projects, tasks, Agent execution, messages, result evidence, and 
 
 ![Work task list: follow demonstration tasks by status](/screenshots/work-en.png)
 
+## Built-in Agent templates {#built-in-agent-templates}
+
+In a project's **Agent directory → Add Agent**, start with **Agent template version**. Six built-in roles are available:
+
+| Template | Purpose |
+|---|---|
+| PM · Project Manager | Goals, scope, task breakdown, dependencies, risks, and handoffs |
+| PG · Programmer | Implementation, fixes, code, and test evidence |
+| SA · Systems Analyst | Business processes, requirements, access rules, and traceable acceptance criteria |
+| SD · Systems Designer | Architecture, APIs, data models, tradeoffs, and migration plans |
+| QA · Quality Assurance | Test plans, actual verification, reproducible defects, and coverage gaps |
+| Reviewer · Independent Review | Check deliverables and evidence, giving reasons to accept or return work |
+
+Applying a template fills a suggested name, platform role, capability tags, and instructions. It selects platform execution and inherits organization model settings. Edit the fields before creation; manually entered names are preserved.
+
+**Execution method** determines who starts the Agent. Most users should choose **Run on the platform (recommended)**: the platform uses the configured model to execute tasks and track progress. An administrator must first enable the execution service. If you already have your own Agent program, choose **Run with an external program**. That program claims tasks and reports progress and results through the API or MCP; the platform does not start it, and the program manages its own model and connection settings. The execution method cannot be changed after creation.
+
+Reviewer uses the reviewer platform role; the other jobs use worker. Job titles grant no additional administrator permissions. The Agent belongs to the current project; managers select tools and Sandbox separately. Server-side authorization and independent-review separation still apply.
+
+Use **Automation → Agent template versions** to view built-ins, apply a version, or publish a custom version. Built-in text supports all three interface languages; entered drafts and custom templates stay verbatim. Templates are immutable versions stored per organization. Existing Agents and Runs retain their applied settings. REST and the `list_agent_templates` MCP tool expose these versions too.
+
 <span id="建立專案與任務"></span>
 <span id="创建项目与任务"></span>
 
@@ -13,6 +34,8 @@ Work organizes projects, tasks, Agent execution, messages, result evidence, and 
 2. In the Project's “Tasks” view, create a Task and enter its goal, description, inputs, scope, constraints, acceptance criteria, and priority.
 3. In **Assignee**, choose a human teammate or Agent authorized for this Project, or leave it unassigned for an eligible person to claim. In **Assign reviewer**, choose another authorized person or Agent. Add prerequisite Tasks as dependencies when needed. Cycles are rejected. A dependent Task can start only after its prerequisites pass independent review.
 4. Save and search the task list or filter it by status. Editing the task specification does not replace saved execution or review history.
+
+After creating a Work project, you can choose to create a Knowledge space and a Code project with the same name and description. Select either, both, or skip. Knowledge keeps the Work key; Code uses lowercase and replaces underscores with hyphens. Each product enforces its own access rules. Unavailable services, conflicting keys, and permission errors are shown separately. Retrying skips completed items, and the Work project remains available. This step creates a Code project; repositories can be created later in Code.
 
 Human assignees must be invited, active, and granted a Work role and this Project scope by an Identity administrator. An administrator can assign work to an invited teammate before they have signed in to Work. See [Team setup](team-setup.md) for roles and scopes.
 

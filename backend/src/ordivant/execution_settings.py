@@ -5,6 +5,7 @@ import json
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .agent_presets import builtin_key_for_template
 from .errors import DomainError, bad_request, conflict, not_found
 from .model_settings import validate_model_selection
 from .models import (
@@ -126,6 +127,7 @@ def template_json(template: AgentTemplate) -> dict:
         "version": template.version,
         "name": template.name,
         "description": template.description,
+        "builtin_key": builtin_key_for_template(template),
         "definition": _loads(template.definition_json, {}),
         "created_at": template.created_at.isoformat().replace("+00:00", "Z"),
     }

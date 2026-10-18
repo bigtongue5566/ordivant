@@ -132,6 +132,14 @@ jobs:
         run: npm run check:markdown
         working-directory: frontend
 
+      - name: Check Agent model and project creation interactions
+        run: |
+          npm run test:agent-model-fields
+          npm run test:project-companions
+          npm run test:access-tokens
+          npm run test:agent-presets
+        working-directory: frontend
+
       - name: Build Suite
         run: npm run build:suite
         working-directory: frontend
@@ -215,6 +223,8 @@ jobs:
           version: "0.12.20"
           enable-cache: true
           cache-dependency-glob: |
+            backend/uv.lock
+            products/identity/backend/uv.lock
             products/knowledge/backend/uv.lock
             products/code/backend/uv.lock
 
@@ -226,3 +236,11 @@ jobs:
 
       - name: Run product smoke acceptance
         run: uv run --project products/knowledge/backend --frozen --no-sync python scripts/product_smoke.py --product all
+
+      - name: Install personal API and MCP acceptance dependencies
+        run: |
+          uv sync --project backend --frozen
+          uv sync --project products/identity/backend --frozen
+
+      - name: Verify personal tokens through REST and stdio MCP
+        run: uv run --project backend --frozen --no-sync python scripts/verify_personal_mcp.py

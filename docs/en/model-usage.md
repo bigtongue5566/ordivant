@@ -12,7 +12,7 @@ A Work organization administrator configures model connections. Agents can inher
 
 1. Sign in to Work and open **Model connections** in the sidebar. Only organization administrators can manage provider connections.
 2. Add a provider with a name, ID, HTTPS API base URL, and API key. A Responses API-compatible URL commonly ends in `/v1`.
-3. Add the model ID and display name, then choose the reasoning options and context and per-response output limits supported by that model.
+3. Click **Fetch models from API**, search and select models, then click **Add selected models**. This calls `/models` under the Base URL using the entered or saved key. Fill in context, output limits, and reasoning options that the API does not provide. You can also add models manually. Fetching preserves existing model settings; changes apply only after saving.
 4. Select the organization's default provider, model, reasoning option, and output limit, then save.
 
 The API key is stored securely and is not shown again when you reopen settings. Leaving the key field blank and saving preserves the current key. When changing the API URL, enter the key supplied for that provider. If the page says another administrator changed the settings, reload before making your update.

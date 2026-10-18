@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_serializer, field_validator, model_serializer, model_validator
 
 
 class ProductPermission(BaseModel):
@@ -217,6 +217,32 @@ class SessionOut(BaseModel):
 class IntrospectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     session_token: str = Field(min_length=32, max_length=160)
+
+
+class AccessTokenCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=100)
+    products: list[Literal["work", "knowledge", "code"]] = Field(min_length=1, max_length=3)
+    expires_in_days: int = Field(default=30, ge=1, le=365)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name is required")
+        return cleaned
+
+    @field_validator("products")
+    @classmethod
+    def unique_products(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(values))
+
+
+class AccessTokenIntrospectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    access_token: SecretStr = Field(min_length=20, max_length=512)
+    product: Literal["work", "knowledge", "code"]
 
 
 class OIDCStartRequest(BaseModel):

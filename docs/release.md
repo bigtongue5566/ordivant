@@ -2,29 +2,33 @@
 <span id="v0-1-0-公开版本"></span>
 <span id="public-release-v0-1-0"></span>
 <span id="public-release-v0-2-0"></span>
+<span id="public-release-v0-3-0"></span>
 
-# Ordivant v0.3.0 公開版本 {#public-release-v0-3-0}
+# Ordivant v0.4.0 公開版本 {#public-release-v0-4-0}
 
-發布日期：2026-10-15。授權：[MIT](../LICENSE)。原始碼與下載：[GitHub Releases](https://github.com/ordivant-ai/ordivant/releases/tag/v0.3.0)。
+發布日期：2026-10-19。授權：[MIT](../LICENSE)。原始碼與下載：[GitHub Releases](https://github.com/ordivant-ai/ordivant/releases/tag/v0.4.0)。
 
 ## 本版內容 {#included-in-this-release}
 <span id="本版內容"></span>
 <span id="本版内容"></span>
 
-- **Work 團隊規劃**：看板與 Backlog 排序、Epic、工作類型、Sprint、里程碑、日期、自訂欄位和階段；登入後提報任務、事件規則、個人儲存查詢、工時、每週容量、觀察報表及 CSV 匯入／匯出。真人可認領或接受指派、交接、提交成果，再由另一位獲授權的人獨立審核。操作方式見 [Work 指南](./guide/work.md)。
-- **跨模組協作**：Work、Knowledge 和 Code 的資源支援附件、提及、訂閱及通知；通知中心和跨產品文字搜尋只顯示目前獲授權的內容。
-- **Knowledge 文件協作**：頁面階層、封存、PRD／會議／ADR／SOP 範本、留言回覆與解決、Markdown 工具和預覽、版本差異及受控還原。多人與 Agent 仍可共同編輯同一份草稿，發布後保留不可變版本。見 [Knowledge 指南](./guide/knowledge.md)。
-- **Code 審查與證據**：PR 行內討論綁定 head SHA、檔案與行號；head 改變後會標示過期。可管理並讀回 Gitea 分支保護，查看目前提交的上游核准、檢查與 Actions；設定 GitHub／GitLab 部署來源後，可讀取同一 SHA 的部署紀錄。Ordivant 不會代替上游執行 CI 或部署。見 [Code 指南](./guide/code.md)。
-- **企業身分與治理**：SCIM 2.0 Users／Groups、OIDC ACR／AMR 登入政策、SMTP 邀請與帳號復原，以及 Identity 稽核匯出與保留管理。見[管理指南](./guide/administration.md)及[企業 SSO](./enterprise-sso.md)。
-- **無 LLM 也能使用**：一般真人任務、共同編輯、附件、搜尋和 Code 協作不需要模型；只有自主 Agent Run 需要模型連線。介面與操作文件提供繁體中文、簡體中文和英文。
+- **個人 API 與 MCP**：在「帳號與安全性 → API 與 MCP」建立限定產品及期限的個人權杖，複製目前環境的連線範例，並隨時撤銷。權杖代表本人的真人帳號，每次操作沿用目前角色及資源範圍，不會取得 Agent 身分或額外權限。見[連線指南](./guide/administration.md#personal-api-and-mcp-access)。
+- **六種內建 Agent 範本**：PM、PG、SA、SD、QA 與 Reviewer。新增 Agent 時帶入可編輯的名稱、能力與工作指令；範本按組織保存為不可變版本，既有 Agent 不會被覆寫。見 [Work 指南](./guide/work.md#built-in-agent-templates)。
+- **建立專案時一起建立其他產品**：Work 專案建立後，可選擇建立對應 Knowledge 空間及 Code 專案，也可略過。失敗項目可分別重試，已成功的項目不會重複建立；各產品仍獨立授權。
+- **從 Provider 取得模型**：模型設定可向 OpenAI 相容服務的 `/models` 取得清單，搜尋並選取模型。只有上游明確提供時，才帶入 Context、輸出上限與推理強度，缺漏時仍需手填；不會測試模型推論。見[模型設定](./model-usage.md)。
+- **更清楚的執行設定**：以「執行方式」、「由平台執行」和「由外部程式執行」說明 Agent 的運作；修正指定模型尚未填完整時的畫面錯誤，以及模型清單撐長側欄的問題。
+- **開源協作指南**：重新整理 AGENTS 與貢獻規範，提供通用的目錄、契約、測試與 PR 指引，適用不同開發者和 coding agent。
+- 新功能介面與操作文件支援繁體中文、簡體中文和英文；既有真人工作、文件共編與 Code 協作仍不需要 LLM。
+
+個人權杖完整內容只顯示一次，每位使用者最多 50 個有效權杖，有效期限為 1 至 365 天。密碼變更、帳號復原與停用會撤銷既有權杖；「登出所有裝置」只撤銷瀏覽器工作階段，外部工具須另外撤銷權杖。MCP 目前為本機 stdio bridge，需 uv 與原始碼；不是遠端 Streamable HTTP MCP 服務。新增的連線範例使用佔位值，請在自己的用戶端安全設定權杖。
 
 ## 升級與限制 {#upgrade-and-limitations}
 <span id="升級與限制"></span>
 <span id="升级与限制"></span>
 
-由 v0.2.0 或更早版本升級前，先依[維運指南](./guide/operations.md)停止服務並備份該 Compose 專案的資料庫、所有持久化資料卷、服務機密及自訂 `.env`。加密金鑰必須與對應資料庫、資料卷一起保存；機密目錄預設為 `.data/container-secrets/`，自訂時備份 `ORDIVANT_SECRETS_DIR` 指定的位置。若使用企業機密掛載，也備份 `ORDIVANT_ENTERPRISE_SECRETS_DIR`。
+由 v0.3.0 或更早版本升級前，先依[維運指南](./guide/operations.md)停止服務並備份該 Compose 專案的資料庫、所有持久化資料卷、服務機密及自訂 `.env`。加密金鑰必須與對應資料庫、資料卷一起保存；機密目錄預設為 `.data/container-secrets/`，自訂時備份 `ORDIVANT_SECRETS_DIR` 指定的位置。若使用企業機密掛載，也備份 `ORDIVANT_ENTERPRISE_SECRETS_DIR`。
 
-將原有 repository 更新至 v0.3.0，沿用原有 Compose 專案名稱、`.env`、機密目錄、Compose 檔案組合及 profiles。服務啟動時會套用資料庫結構更新。從 repository root 執行：
+將原有 repository 更新至 v0.4.0，沿用原有 Compose 專案名稱、`.env`、機密目錄、Compose 檔案組合及 profiles。服務啟動時會套用資料庫結構更新。從 repository root 執行：
 
 ```sh
 docker compose up -d --build --wait

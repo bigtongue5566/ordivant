@@ -63,6 +63,7 @@ def test_official_mcp_stdio_bridge_uses_scoped_rest_api(api, credentials, reposi
                 tool_list = await session.list_tools()
                 names = {tool.name for tool in tool_list.tools}
                 assert names == {
+                    "get_me", "create_code_project",
                     "list_code_projects", "search_code_index", "list_repositories", "create_repository", "create_branch",
                     "commit_file", "create_pull_request", "get_pull_request",
                     "get_pull_request_collaboration", "comment_on_pull_request", "review_pull_request",

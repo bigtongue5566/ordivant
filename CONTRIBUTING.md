@@ -1,6 +1,6 @@
 # Contributing to Ordivant
 
-Thank you for contributing to Ordivant. This repository is an enterprise agent collaboration suite: Work, Identity, Knowledge, Code, Runtime, and the isolated Sandbox have separate responsibilities and deployment boundaries.
+Thank you for contributing to Ordivant. This repository is a self-hosted collaboration platform for people and Agents: Work, Identity, Knowledge, Code, Runtime, and the isolated Sandbox have separate responsibilities and deployment boundaries. Human collaboration does not require an LLM. Coding agents can use [AGENTS.md](AGENTS.md) for repository conventions.
 
 ## 開發環境
 
@@ -16,7 +16,7 @@ npm ci --prefix runtime
 npm ci --prefix frontend
 ```
 
-Windows 開發者仍可使用既有 PowerShell 入口，例如 `scripts/setup.ps1 -SkipSeed`、`scripts/validate.ps1` 和 `scripts/containers.ps1`。容器化與 PostgreSQL 完整驗收需要本機 Docker Desktop；一般 Python/Node 測試與 CI 不需要 Docker daemon。請勿以替代腳本覆蓋或移除既有 Windows 工作流程。
+容器化與 PostgreSQL 完整驗收需要 Docker Engine 與 Docker Compose v2；Windows/macOS 可使用 Docker Desktop。一般 Python/Node 測試與 CI 不需要 Docker daemon。Windows 開發者也可選用 PowerShell 輔助腳本，例如 `scripts/setup.ps1 -SkipSeed`、`scripts/validate.ps1` 和 `scripts/containers.ps1`。
 
 ## 本機檢查
 
@@ -76,6 +76,8 @@ uv run --project products/knowledge/backend --frozen --no-sync python scripts/pr
 
 CI 使用 `demo` Runtime 模式，不呼叫付費模型。除非測試明確要求，不要設定或轉送真實 provider key、工作階段 cookie、agent/runtime token、Gitea 憑證或其他私人服務設定。
 
+個人 API／MCP 連線可另執行 `uv run --project backend --frozen --no-sync python scripts/verify_personal_mcp.py`。先安裝四個產品的依賴；腳本會建立臨時資料庫、動態連接埠及合成帳號，驗證三個產品的 REST、stdio MCP 與撤銷流程，結束後清理，不使用既有帳號或模型連線。CI 也會執行這個流程。
+
 ## 範圍與責任
 
 - `backend/` 維護 Work 業務 API、MCP 與權限；所有業務授權必須由 Python service 執行。
@@ -83,7 +85,7 @@ CI 使用 `demo` Runtime 模式，不呼叫付費模型。除非測試明確要�
 - `runtime/` 維護 Pi Durable 執行、派送與執行回報；不得取代業務服務的授權或租約檢查。
 - `sandbox/` 維護隔離 command 執行器；不得把 Docker socket 或主機目錄掛載至不受信任服務。
 - `frontend/` 維護共用 React UI 與各產品 build mode；前端狀態不能取代伺服器授權。
-- PM 維護架構、共用契約、repo 根目錄 tooling 與跨模組整合。改動共享契約前，先與 PM 協調；實作只改分派或明確負責的檔案。
+- 跨模組、共用契約及根目錄 tooling 的變更，請在 PR 說明相容性、遷移與整合影響，由維護者審查。貢獻不需要指定的 PM 或 Agent；多人同時開發時，先協調重疊的修改範圍，並保留他人的既有變更。
 
 請保持產品資料、API、MCP 與部署邊界清楚。Task 與 execution 是不同紀錄；完成結果需要證據並由獨立 reviewer 驗收。Mutation 的冪等、租約 fencing、依賴循環、跨專案授權、重啟復原及協作 round trip 應依變更風險補上測試。
 

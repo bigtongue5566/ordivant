@@ -1,0 +1,16 @@
+export default {
+  '要一起建立 Knowledge 與 Code 嗎？': 'Create Knowledge and Code too?',
+  'Work 專案「{{name}}」已建立。是否使用相同名稱與描述建立下列項目？': 'Work project "{{name}}" has been created. Create the following with the same name and description?',
+  'Knowledge 空間': 'Knowledge space',
+  'Code 專案': 'Code project',
+  '代碼：{{key}}': 'Key: {{key}}',
+  '已建立 {{name}}': 'Created {{name}}',
+  '尚未確認此項目建立成功': 'Creation of this item has not been confirmed',
+  '此產品已有相同代碼，或建立操作發生衝突。請先確認既有項目。': 'The key already exists in this product, or the operation conflicted. Check existing items first.',
+  'Code 專案代碼會轉為小寫，並將底線改為連字號。': 'The Code project key uses lowercase letters and replaces underscores with hyphens.',
+  '可只選其中一項或略過；未完成的項目可重試，Work 專案仍可正常使用。': 'Choose either item or skip. Unfinished items can be retried, and your Work project remains available.',
+  '重試未完成項目': 'Retry unfinished items',
+  '建立所選項目': 'Create selected items',
+  '略過': 'Skip',
+  '產品服務回傳無效的建立結果，請確認服務設定後重試。': 'The product service returned an invalid creation result. Check its configuration and retry.',
+};

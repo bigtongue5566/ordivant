@@ -16,6 +16,7 @@ from . import enterprise_models as _enterprise_models  # noqa: F401
 from .enterprise import router as enterprise_router, mail_worker
 from .scim import router as scim_router, ScimError, scim_error_handler
 from .api import router
+from .access_tokens import router as access_tokens_router
 from .config import Settings, get_settings
 from .db import Base, make_engine, session_factory
 from .errors import DomainError
@@ -67,8 +68,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await delivery
             engine.dispose()
 
-    application = FastAPI(title="Ordivant Identity", version="0.3.0", lifespan=lifespan)
+    application = FastAPI(title="Ordivant Identity", version="0.4.0", lifespan=lifespan)
     application.include_router(router, prefix="/api/auth")
+    application.include_router(access_tokens_router, prefix="/api/auth")
     application.include_router(sso_router, prefix="/api/auth")
     application.include_router(enterprise_router, prefix="/api/auth")
     application.include_router(scim_router, prefix="/api/scim/v2")
@@ -94,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         is_auth = request.url.path.startswith(("/api/auth/", "/api/scim/"))
         origin_exempt = {
             "/api/auth/introspect",
+            "/api/auth/access-tokens/introspect",
             "/api/auth/oidc/backchannel-logout",
         }
         if request.url.path.startswith("/api/auth/") and request.method in {"POST", "PATCH", "PUT", "DELETE"} and request.url.path not in origin_exempt:

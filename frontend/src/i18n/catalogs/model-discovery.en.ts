@@ -1,0 +1,16 @@
+export default {
+  '從 API 取得模型': 'Fetch models from API',
+  '使用目前連線讀取模型清單；留白的 API Key 會使用此 Provider 已儲存的金鑰。': 'Fetch models using this connection. Leave API Key blank to use this provider\'s saved key.',
+  '取得模型失敗：{{error}}': 'Could not fetch models: {{error}}',
+  'API 回傳 {{count}} 個模型；選擇後加入，儲存設定才會生效。': 'The API returned {{count}} models. Select models to add, then save your settings to apply them.',
+  '搜尋並選擇 API 模型': 'Search and select API models',
+  '加入所選模型': 'Add selected models',
+  'API 未提供的 Context、輸出上限與推理強度需自行補填；現有模型設定會保留。': 'Fill in context, output limits, and reasoning efforts that the API does not provide. Existing model settings are preserved.',
+  '請提供 API Key；變更 Base URL 時必須重新提供金鑰。': 'Provide an API key. Changing the Base URL requires a new key.',
+  '請輸入有效的 Provider API Base URL。': 'Enter a valid provider API Base URL.',
+  'Provider 拒絕模型清單請求，請檢查金鑰及權限。': 'The provider rejected the model list request. Check the API key and permissions.',
+  'Provider 不支援 /models，請手動新增模型。': 'This provider does not support /models. Add models manually.',
+  '無法取得 Provider 模型清單，請稍後重試。': 'The provider model list is unavailable. Try again later.',
+  '取得 Provider 模型清單逾時，請稍後重試。': 'The provider model list request timed out. Try again later.',
+  'Provider 回傳的模型清單格式無效。': 'The provider returned an invalid model list.',
+} satisfies Record<string, string>;

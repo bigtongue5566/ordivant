@@ -4,7 +4,7 @@ import json
 import os
 import uuid
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -15,6 +15,14 @@ from .schemas import ArtifactInput
 API_URL = os.getenv("ORDIVANT_API_URL", "http://127.0.0.1:8000").rstrip("/")
 API_TOKEN = os.getenv("ORDIVANT_API_TOKEN", "")
 mcp = FastMCP("Ordivant")
+
+
+def _normalize_api_base_url(value: str) -> str:
+    parts = urlsplit(value)
+    path = parts.path.rstrip("/")
+    if path.endswith("/api"):
+        path = path[:-4]
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment)).rstrip("/")
 
 
 async def _request(
@@ -30,7 +38,7 @@ async def _request(
     headers = {"Authorization": f"Bearer {API_TOKEN}"}
     if request_id:
         headers["Idempotency-Key"] = request_id
-    async with httpx.AsyncClient(base_url=API_URL, timeout=30) as client:
+    async with httpx.AsyncClient(base_url=_normalize_api_base_url(API_URL), timeout=30) as client:
         response = await client.request(method, path, json=body, params=params, headers=headers)
     if response.is_error:
         detail = response.text[:2000]
@@ -46,11 +54,47 @@ async def _request_text(method: str, path: str, *, body: dict | None = None, req
     headers = {"Authorization": f"Bearer {API_TOKEN}"}
     if request_id:
         headers["Idempotency-Key"] = request_id
-    async with httpx.AsyncClient(base_url=API_URL, timeout=30) as client:
+    async with httpx.AsyncClient(base_url=_normalize_api_base_url(API_URL), timeout=30) as client:
         response = await client.request(method, path, json=body, headers=headers)
     if response.is_error:
         raise RuntimeError(f"Ordivant API returned HTTP {response.status_code}: {response.text[:2000]}")
     return response.text
+
+
+@mcp.tool()
+async def get_me() -> dict:
+    """Read the principal associated with this configured credential."""
+    return await _request("GET", "/api/me")
+
+
+@mcp.tool()
+async def list_projects() -> list[dict]:
+    """List Work projects authorized for this configured credential."""
+    return await _request("GET", "/api/projects")
+
+
+@mcp.tool()
+async def create_project(
+    key: str,
+    name: str,
+    description: str = "",
+    team_id: str | None = None,
+    budget_usd: float = 0,
+    request_id: str | None = None,
+) -> dict:
+    """Create a Work project using the configured credential's server-side authorization."""
+    return await _request(
+        "POST",
+        "/api/projects",
+        body={
+            "key": key,
+            "name": name,
+            "description": description,
+            "team_id": team_id,
+            "budget_usd": budget_usd,
+        },
+        request_id=request_id or str(uuid.uuid4()),
+    )
 
 
 @mcp.tool()
@@ -207,7 +251,7 @@ async def submit_intake_form(form_id: str, value: dict[str, Any], request_id: st
 
 @mcp.tool()
 async def add_task_worklog(task_id: str, minutes: int, started_at: str, description: str = "", request_id: str | None = None) -> dict:
-    """Record observed time against an authorized task; attribution comes from the token."""
+    """Record observed time against an authorized task; attribution comes from the configured credential."""
     return await _request("POST", f"/api/tasks/{task_id}/worklogs", body={"minutes": minutes, "started_at": started_at, "description": description}, request_id=request_id or str(uuid.uuid4()))
 
 

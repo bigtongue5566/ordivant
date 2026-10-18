@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -11,6 +13,14 @@ from mcp.server.fastmcp import FastMCP
 API_URL = os.getenv("ORDIVANT_KNOWLEDGE_API_URL", "http://127.0.0.1:8010").rstrip("/")
 API_TOKEN = os.getenv("ORDIVANT_KNOWLEDGE_API_TOKEN", "")
 mcp = FastMCP("Ordivant Knowledge")
+
+
+def _normalize_api_base_url(value: str) -> str:
+    parts = urlsplit(value)
+    path = parts.path.rstrip("/")
+    if path.endswith("/api"):
+        path = path[:-4]
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment)).rstrip("/")
 
 
 async def _request(
@@ -26,7 +36,7 @@ async def _request(
     headers = {"Authorization": f"Bearer {API_TOKEN}"}
     if request_id:
         headers["Idempotency-Key"] = request_id
-    async with httpx.AsyncClient(base_url=API_URL, timeout=30) as client:
+    async with httpx.AsyncClient(base_url=_normalize_api_base_url(API_URL), timeout=30) as client:
         response = await client.request(method, path, json=body, params=params, headers=headers)
     if response.is_error:
         try:
@@ -45,9 +55,31 @@ async def _request(
 
 
 @mcp.tool()
+async def get_me() -> dict[str, Any]:
+    """Read the principal associated with this configured credential."""
+    return await _request("GET", "/api/me")
+
+
+@mcp.tool()
 async def list_spaces() -> list[dict[str, Any]]:
     """List knowledge spaces visible to the configured principal."""
     return await _request("GET", "/api/spaces")
+
+
+@mcp.tool()
+async def create_space(
+    key: str,
+    name: str,
+    description: str = "",
+    request_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a Knowledge space using the configured credential's server-side authorization."""
+    return await _request(
+        "POST",
+        "/api/spaces",
+        body={"key": key, "name": name, "description": description},
+        request_id=request_id or str(uuid.uuid4()),
+    )
 
 
 @mcp.tool()
@@ -76,7 +108,7 @@ async def create_document(
     source_refs: list[dict[str, str]] | None = None,
     parent_id: str | None = None,
 ) -> dict[str, Any]:
-    """Create version 1 in a visible space; actor identity comes from the configured token."""
+    """Create version 1 in a visible space; actor identity comes from the configured credential."""
     payload = {
         "space_id": space_id,
         "title": title,

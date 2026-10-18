@@ -1,7 +1,7 @@
 {
   "name": "ordivant-frontend",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader runner",
@@ -11,6 +11,10 @@
     "build:knowledge": "tsc -b && vite build --configLoader runner --mode knowledge --outDir dist/knowledge",
     "build:code": "tsc -b && vite build --configLoader runner --mode code --outDir dist/code",
     "typecheck": "tsc -b --pretty false",
+    "test:agent-model-fields": "node ../scripts/agent-model-fields-test.mjs",
+    "test:project-companions": "node ../scripts/project-companions-test.mjs",
+    "test:access-tokens": "node ../scripts/access-tokens-test.mjs",
+    "test:agent-presets": "node ../scripts/agent-presets-test.mjs",
     "check:markdown": "node scripts/check-markdown.mjs",
     "preview": "vite preview --configLoader runner --host 127.0.0.1 --outDir dist/suite",
     "i18n:generate": "node ../scripts/i18n-check.mjs --write",

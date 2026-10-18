@@ -34,6 +34,8 @@ Agent create／edit／list 新增 `execution_config:ExecutionConfig` 與 `templa
 
 `AgentTemplate`：`{id,key,version,name,description,definition:{role:"worker"|"reviewer",capabilities:string[],instructions:string,model_config:null|ModelSelection,tool_connection_ids:string[],sandbox_profile_id:null|string,limits:{max_turns,timeout_seconds}},created_at}`。
 
+內建範本另有唯讀 `builtin_key:"pm"|"pg"|"sa"|"sd"|"qa"|"reviewer"|null`。啟動時為既有組織補齊六個 v1，新組織建立時同步提供；重複初始化不覆蓋既有資料。自訂範本及衍生新版本回傳 null，僅確切的內建版本在介面本地化。PM／PG／SA／SD／QA 使用 worker，Reviewer 使用 reviewer；不預先綁定模型、工具或 Sandbox。
+
 - `GET /api/agent-templates` 列出目前可見的組織版本；只有 manager／admin 可變更。
 - `POST /api/agent-templates` 本文 `{key,name,description?,definition}` 建立 v1；重複 key 會回報衝突。
 - `POST /api/agent-templates/{id}/versions` 本文 `{name,description?,definition}` 發布該 key 的新不可變版本。舊版本維持原樣。並行發布不得產生重複版本號。

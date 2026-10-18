@@ -5,9 +5,9 @@
 
 本頁說明目前可以使用的功能與尚未支援的項目，不承諾推出日期。你可以透過 [GitHub Issues](https://github.com/ordivant-ai/ordivant/issues) 提出需求或追蹤討論；提出需求不代表一定會開發。
 
-## v0.3.0 新增功能 {#unreleased-development}
+## v0.4.0 新增功能 {#unreleased-development}
 
-v0.3.0 提供 Work 規劃、Knowledge 文件管理、跨模組附件、提及、訂閱、通知及搜尋，也加入 SCIM、SMTP、OIDC 登入政策與稽核管理。各產品的操作方式見[功能導覽](./features.md)；已有部署請先閱讀[升級說明](./release.md)。企業整合需要管理員設定，客戶自己的 IdP／目錄與外部 Git 服務仍需依實際環境驗證。
+v0.4.0 新增個人 API／MCP 權杖、PM／PG／SA／SD／QA／Reviewer 範本、Provider 模型清單，以及 Work 建立專案後選建其他產品的流程。原有看板、Sprint、附件、通知、搜尋與企業整合仍可使用。見[功能導覽](./features.md)、[Work 指南](./guide/work.md)與[升級說明](./release.md)。各產品維持獨立授權，企業整合仍需在自己的環境驗證。
 
 <span id="v0-1-已交付"></span>
 
